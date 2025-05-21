@@ -1,0 +1,13 @@
+{
+  "name": "candy-shop-root",
+  "private": true,
+  "scripts": {
+    "build": "cd teacher-student-app && npm run build",
+    "deploy": "cd teacher-student-app && firebase deploy",
+    "build-and-deploy": "npm run build && npm run deploy"
+  },
+  "dependencies": {
+    "firebase-admin": "^13.4.0",
+    "framer-motion": "^12.12.1"
+  }
+}

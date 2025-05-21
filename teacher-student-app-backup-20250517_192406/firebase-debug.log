@@ -1,0 +1,98 @@
+[debug] [2025-05-17T09:57:21.527Z] ----------------------------------------------------------------------
+[debug] [2025-05-17T09:57:21.533Z] Command:       /usr/local/bin/node /usr/local/bin/firebase deploy
+[debug] [2025-05-17T09:57:21.534Z] CLI Version:   14.3.1
+[debug] [2025-05-17T09:57:21.534Z] Platform:      darwin
+[debug] [2025-05-17T09:57:21.534Z] Node Version:  v22.14.0
+[debug] [2025-05-17T09:57:21.534Z] Time:          Sat May 17 2025 18:57:21 GMT+0900 (Korean Standard Time)
+[debug] [2025-05-17T09:57:21.534Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2025-05-17T09:57:21.617Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2025-05-17T09:57:21.617Z] > authorizing via signed-in user (jammanboyt@gmail.com)
+[debug] [2025-05-17T09:57:21.617Z] [iam] checking project candy-shop-8394b for permissions ["datastore.indexes.create","datastore.indexes.delete","datastore.indexes.list","datastore.indexes.update","firebase.projects.get","firebasehosting.sites.update","firebaserules.releases.create","firebaserules.releases.update","firebaserules.rulesets.create"]
+[debug] [2025-05-17T09:57:21.618Z] Checked if tokens are valid: true, expires at: 1747479021909
+[debug] [2025-05-17T09:57:21.618Z] Checked if tokens are valid: true, expires at: 1747479021909
+[debug] [2025-05-17T09:57:21.618Z] >>> [apiv2][query] POST https://cloudresourcemanager.googleapis.com/v1/projects/candy-shop-8394b:testIamPermissions [none]
+[debug] [2025-05-17T09:57:21.618Z] >>> [apiv2][(partial)header] POST https://cloudresourcemanager.googleapis.com/v1/projects/candy-shop-8394b:testIamPermissions x-goog-quota-user=projects/candy-shop-8394b
+[debug] [2025-05-17T09:57:21.618Z] >>> [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/candy-shop-8394b:testIamPermissions {"permissions":["datastore.indexes.create","datastore.indexes.delete","datastore.indexes.list","datastore.indexes.update","firebase.projects.get","firebasehosting.sites.update","firebaserules.releases.create","firebaserules.releases.update","firebaserules.rulesets.create"]}
+[debug] [2025-05-17T09:57:22.455Z] <<< [apiv2][status] POST https://cloudresourcemanager.googleapis.com/v1/projects/candy-shop-8394b:testIamPermissions 200
+[debug] [2025-05-17T09:57:22.455Z] <<< [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/candy-shop-8394b:testIamPermissions {"permissions":["datastore.indexes.create","datastore.indexes.delete","datastore.indexes.list","datastore.indexes.update","firebase.projects.get","firebasehosting.sites.update","firebaserules.releases.create","firebaserules.releases.update","firebaserules.rulesets.create"]}
+[debug] [2025-05-17T09:57:22.455Z] Checked if tokens are valid: true, expires at: 1747479021909
+[debug] [2025-05-17T09:57:22.455Z] Checked if tokens are valid: true, expires at: 1747479021909
+[debug] [2025-05-17T09:57:22.456Z] >>> [apiv2][query] GET https://firebase.googleapis.com/v1beta1/projects/candy-shop-8394b [none]
+[debug] [2025-05-17T09:57:22.875Z] <<< [apiv2][status] GET https://firebase.googleapis.com/v1beta1/projects/candy-shop-8394b 200
+[debug] [2025-05-17T09:57:22.876Z] <<< [apiv2][body] GET https://firebase.googleapis.com/v1beta1/projects/candy-shop-8394b {"projectId":"candy-shop-8394b","projectNumber":"37833066657","displayName":"candy-shop","name":"projects/candy-shop-8394b","resources":{"hostingSite":"candy-shop-8394b"},"state":"ACTIVE","etag":"1_b58f749e-fb18-41b7-bdcc-5f93029b0aac"}
+[info] 
+[info] === Deploying to 'candy-shop-8394b'...
+[info] 
+[info] i  deploying storage, firestore, hosting 
+[info] i  storage: ensuring required API firebasestorage.googleapis.com is enabled... 
+[debug] [2025-05-17T09:57:22.879Z] Checked if tokens are valid: true, expires at: 1747479021909
+[debug] [2025-05-17T09:57:22.879Z] Checked if tokens are valid: true, expires at: 1747479021909
+[debug] [2025-05-17T09:57:22.879Z] >>> [apiv2][query] GET https://serviceusage.googleapis.com/v1/projects/candy-shop-8394b/services/firebasestorage.googleapis.com [none]
+[debug] [2025-05-17T09:57:22.879Z] >>> [apiv2][(partial)header] GET https://serviceusage.googleapis.com/v1/projects/candy-shop-8394b/services/firebasestorage.googleapis.com x-goog-quota-user=projects/candy-shop-8394b
+[debug] [2025-05-17T09:57:24.138Z] <<< [apiv2][status] GET https://serviceusage.googleapis.com/v1/projects/candy-shop-8394b/services/firebasestorage.googleapis.com 200
+[debug] [2025-05-17T09:57:24.138Z] <<< [apiv2][body] GET https://serviceusage.googleapis.com/v1/projects/candy-shop-8394b/services/firebasestorage.googleapis.com [omitted]
+[info] ✔  storage: required API firebasestorage.googleapis.com is enabled 
+[debug] [2025-05-17T09:57:24.140Z] Checked if tokens are valid: true, expires at: 1747479021909
+[debug] [2025-05-17T09:57:24.140Z] Checked if tokens are valid: true, expires at: 1747479021909
+[debug] [2025-05-17T09:57:24.140Z] >>> [apiv2][query] GET https://firebasestorage.googleapis.com/v1alpha/projects/candy-shop-8394b/defaultBucket [none]
+[debug] [2025-05-17T09:57:25.087Z] <<< [apiv2][status] GET https://firebasestorage.googleapis.com/v1alpha/projects/candy-shop-8394b/defaultBucket 200
+[debug] [2025-05-17T09:57:25.088Z] <<< [apiv2][body] GET https://firebasestorage.googleapis.com/v1alpha/projects/candy-shop-8394b/defaultBucket {"name":"projects/candy-shop-8394b/defaultBucket","location":"US-CENTRAL1","bucket":{"name":"projects/candy-shop-8394b/buckets/candy-shop-8394b.firebasestorage.app"},"storageClass":"REGIONAL"}
+[info] i  firebase.storage: checking storage.rules for compilation errors... 
+[debug] [2025-05-17T09:57:25.090Z] Checked if tokens are valid: true, expires at: 1747479021909
+[debug] [2025-05-17T09:57:25.091Z] Checked if tokens are valid: true, expires at: 1747479021909
+[debug] [2025-05-17T09:57:25.091Z] >>> [apiv2][query] POST https://firebaserules.googleapis.com/v1/projects/candy-shop-8394b:test [none]
+[debug] [2025-05-17T09:57:25.091Z] >>> [apiv2][body] POST https://firebaserules.googleapis.com/v1/projects/candy-shop-8394b:test [omitted]
+[debug] [2025-05-17T09:57:26.273Z] <<< [apiv2][status] POST https://firebaserules.googleapis.com/v1/projects/candy-shop-8394b:test 200
+[debug] [2025-05-17T09:57:26.273Z] <<< [apiv2][body] POST https://firebaserules.googleapis.com/v1/projects/candy-shop-8394b:test {}
+[info] ✔  firebase.storage: rules file storage.rules compiled successfully 
+[info] i  firestore: reading indexes from firestore.indexes.json... 
+[info] i  cloud.firestore: checking firestore.rules for compilation errors... 
+[debug] [2025-05-17T09:57:26.276Z] Checked if tokens are valid: true, expires at: 1747479021909
+[debug] [2025-05-17T09:57:26.276Z] Checked if tokens are valid: true, expires at: 1747479021909
+[debug] [2025-05-17T09:57:26.276Z] >>> [apiv2][query] POST https://firebaserules.googleapis.com/v1/projects/candy-shop-8394b:test [none]
+[debug] [2025-05-17T09:57:26.276Z] >>> [apiv2][body] POST https://firebaserules.googleapis.com/v1/projects/candy-shop-8394b:test [omitted]
+[debug] [2025-05-17T09:57:27.316Z] <<< [apiv2][status] POST https://firebaserules.googleapis.com/v1/projects/candy-shop-8394b:test 200
+[debug] [2025-05-17T09:57:27.316Z] <<< [apiv2][body] POST https://firebaserules.googleapis.com/v1/projects/candy-shop-8394b:test {}
+[info] ✔  cloud.firestore: rules file firestore.rules compiled successfully 
+[debug] [2025-05-17T09:57:27.323Z] Checked if tokens are valid: true, expires at: 1747479021909
+[debug] [2025-05-17T09:57:27.323Z] Checked if tokens are valid: true, expires at: 1747479021909
+[debug] [2025-05-17T09:57:27.324Z] >>> [apiv2][query] POST https://firebasehosting.googleapis.com/v1beta1/projects/-/sites/candy-shop-8394b/versions [none]
+[debug] [2025-05-17T09:57:27.324Z] >>> [apiv2][body] POST https://firebasehosting.googleapis.com/v1beta1/projects/-/sites/candy-shop-8394b/versions {"status":"CREATED","labels":{"deployment-tool":"cli-firebase"}}
+[debug] [2025-05-17T09:57:28.642Z] <<< [apiv2][status] POST https://firebasehosting.googleapis.com/v1beta1/projects/-/sites/candy-shop-8394b/versions 200
+[debug] [2025-05-17T09:57:28.642Z] <<< [apiv2][body] POST https://firebasehosting.googleapis.com/v1beta1/projects/-/sites/candy-shop-8394b/versions {"name":"projects/37833066657/sites/candy-shop-8394b/versions/c5f39fc0a42316d0","status":"CREATED","config":{},"labels":{"deployment-tool":"cli-firebase"}}
+[debug] [2025-05-17T09:57:28.643Z] Checked if tokens are valid: true, expires at: 1747479021909
+[debug] [2025-05-17T09:57:28.644Z] Checked if tokens are valid: true, expires at: 1747479021909
+[debug] [2025-05-17T09:57:28.644Z] >>> [apiv2][query] GET https://firebaserules.googleapis.com/v1/projects/candy-shop-8394b/releases pageSize=10&pageToken=
+[debug] [2025-05-17T09:57:29.681Z] <<< [apiv2][status] GET https://firebaserules.googleapis.com/v1/projects/candy-shop-8394b/releases 200
+[debug] [2025-05-17T09:57:29.681Z] <<< [apiv2][body] GET https://firebaserules.googleapis.com/v1/projects/candy-shop-8394b/releases {"releases":[{"name":"projects/candy-shop-8394b/releases/cloud.firestore","rulesetName":"projects/candy-shop-8394b/rulesets/e5221d33-595f-4dd6-be4c-9aa2b1f1e50c","createTime":"2025-05-06T12:31:32.871150Z","updateTime":"2025-05-17T09:51:38.937017Z"},{"name":"projects/candy-shop-8394b/releases/firebase.storage/candy-shop-8394b.firebasestorage.app","rulesetName":"projects/candy-shop-8394b/rulesets/fe2a1aa4-f8e4-4827-b705-d0f5766b8e19","createTime":"2025-05-06T12:39:50.075492Z","updateTime":"2025-05-17T09:51:37.878064Z"}]}
+[debug] [2025-05-17T09:57:29.700Z] Checked if tokens are valid: true, expires at: 1747479021909
+[debug] [2025-05-17T09:57:29.700Z] Checked if tokens are valid: true, expires at: 1747479021909
+[debug] [2025-05-17T09:57:29.701Z] >>> [apiv2][query] GET https://firebaserules.googleapis.com/v1/projects/candy-shop-8394b/rulesets/fe2a1aa4-f8e4-4827-b705-d0f5766b8e19 [none]
+[debug] [2025-05-17T09:57:30.761Z] <<< [apiv2][status] GET https://firebaserules.googleapis.com/v1/projects/candy-shop-8394b/rulesets/fe2a1aa4-f8e4-4827-b705-d0f5766b8e19 200
+[debug] [2025-05-17T09:57:30.762Z] <<< [apiv2][body] GET https://firebaserules.googleapis.com/v1/projects/candy-shop-8394b/rulesets/fe2a1aa4-f8e4-4827-b705-d0f5766b8e19 [omitted]
+[info] i  storage: latest version of storage.rules already up to date, skipping upload... 
+[debug] [2025-05-17T09:57:30.764Z] Checked if tokens are valid: true, expires at: 1747479021909
+[debug] [2025-05-17T09:57:30.764Z] Checked if tokens are valid: true, expires at: 1747479021909
+[info] i  firestore: deploying indexes... 
+[debug] [2025-05-17T09:57:30.765Z] Checked if tokens are valid: true, expires at: 1747479021909
+[debug] [2025-05-17T09:57:30.765Z] Checked if tokens are valid: true, expires at: 1747479021909
+[debug] [2025-05-17T09:57:30.765Z] >>> [apiv2][query] GET https://firebaserules.googleapis.com/v1/projects/candy-shop-8394b/releases pageSize=10&pageToken=
+[debug] [2025-05-17T09:57:30.766Z] >>> [apiv2][query] GET https://firestore.googleapis.com/v1/projects/candy-shop-8394b/databases/(default)/collectionGroups/-/indexes [none]
+[debug] [2025-05-17T09:57:30.965Z] <<< [apiv2][status] GET https://firestore.googleapis.com/v1/projects/candy-shop-8394b/databases/(default)/collectionGroups/-/indexes 200
+[debug] [2025-05-17T09:57:30.965Z] <<< [apiv2][body] GET https://firestore.googleapis.com/v1/projects/candy-shop-8394b/databases/(default)/collectionGroups/-/indexes {"indexes":[{"name":"projects/candy-shop-8394b/databases/(default)/collectionGroups/alarms/indexes/CICAgOjXh4EK","queryScope":"COLLECTION","fields":[{"fieldPath":"isActive","order":"ASCENDING"},{"fieldPath":"targetTime","order":"DESCENDING"},{"fieldPath":"__name__","order":"DESCENDING"}],"state":"READY","density":"SPARSE_ALL"}]}
+[debug] [2025-05-17T09:57:30.966Z] Checked if tokens are valid: true, expires at: 1747479021909
+[debug] [2025-05-17T09:57:30.966Z] Checked if tokens are valid: true, expires at: 1747479021909
+[debug] [2025-05-17T09:57:30.966Z] >>> [apiv2][query] GET https://firestore.googleapis.com/v1/projects/candy-shop-8394b/databases/(default)/collectionGroups/-/fields?filter=indexConfig.usesAncestorConfig=false OR ttlConfig:* [none]
+[debug] [2025-05-17T09:57:31.042Z] <<< [apiv2][status] GET https://firestore.googleapis.com/v1/projects/candy-shop-8394b/databases/(default)/collectionGroups/-/fields?filter=indexConfig.usesAncestorConfig=false OR ttlConfig:* 200
+[debug] [2025-05-17T09:57:31.042Z] <<< [apiv2][body] GET https://firestore.googleapis.com/v1/projects/candy-shop-8394b/databases/(default)/collectionGroups/-/fields?filter=indexConfig.usesAncestorConfig=false OR ttlConfig:* {"fields":[{"name":"projects/candy-shop-8394b/databases/(default)/collectionGroups/__default__/fields/*","indexConfig":{"indexes":[{"queryScope":"COLLECTION","fields":[{"fieldPath":"*","order":"ASCENDING"}],"state":"READY"},{"queryScope":"COLLECTION","fields":[{"fieldPath":"*","order":"DESCENDING"}],"state":"READY"},{"queryScope":"COLLECTION","fields":[{"fieldPath":"*","arrayConfig":"CONTAINS"}],"state":"READY"}]}}]}
+[info] i  firestore: The following indexes are defined in your project but are not present in your firestore indexes file:
+	(alarms) -- (isActive,ASCENDING) (targetTime,DESCENDING)  
+[debug] [2025-05-17T09:57:31.160Z] <<< [apiv2][status] GET https://firebaserules.googleapis.com/v1/projects/candy-shop-8394b/releases 200
+[debug] [2025-05-17T09:57:31.161Z] <<< [apiv2][body] GET https://firebaserules.googleapis.com/v1/projects/candy-shop-8394b/releases {"releases":[{"name":"projects/candy-shop-8394b/releases/cloud.firestore","rulesetName":"projects/candy-shop-8394b/rulesets/e5221d33-595f-4dd6-be4c-9aa2b1f1e50c","createTime":"2025-05-06T12:31:32.871150Z","updateTime":"2025-05-17T09:51:38.937017Z"},{"name":"projects/candy-shop-8394b/releases/firebase.storage/candy-shop-8394b.firebasestorage.app","rulesetName":"projects/candy-shop-8394b/rulesets/fe2a1aa4-f8e4-4827-b705-d0f5766b8e19","createTime":"2025-05-06T12:39:50.075492Z","updateTime":"2025-05-17T09:51:37.878064Z"}]}
+[debug] [2025-05-17T09:57:31.161Z] Checked if tokens are valid: true, expires at: 1747479021909
+[debug] [2025-05-17T09:57:31.161Z] Checked if tokens are valid: true, expires at: 1747479021909
+[debug] [2025-05-17T09:57:31.161Z] >>> [apiv2][query] GET https://firebaserules.googleapis.com/v1/projects/candy-shop-8394b/rulesets/e5221d33-595f-4dd6-be4c-9aa2b1f1e50c [none]
+[debug] [2025-05-17T09:57:32.194Z] <<< [apiv2][status] GET https://firebaserules.googleapis.com/v1/projects/candy-shop-8394b/rulesets/e5221d33-595f-4dd6-be4c-9aa2b1f1e50c 200
+[debug] [2025-05-17T09:57:32.195Z] <<< [apiv2][body] GET https://firebaserules.googleapis.com/v1/projects/candy-shop-8394b/rulesets/e5221d33-595f-4dd6-be4c-9aa2b1f1e50c [omitted]
+[info] i  firestore: latest version of firestore.rules already up to date, skipping upload... 
