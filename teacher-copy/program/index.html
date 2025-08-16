@@ -1,3 +1,19 @@
 <!doctype html><html lang="en"><head>
   <base href="./">
-  <script>(function(){var p=location.pathname;if(p.indexOf("/teacher-copy/program")>-1){try{history.replaceState(null,"","/teacher-copy");}catch(e){}}if(p.indexOf("/student-copy/program")>-1){try{history.replaceState(null,"","/student-copy");}catch(e){}}})();</script><meta charset="utf-8"/><link rel="icon" href="favicon.ico"/><meta name="viewport" content="width=device-width,initial-scale=1"/><meta name="theme-color" content="#000000"/><meta name="description" content="Web site created using create-react-app"/><link rel="apple-touch-icon" href="../media/image/logo192.png"/><link rel="manifest" href="manifest.json"/><title>JAMMANBO CANDY SHOP</title><script defer="defer" src="static/js/main.f6188266.js"></script><link href="static/css/main.d96b304b.css" rel="stylesheet"></head><body><noscript>You need to enable JavaScript to run this app.</noscript><div id="root"></div></body></html>
+  <script>
+    // file:// 프로토콜에서 teacher-copy 기본 경로 설정
+    (function(){
+      if(location.protocol === 'file:') {
+        // file:// 환경에서는 hash 라우팅 사용
+        if(!location.hash || location.hash === '#/') {
+          location.hash = '#/teacher-copy';
+        }
+      } else {
+        // 일반 웹 환경에서의 기존 로직
+        var p=location.pathname;
+        if(p.indexOf("/teacher-copy/program")>-1){
+          try{history.replaceState(null,"","/teacher-copy");}catch(e){}
+        }
+      }
+    })();
+  </script><meta charset="utf-8"/><link rel="icon" href="favicon.ico"/><meta name="viewport" content="width=device-width,initial-scale=1"/><meta name="theme-color" content="#000000"/><meta name="description" content="Web site created using create-react-app"/><link rel="apple-touch-icon" href="../media/image/logo192.png"/><link rel="manifest" href="manifest.json"/><title>JAMMANBO CANDY SHOP</title><script defer="defer" src="static/js/main.f6188266.js"></script><link href="static/css/main.d96b304b.css" rel="stylesheet"></head><body><noscript>You need to enable JavaScript to run this app.</noscript><div id="root"></div></body></html>
