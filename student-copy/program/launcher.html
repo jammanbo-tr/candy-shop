@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>교사 개인화 웹앱 제작을 통한 학급 피드백 시스템 구축-5학년</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      padding: 20px;
+    }
+    
+    .container {
+      text-align: center;
+      max-width: 800px;
+      width: 100%;
+      background: rgba(255, 255, 255, 0.1);
+      backdrop-filter: blur(10px);
+      border-radius: 24px;
+      padding: 60px 40px;
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+    }
+    
+    .title {
+      font-size: 36px;
+      font-weight: 700;
+      margin-bottom: 16px;
+      background: linear-gradient(45deg, #FFD700, #FFA500, #FF6B35);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      line-height: 1.2;
+    }
+    
+    .subtitle {
+      font-size: 24px;
+      font-weight: 600;
+      margin-bottom: 40px;
+      color: rgba(255, 255, 255, 0.9);
+    }
+    
+    .description {
+      font-size: 18px;
+      margin-bottom: 50px;
+      color: rgba(255, 255, 255, 0.8);
+      line-height: 1.6;
+    }
+    
+    .buttons {
+      display: flex;
+      gap: 30px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+    
+    .btn {
+      padding: 20px 40px;
+      border-radius: 16px;
+      background: linear-gradient(45deg, #667eea, #764ba2);
+      color: white;
+      text-decoration: none;
+      font-size: 18px;
+      font-weight: 700;
+      border: 2px solid rgba(255, 255, 255, 0.2);
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+      transition: all 0.3s ease;
+      min-width: 200px;
+      position: relative;
+      overflow: hidden;
+    }
+    
+    .btn::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: -100%;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+      transition: left 0.5s;
+    }
+    
+    .btn:hover::before {
+      left: 100%;
+    }
+    
+    .btn:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 15px 40px rgba(0, 0, 0, 0.3);
+      border-color: rgba(255, 255, 255, 0.4);
+    }
+    
+    .btn.teacher {
+      background: linear-gradient(45deg, #4facfe, #00f2fe);
+    }
+    
+    .btn.student {
+      background: linear-gradient(45deg, #f093fb, #f5576c);
+    }
+    
+    .icon {
+      font-size: 24px;
+      margin-bottom: 8px;
+      display: block;
+    }
+    
+    @media (max-width: 768px) {
+      .container {
+        padding: 40px 20px;
+      }
+      
+      .title {
+        font-size: 28px;
+      }
+      
+      .subtitle {
+        font-size: 20px;
+      }
+      
+      .buttons {
+        flex-direction: column;
+        align-items: center;
+      }
+      
+      .btn {
+        width: 100%;
+        max-width: 300px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1 class="title">교사 개인화 웹앱 제작을 통한<br>학급 피드백 시스템 구축</h1>
+    <h2 class="subtitle">5학년 대상</h2>
+    <p class="description">
+      혁신적인 교육 기술을 활용한 맞춤형 학급 관리 시스템입니다.<br>
+      교사와 학생이 함께 성장할 수 있는 디지털 교육 환경을 제공합니다.
+    </p>
+    <div class="buttons">
+      <a href="../teacher-copy/program/index.html" class="btn teacher">
+        <span class="icon">👨‍🏫</span>
+        교사용 시스템
+      </a>
+      <a href="index.html" class="btn student">
+        <span class="icon">👨‍🎓</span>
+        학생용 시스템
+      </a>
+    </div>
+  </div>
+</body>
+</html>
