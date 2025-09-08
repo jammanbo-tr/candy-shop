@@ -5,7 +5,11 @@ import { db } from '../firebase';
 const PERIODS = ['1교시', '2교시', '3교시', '4교시', '5교시', '6교시'];
 
 // 기본 학생 목록 (실제 환경에서는 다른 소스에서 가져와야 할 수도 있음)
-const DEFAULT_STUDENTS = ['김규민', '김범준', '김성준'];
+const DEFAULT_STUDENTS = [
+  '김규민', '김범준', '김성준', '김수겸', '김주원', '문기훈', '박동하', '백주원',
+  '백지원', '손정환', '이도윤', '이예준', '임재희', '조은빈', '조찬희', '최서윤',
+  '최서현', '한서우', '황리아', '김주하', '이해원', '하지수', '테스트'
+];
 
 const LearningJournalViewModal = ({ isOpen, onClose, selectedDate, refreshData }) => {
   const [data, setData] = useState([]);
@@ -50,7 +54,10 @@ const LearningJournalViewModal = ({ isOpen, onClose, selectedDate, refreshData }
           studentNames.push(studentData.name);
         }
       });
-      setStudents(studentNames.sort());
+
+      // Firestore에서 가져온 학생 목록과 기본 목록을 합치기
+      const allStudentNames = [...new Set([...studentNames, ...DEFAULT_STUDENTS])];
+      setStudents(allStudentNames.sort());
     } catch (error) {
       console.error('학생 목록 가져오기 오류:', error);
       // 오류 시 기본 학생 목록 사용
@@ -624,28 +631,29 @@ const LearningJournalViewModal = ({ isOpen, onClose, selectedDate, refreshData }
                                                 );
                                               }
 
-                                              // 키워드와 내용 분리 (첫 번째 줄을 키워드로 간주)
-                                              const lines = entry.content.split('\n').filter(line => line.trim());
-                                              const keyword = lines[0] || '';
-                                              const details = lines.slice(1).join(' ') || '';
+                                              // 키워드와 내용을 별도 필드에서 가져오기
+                                              const keyword = entry.keyword || '';
+                                              const content = entry.content || '';
 
                                               return (
                                                 <div>
-                                                  {/* 핵심 키워드 */}
-                                                  <div style={{
-                                                    fontSize: '13px',
-                                                    fontWeight: '800',
-                                                    color: '#e65100',
-                                                    marginBottom: details ? '4px' : '0px',
-                                                    lineHeight: '1.2',
-                                                    wordWrap: 'break-word',
-                                                    overflowWrap: 'break-word'
-                                                  }}>
-                                                    {keyword}
-                                                  </div>
+                                                  {/* 핵심 키워드 (굵은 글씨) */}
+                                                  {keyword && (
+                                                    <div style={{
+                                                      fontSize: '13px',
+                                                      fontWeight: '800',
+                                                      color: '#e65100',
+                                                      marginBottom: content ? '4px' : '0px',
+                                                      lineHeight: '1.2',
+                                                      wordWrap: 'break-word',
+                                                      overflowWrap: 'break-word'
+                                                    }}>
+                                                      {keyword}
+                                                    </div>
+                                                  )}
                                                   
-                                                  {/* 상세 학습내용 */}
-                                                  {details && (
+                                                  {/* 상세 학습내용 (얇은 글씨) */}
+                                                  {content && (
                                                     <div style={{
                                                       fontSize: '11px',
                                                       color: '#666',
@@ -654,7 +662,19 @@ const LearningJournalViewModal = ({ isOpen, onClose, selectedDate, refreshData }
                                                       wordWrap: 'break-word',
                                                       overflowWrap: 'break-word'
                                                     }}>
-                                                      {details}
+                                                      {content}
+                                                    </div>
+                                                  )}
+                                                  
+                                                  {/* 키워드와 내용이 모두 없는 경우 */}
+                                                  {!keyword && !content && (
+                                                    <div style={{ 
+                                                      fontSize: '12px', 
+                                                      color: '#999', 
+                                                      fontStyle: 'italic',
+                                                      textAlign: 'center'
+                                                    }}>
+                                                      내용 없음
                                                     </div>
                                                   )}
                                                 </div>
@@ -819,9 +839,23 @@ const LearningJournalViewModal = ({ isOpen, onClose, selectedDate, refreshData }
                               <p style={{ margin: '0 0 8px 0', fontSize: '14px', color: '#666' }}>
                                 📅 날짜: {new Date(entry.date).toLocaleDateString('ko-KR')}
                               </p>
-                              <p style={{ margin: '0', fontSize: '14px', lineHeight: '1.5' }}>
-                                📝 {entry.content || '내용 없음'}
-                              </p>
+                              <div style={{ margin: '0', fontSize: '14px', lineHeight: '1.5' }}>
+                                📝 
+                                {entry.keyword && (
+                                  <span style={{ fontWeight: '800', color: '#e65100', marginLeft: '4px' }}>
+                                    {entry.keyword}
+                                  </span>
+                                )}
+                                {entry.keyword && entry.content && <br />}
+                                {entry.content && (
+                                  <span style={{ fontWeight: '300', color: '#666', marginLeft: entry.keyword ? '16px' : '4px' }}>
+                                    {entry.content}
+                                  </span>
+                                )}
+                                {!entry.keyword && !entry.content && (
+                                  <span style={{ color: '#999', fontStyle: 'italic', marginLeft: '4px' }}>내용 없음</span>
+                                )}
+                              </div>
                             </div>
                             <div style={{ display: 'flex', gap: '8px' }}>
                               <span style={{
