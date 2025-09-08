@@ -19,6 +19,15 @@ const LearningJournalViewModal = ({ isOpen, onClose, selectedDate, refreshData }
     selectedDate ? selectedDate.toISOString().split('T')[0] : new Date().toISOString().split('T')[0]
   );
   const [selectedPeriodFilter, setSelectedPeriodFilter] = useState('전체');
+  const [visiblePeriods, setVisiblePeriods] = useState({
+    '전체': true,
+    '1교시': true,
+    '2교시': true,
+    '3교시': true,
+    '4교시': true,
+    '5교시': true,
+    '6교시': true
+  });
   const [showTableView, setShowTableView] = useState(true);
   const [draggedEntry, setDraggedEntry] = useState(null);
   const [dragOverCell, setDragOverCell] = useState(null);
@@ -113,6 +122,30 @@ const LearningJournalViewModal = ({ isOpen, onClose, selectedDate, refreshData }
       fetchData();
     }
   }, [selectedDateFilter, isOpen, fetchData]);
+
+  // 교시 필터 체크박스 핸들러
+  const handlePeriodCheckboxChange = (period) => {
+    if (period === '전체') {
+      // 전체 체크/언체크
+      const allChecked = visiblePeriods['전체'];
+      const newState = {};
+      Object.keys(visiblePeriods).forEach(key => {
+        newState[key] = !allChecked;
+      });
+      setVisiblePeriods(newState);
+    } else {
+      // 개별 교시 체크/언체크
+      const newState = { ...visiblePeriods };
+      newState[period] = !newState[period];
+      
+      // 모든 교시가 선택되면 전체도 체크, 하나라도 해제되면 전체 해제
+      const periodKeys = ['1교시', '2교시', '3교시', '4교시', '5교시', '6교시'];
+      const allPeriodsChecked = periodKeys.every(key => newState[key]);
+      newState['전체'] = allPeriodsChecked;
+      
+      setVisiblePeriods(newState);
+    }
+  };
 
   const handleMoveEntry = async (entry, newPeriod) => {
     try {
@@ -302,6 +335,41 @@ const LearningJournalViewModal = ({ isOpen, onClose, selectedDate, refreshData }
                 >
                   📅 오늘로 이동
                 </button>
+              </div>
+              
+              {/* 교시 필터 체크박스 */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginLeft: '24px' }}>
+                <label style={{ fontSize: '14px', fontWeight: '600', color: '#666' }}>
+                  ⏰ 교시 필터:
+                </label>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                  {['전체', '1교시', '2교시', '3교시', '4교시', '5교시', '6교시'].map(period => (
+                    <label 
+                      key={period}
+                      style={{ 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        gap: '4px',
+                        fontSize: '13px',
+                        fontWeight: '500',
+                        color: visiblePeriods[period] ? '#1976d2' : '#666',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={visiblePeriods[period]}
+                        onChange={() => handlePeriodCheckboxChange(period)}
+                        style={{
+                          width: '16px',
+                          height: '16px',
+                          cursor: 'pointer'
+                        }}
+                      />
+                      <span>{period}</span>
+                    </label>
+                  ))}
+                </div>
               </div>
             </div>
             
@@ -525,7 +593,7 @@ const LearningJournalViewModal = ({ isOpen, onClose, selectedDate, refreshData }
                               }}>
                                 👤 학생명
                               </th>
-                              {PERIODS.map(period => (
+                              {PERIODS.filter(period => visiblePeriods[period]).map(period => (
                                 <th key={period} style={{
                                   padding: '16px 12px',
                                   textAlign: 'center',
@@ -555,7 +623,7 @@ const LearningJournalViewModal = ({ isOpen, onClose, selectedDate, refreshData }
                                 }}>
                                   {studentName}
                                 </td>
-                                {PERIODS.map(period => {
+                                {PERIODS.filter(period => visiblePeriods[period]).map(period => {
                                   const entry = studentData[studentName][period];
                                   return (
                                     <td
