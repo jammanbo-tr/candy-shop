@@ -123,6 +123,107 @@ const LearningJournalViewModal = ({ isOpen, onClose, selectedDate, refreshData }
     }
   }, [selectedDateFilter, isOpen, fetchData]);
 
+  // CSV 다운로드 기능
+  const downloadCSV = () => {
+    try {
+      // 학생별 데이터 구성
+      const studentData = {};
+      students.forEach(studentName => {
+        studentData[studentName] = {};
+        PERIODS.forEach(period => {
+          studentData[studentName][period] = null;
+        });
+      });
+
+      // 데이터를 학생별로 분류
+      data.forEach(entry => {
+        if (studentData[entry.studentName]) {
+          studentData[entry.studentName][entry.period] = entry;
+        }
+      });
+
+      // CSV 헤더 구성 (구글 스프레드시트와 동일한 구조)
+      const headers = ['학생 이름', '1교시', '2교시', '3교시', '4교시', '5교시', '6교시'];
+      
+      // CSV 데이터 구성
+      const csvData = [];
+      csvData.push(headers);
+
+      // 각 학생별로 행 생성
+      students.forEach(studentName => {
+        const row = [studentName];
+        
+        PERIODS.forEach(period => {
+          const entry = studentData[studentName][period];
+          if (entry) {
+            // 키워드와 내용을 합쳐서 하나의 셀에 저장 (구글 스프레드시트 형식)
+            const keyword = entry.keyword || '';
+            const content = entry.content || '';
+            const understanding = entry.understanding || '';
+            const difficulty = entry.difficulty || '';
+            
+            // 이모지와 점수를 포함한 형태로 구성
+            let cellContent = '';
+            if (keyword) {
+              cellContent += keyword;
+            }
+            if (content) {
+              if (cellContent) cellContent += '\n';
+              cellContent += content;
+            }
+            if (understanding || difficulty) {
+              if (cellContent) cellContent += '\n';
+              const understandingEmojis = '😊'.repeat(Math.floor(parseFloat(understanding) || 0));
+              const difficultyEmojis = '❤️'.repeat(Math.floor(parseFloat(difficulty) || 0));
+              cellContent += understandingEmojis + difficultyEmojis;
+            }
+            
+            row.push(cellContent);
+          } else {
+            row.push(''); // 빈 셀
+          }
+        });
+        
+        csvData.push(row);
+      });
+
+      // CSV 문자열 생성
+      const csvContent = csvData.map(row => 
+        row.map(cell => {
+          // 셀 내용에 쉼표, 따옴표, 줄바꿈이 있으면 따옴표로 감싸기
+          const cellStr = String(cell || '');
+          if (cellStr.includes(',') || cellStr.includes('"') || cellStr.includes('\n')) {
+            return `"${cellStr.replace(/"/g, '""')}"`;
+          }
+          return cellStr;
+        }).join(',')
+      ).join('\n');
+
+      // BOM 추가하여 한글 깨짐 방지
+      const BOM = '\uFEFF';
+      const blob = new Blob([BOM + csvContent], { type: 'text/csv;charset=utf-8' });
+      
+      // 파일명 생성 (날짜 포함)
+      const fileName = `학습일지_${selectedDateFilter || new Date().toISOString().split('T')[0]}.csv`;
+      
+      // 다운로드 실행
+      const link = document.createElement('a');
+      if (link.download !== undefined) {
+        const url = URL.createObjectURL(blob);
+        link.setAttribute('href', url);
+        link.setAttribute('download', fileName);
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      }
+      
+    } catch (error) {
+      console.error('CSV 다운로드 오류:', error);
+      alert('CSV 다운로드 중 오류가 발생했습니다.');
+    }
+  };
+
   // 선택된 교시 수에 따른 동적 열 너비 계산
   const getColumnWidth = () => {
     const selectedPeriodCount = PERIODS.filter(period => visiblePeriods[period]).length;
@@ -401,10 +502,7 @@ const LearningJournalViewModal = ({ isOpen, onClose, selectedDate, refreshData }
                   alignItems: 'center',
                   gap: '4px'
                 }}
-                onClick={() => {
-                  // CSV 다운로드 기능 구현 예정
-                  alert('CSV 다운로드 기능을 구현 중입니다.');
-                }}
+                onClick={downloadCSV}
               >
                 📊 CSV 다운로드
               </button>
