@@ -128,9 +128,9 @@ const LearningJournalViewModal = ({ isOpen, onClose, selectedDate, refreshData }
     const selectedPeriodCount = PERIODS.filter(period => visiblePeriods[period]).length;
     if (selectedPeriodCount === 0) return '300px';
     
-    // 총 테이블 너비에서 학생명 열(200px)를 제외하고 교시 열들로 균등분배
+    // 총 테이블 너비에서 학생명 열을 제외하고 교시 열들로 균등분배
     const availableWidth = 100; // percentage 기준
-    const studentNameColumnWidth = 15; // percentage
+    const studentNameColumnWidth = 10; // percentage (15% → 10%로 축소)
     const periodColumnWidth = (availableWidth - studentNameColumnWidth) / selectedPeriodCount;
     
     return `${periodColumnWidth}%`;
@@ -597,13 +597,13 @@ const LearningJournalViewModal = ({ isOpen, onClose, selectedDate, refreshData }
                           <thead>
                             <tr style={{ backgroundColor: '#f5f5f5' }}>
                               <th style={{
-                                padding: '16px 12px',
-                                textAlign: 'left',
+                                padding: '16px 8px',
+                                textAlign: 'center',
                                 fontWeight: '600',
                                 color: '#333',
                                 borderBottom: '2px solid #e8eaed',
-                                width: '15%',
-                                minWidth: '120px'
+                                width: '10%',
+                                minWidth: '90px'
                               }}>
                                 👤 학생명
                               </th>
@@ -629,13 +629,14 @@ const LearningJournalViewModal = ({ isOpen, onClose, selectedDate, refreshData }
                                 '&:hover': { backgroundColor: '#f9f9f9' }
                               }}>
                                 <td style={{
-                                  padding: '16px 12px',
+                                  padding: '16px 8px',
                                   fontWeight: '600',
                                   color: '#333',
                                   backgroundColor: '#fafafa',
                                   borderRight: '1px solid #e8eaed',
-                                  width: '15%',
-                                  minWidth: '120px'
+                                  width: '10%',
+                                  minWidth: '90px',
+                                  textAlign: 'center'
                                 }}>
                                   {studentName}
                                 </td>
