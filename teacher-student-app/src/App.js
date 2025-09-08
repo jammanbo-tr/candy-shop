@@ -23,6 +23,7 @@ import LabPage from './pages/LabPage';
 import HangangPage from './pages/HangangPage';
 import HangangHubPage from './pages/HangangHubPage';
 import LearningJournalPage from './pages/LearningJournalPage';
+import DataBoardPage from './pages/DataBoardPage';
 import VillainChaseGame from './components/VillainChaseGame';
 import './App.css';
 
@@ -59,6 +60,7 @@ function App() {
         <Route path="/hangang" element={<HangangPage />} />
         <Route path="/hangang/:classId" element={<HangangPage />} />
         <Route path="/learning-journal" element={<LearningJournalPage />} />
+        <Route path="/data-board" element={<DataBoardPage />} />
         <Route path="/villain-chase" element={<VillainChaseGame />} />
         <Route path="/chase" element={<VillainChaseGame />} />
         <Route path="/" element={<TeacherPage />} />

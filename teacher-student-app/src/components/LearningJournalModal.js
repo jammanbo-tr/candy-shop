@@ -209,10 +209,33 @@ const LearningJournalModal = ({ isOpen, onClose, studentName = '' }) => {
           <p style={{
             fontSize: '16px',
             color: '#666',
-            margin: 0
+            margin: '0 0 30px 0'
           }}>
             학습일지가 성공적으로 제출되었어요!
           </p>
+          <button
+            onClick={() => {
+              // 데이터 전광판 페이지로 이동 (선택된 교시와 함께)
+              const selectedPeriod = formData.period;
+              window.open(`/data-board?period=${selectedPeriod}`, '_blank');
+            }}
+            style={{
+              backgroundColor: '#ff6b35',
+              color: 'white',
+              border: 'none',
+              borderRadius: '12px',
+              padding: '12px 24px',
+              fontSize: '16px',
+              fontWeight: 'bold',
+              cursor: 'pointer',
+              boxShadow: '0 4px 12px rgba(255, 107, 53, 0.3)',
+              transition: 'transform 0.2s ease',
+            }}
+            onMouseOver={(e) => e.target.style.transform = 'translateY(-2px)'}
+            onMouseOut={(e) => e.target.style.transform = 'translateY(0)'}
+          >
+            📊 데이터 전광판 입장하기
+          </button>
         </div>
       </div>
     );
