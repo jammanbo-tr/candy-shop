@@ -80,6 +80,7 @@ const StudentPage = () => {
   const [buyError, setBuyError] = useState('');
   const [buySuccess, setBuySuccess] = useState('');
   const [depositError, setDepositError] = useState('');
+  const [selectedEmotion, setSelectedEmotion] = useState(null);
 
   // 새로운 교사 메시지 개수 계산
   useEffect(() => {
@@ -88,6 +89,12 @@ const StudentPage = () => {
     const lastRead = student.lastTeacherMsgRead || 0;
     const unread = teacherMsgs.filter(m => m.ts > lastRead).length;
     setUnreadCount(unread);
+  }, [student]);
+
+  useEffect(() => {
+    if (student && student.emotionIcon) {
+      setSelectedEmotion(student.emotionIcon);
+    }
   }, [student]);
 
   // 메시지 보내기
@@ -218,6 +225,14 @@ const StudentPage = () => {
     }
   };
 
+  // 감정 이모티콘 저장 함수
+  const handleSelectEmotion = async (icon) => {
+    setSelectedEmotion(icon);
+    await updateDoc(doc(db, 'students', studentId), { emotionIcon: icon });
+  };
+
+  const EMOTION_ICONS = Array.from({ length: 16 }, (_, i) => `/em${i + 1}.png`);
+
   return (
     <div style={{ 
       padding: '32px',
@@ -273,6 +288,55 @@ const StudentPage = () => {
             </Box>
             {/* 오른쪽: 학생 정보 */}
             <Box sx={{ flex: 1, p: '24px 18px 18px 18px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', minHeight: 180 }}>
+              {/* 감정 이모티콘 선택 UI */}
+              <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', mb: 1 }}>
+                {/* 원형 감정 구역 */}
+                <div style={{
+                  width: 60,
+                  height: 60,
+                  borderRadius: '50%',
+                  border: '2.5px solid #ffd6e0',
+                  marginBottom: 10,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  background: '#fffde7',
+                  boxShadow: '0 2px 8px #f8bbd0a0',
+                  fontSize: 36,
+                  overflow: 'hidden',
+                }}>
+                  {selectedEmotion ? (
+                    <img src={selectedEmotion} alt="감정" style={{ width: 44, height: 44, objectFit: 'contain' }} />
+                  ) : (
+                    <span style={{ color: '#bbb', fontSize: 32 }}>🙂</span>
+                  )}
+                </div>
+                {/* 이모티콘 선택 바 */}
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'center', maxWidth: 260 }}>
+                  {EMOTION_ICONS.map((icon, idx) => (
+                    <button
+                      key={icon}
+                      onClick={() => handleSelectEmotion(icon)}
+                      style={{
+                        border: selectedEmotion === icon ? '2.5px solid #d72660' : '2px solid #eee',
+                        borderRadius: '50%',
+                        padding: 2,
+                        background: '#fff',
+                        cursor: 'pointer',
+                        width: 36,
+                        height: 36,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        boxShadow: selectedEmotion === icon ? '0 2px 8px #ffd6e0a0' : 'none',
+                        transition: 'all 0.15s',
+                      }}
+                    >
+                      <img src={icon} alt={`감정${idx + 1}`} style={{ width: 28, height: 28, objectFit: 'contain' }} />
+                    </button>
+                  ))}
+                </div>
+              </Box>
               <Box sx={{ display: 'flex', flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', mb: 1 }}>
                 <Box>
                   <Typography variant="h5" fontWeight="bold" sx={{ fontSize: '1.35rem', mb: 0.5 }}>{student.name}</Typography>

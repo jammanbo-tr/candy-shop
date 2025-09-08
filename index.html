@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Jammanbo Play Creator - 게임 컬렉션</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: white;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 40px 20px;
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 60px;
+        }
+        
+        .main-title {
+            font-size: 3.5rem;
+            font-weight: 900;
+            margin-bottom: 20px;
+            background: linear-gradient(45deg, #f093fb 0%, #f5576c 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        
+        .subtitle {
+            font-size: 1.3rem;
+            opacity: 0.9;
+            margin-bottom: 40px;
+        }
+        
+        .games-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 30px;
+            margin-bottom: 60px;
+        }
+        
+        .game-card {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 30px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+        
+        .game-card:hover {
+            transform: translateY(-10px);
+            background: rgba(255, 255, 255, 0.15);
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+        }
+        
+        .game-icon {
+            font-size: 4rem;
+            margin-bottom: 20px;
+            display: block;
+        }
+        
+        .game-title {
+            font-size: 1.8rem;
+            font-weight: 700;
+            margin-bottom: 15px;
+            color: #fff;
+        }
+        
+        .game-description {
+            font-size: 1rem;
+            line-height: 1.6;
+            opacity: 0.9;
+            margin-bottom: 20px;
+        }
+        
+        .game-features {
+            list-style: none;
+            margin-bottom: 25px;
+        }
+        
+        .game-features li {
+            font-size: 0.9rem;
+            margin-bottom: 8px;
+            opacity: 0.8;
+        }
+        
+        .game-features li:before {
+            content: "✓ ";
+            color: #4facfe;
+            font-weight: bold;
+        }
+        
+        .play-button {
+            background: linear-gradient(45deg, #4facfe 0%, #00f2fe 100%);
+            border: none;
+            border-radius: 12px;
+            color: white;
+            font-size: 1.1rem;
+            font-weight: 600;
+            padding: 12px 25px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            width: 100%;
+            text-decoration: none;
+            display: inline-block;
+            text-align: center;
+        }
+        
+        .play-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(79, 172, 254, 0.6);
+        }
+        
+        .tech-info {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 25px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            text-align: center;
+        }
+        
+        .tech-title {
+            font-size: 1.5rem;
+            margin-bottom: 15px;
+            color: #4facfe;
+        }
+        
+        .tech-description {
+            opacity: 0.9;
+            line-height: 1.6;
+        }
+        
+        @media (max-width: 768px) {
+            .main-title {
+                font-size: 2.5rem;
+            }
+            
+            .games-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .container {
+                padding: 20px 15px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1 class="main-title">Jammanbo Play Creator</h1>
+            <p class="subtitle">다양한 인터랙티브 게임 경험을 제공하는 플랫폼</p>
+        </div>
+        
+        <div class="games-grid">
+            <!-- 리듬 캔디 게임 -->
+            <div class="game-card" onclick="window.open('./rythm-candy-game/', '_blank')">
+                <span class="game-icon">🍭</span>
+                <h2 class="game-title">RYTHM CANDY</h2>
+                <p class="game-description">타이밍에 맞춰 터치하는 네온 스타일의 리듬 액션 게임</p>
+                <ul class="game-features">
+                    <li>타이밍 기반 리듬 액션</li>
+                    <li>화려한 네온 비주얼 효과</li>
+                    <li>레벨업 시스템</li>
+                    <li>PC 및 모바일 지원</li>
+                </ul>
+                <a href="./rythm-candy-game/" class="play-button">🎮 플레이하기</a>
+            </div>
+            
+            <!-- 빌런 체이스 게임 -->
+            <div class="game-card" onclick="window.open('./villain-chase-game/', '_blank')">
+                <span class="game-icon">🎯</span>
+                <h2 class="game-title">팀 태그: 빌런 체이스</h2>
+                <p class="game-description">협력해서 영리한 빌런을 잡는 실시간 협동 아케이드 게임</p>
+                <ul class="game-features">
+                    <li>실시간 협동 플레이</li>
+                    <li>영리한 AI 빌런 (2배 속도)</li>
+                    <li>협공 보너스 시스템</li>
+                    <li>전략적 아이템 활용</li>
+                    <li>핑 커뮤니케이션</li>
+                </ul>
+                <a href="./villain-chase-game/" class="play-button">🤝 협동하기</a>
+            </div>
+        </div>
+        
+        <!-- Chase 빠른 접근 -->
+        <div class="tech-info">
+            <h3 class="tech-title">🚀 빠른 접근</h3>
+            <p class="tech-description">
+                <strong>/chase</strong> - 빌런 체이스 게임 바로가기<br>
+                협동의 재미를 경험하고 싶다면 <a href="./villain-chase-game/" style="color: #4facfe; text-decoration: none;">여기를 클릭</a>하세요!
+            </p>
+        </div>
+    </div>
+    
+    <script>
+        // URL에서 /chase로 접근하면 빌런 체이스 게임으로 리다이렉트
+        if (window.location.pathname.includes('/chase')) {
+            window.location.href = './villain-chase-game/';
+        }
+    </script>
+</body>
+</html> 

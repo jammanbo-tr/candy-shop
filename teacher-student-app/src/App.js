@@ -20,6 +20,9 @@ import HistoryBoardPage from './pages/HistoryBoardPage';
 import KoreanHistoryMindMapPage from './pages/KoreanHistoryMindMapPage';
 import MindMapHubPage from './pages/MindMapHubPage';
 import LabPage from './pages/LabPage';
+import HangangPage from './pages/HangangPage';
+import HangangHubPage from './pages/HangangHubPage';
+import LearningJournalPage from './pages/LearningJournalPage';
 import VillainChaseGame from './components/VillainChaseGame';
 import './App.css';
 
@@ -52,6 +55,10 @@ function App() {
         <Route path="/korean-history-mindmap" element={<KoreanHistoryMindMapPage />} />
         <Route path="/korean-history-mindmap/:classId" element={<KoreanHistoryMindMapPage />} />
         <Route path="/lab" element={<LabPage />} />
+        <Route path="/hangang-hub" element={<HangangHubPage />} />
+        <Route path="/hangang" element={<HangangPage />} />
+        <Route path="/hangang/:classId" element={<HangangPage />} />
+        <Route path="/learning-journal" element={<LearningJournalPage />} />
         <Route path="/villain-chase" element={<VillainChaseGame />} />
         <Route path="/chase" element={<VillainChaseGame />} />
         <Route path="/" element={<TeacherPage />} />

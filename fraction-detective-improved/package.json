@@ -1,0 +1,41 @@
+{
+  "name": "fraction-detective-game",
+  "version": "1.0.0",
+  "description": "초등학생을 위한 분수 뺄셈 학습 게임",
+  "main": "index.html",
+  "scripts": {
+    "start": "npx http-server . -p 3000 -o",
+    "dev": "npx live-server --port=3000",
+    "build": "npm run optimize",
+    "optimize": "node scripts/optimize.js",
+    "deploy": "npm run build && firebase deploy"
+  },
+  "keywords": [
+    "education",
+    "math",
+    "fractions",
+    "game",
+    "elementary",
+    "korean"
+  ],
+  "author": "교육용 웹앱 개발자",
+  "license": "MIT",
+  "devDependencies": {
+    "http-server": "^14.1.1",
+    "live-server": "^1.2.2",
+    "firebase-tools": "^13.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/your-username/fraction-detective-game.git"
+  },
+  "browserslist": [
+    "> 1%",
+    "last 2 versions",
+    "not dead"
+  ]
+}
+
+
+
+

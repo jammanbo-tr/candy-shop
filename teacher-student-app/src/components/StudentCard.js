@@ -345,6 +345,61 @@ const StudentCard = ({ student, selected, onSelect, onOptionClick, expEffect, le
             XP {student.exp} / {getRequiredExp(student.level)}
           </div>
         </div>
+        
+        {/* 메시지 토큰 정보 */}
+        <div style={{ margin: '8px auto 8px auto', width: '92%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#f0f8ff', padding: '6px 12px', borderRadius: 10, border: '1px solid #e0f0ff' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span role="img" aria-label="token" style={{ fontSize: 14 }}>🎫</span>
+            <span style={{ fontSize: 13, fontWeight: 600, color: '#1976d2' }}>
+              {student.dailyMessageTokens || 0}/10
+            </span>
+          </div>
+          <div style={{ display: 'flex', gap: 4 }}>
+            <button
+              onClick={e => { 
+                e.stopPropagation(); 
+                onOptionClick && onOptionClick('removeToken', student); 
+              }}
+              disabled={!student.dailyMessageTokens || student.dailyMessageTokens <= 0}
+              style={{
+                background: (!student.dailyMessageTokens || student.dailyMessageTokens <= 0) ? '#f5f5f5' : '#ffebee',
+                border: 'none',
+                borderRadius: 4,
+                padding: '2px 6px',
+                fontSize: 12,
+                fontWeight: 600,
+                color: (!student.dailyMessageTokens || student.dailyMessageTokens <= 0) ? '#ccc' : '#d32f2f',
+                cursor: (!student.dailyMessageTokens || student.dailyMessageTokens <= 0) ? 'not-allowed' : 'pointer',
+                transition: 'all 0.2s'
+              }}
+              title="토큰 1개 차감"
+            >
+              −
+            </button>
+            <button
+              onClick={e => { 
+                e.stopPropagation(); 
+                onOptionClick && onOptionClick('addToken', student); 
+              }}
+              disabled={student.dailyMessageTokens >= 20}
+              style={{
+                background: student.dailyMessageTokens >= 20 ? '#f5f5f5' : '#e8f5e8',
+                border: 'none',
+                borderRadius: 4,
+                padding: '2px 6px',
+                fontSize: 12,
+                fontWeight: 600,
+                color: student.dailyMessageTokens >= 20 ? '#ccc' : '#2e7d32',
+                cursor: student.dailyMessageTokens >= 20 ? 'not-allowed' : 'pointer',
+                transition: 'all 0.2s'
+              }}
+              title="토큰 1개 추가"
+            >
+              +
+            </button>
+          </div>
+        </div>
+        
         <div style={{ height: 3 }} />
         {ongoingQuests.length > 0 && (
           <button

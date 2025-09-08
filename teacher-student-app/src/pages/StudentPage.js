@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useDocument, useCollection } from 'react-firebase-hooks/firestore';
-import { doc, updateDoc, arrayUnion, collection, getDocs, query, where, orderBy, onSnapshot, getDoc, addDoc, limit, deleteDoc, setDoc } from 'firebase/firestore';
+import { doc, updateDoc, arrayUnion, collection, getDocs, query, where, orderBy, onSnapshot, getDoc, addDoc, limit, deleteDoc, setDoc, writeBatch } from 'firebase/firestore';
 import { db } from '../firebase';
 import { Card, CardContent, Typography, Button, Box, Modal, Chip, Stack, Snackbar, Alert, Badge, IconButton } from '@mui/material';
 import CelebrationIcon from '@mui/icons-material/Celebration';
@@ -18,6 +18,7 @@ import { auth, googleProvider } from '../firebase';
 import { signInWithPopup, signOut } from 'firebase/auth';
 import { useAuthState } from 'react-firebase-hooks/auth';
 import EmotionAttendanceModal from '../components/EmotionAttendanceModal';
+import LearningJournalModal from '../components/LearningJournalModal';
 
 // CSS 애니메이션 정의 (피버타임용)
 const feverAnimationCSS = `
@@ -238,6 +239,20 @@ const StudentPage = () => {
   const [depositError, setDepositError] = useState('');
   const [unreadAlarmCount, setUnreadAlarmCount] = useState(0);
   
+  // 친구 메시지 관련 상태
+  const [showFriendMessageModal, setShowFriendMessageModal] = useState(false);
+  const [friendMessageText, setFriendMessageText] = useState('');
+  const [selectedFriendForMessage, setSelectedFriendForMessage] = useState(null);
+  const [friendMessages, setFriendMessages] = useState([]);
+  
+  // 메시지 토큰 관련 상태
+  const [dailyMessageTokens, setDailyMessageTokens] = useState(10);
+  
+  // 학습일지 모달 상태
+  const [showLearningJournalModal, setShowLearningJournalModal] = useState(false);
+  const [tokenResetDate, setTokenResetDate] = useState(null);
+  const [isSendingMessage, setIsSendingMessage] = useState(false);
+  
   // 역사 데이터 생성 관련 상태
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [historyEntryData, setHistoryEntryData] = useState({
@@ -398,7 +413,7 @@ const StudentPage = () => {
   useEffect(() => {
     console.log('퀴즈 알림 실시간 리스너 시작');
     
-    const notificationsRef = collection(db, 'notifications');
+    const notificationsRef = collection(db, 'copy_notifications');
     const q = query(
       notificationsRef, 
       where('type', '==', 'quiz'),
@@ -499,7 +514,7 @@ const StudentPage = () => {
     }
 
     try {
-      await addDoc(collection(db, 'quizResponses'), {
+      await addDoc(collection(db, 'copy_quizResponses'), {
         quizId: currentQuiz.id,
         quizTitle: currentQuiz.title,
         studentName: student.name,
@@ -1024,9 +1039,13 @@ _무중임_태_중_황태- 황무황---중태
     );
     const seenAlarms = JSON.parse(localStorage.getItem('seenStudentAlarms')||'[]');
     const unreadAlarms = allAlarms.filter(a => a.ts && !seenAlarms.includes(a.ts)).length;
-    setUnreadCount(unreadMsg + unreadAlarms);
+    
+    // 친구 메시지 읽지 않은 개수 계산
+    const unreadFriendMessages = friendMessages.filter(msg => !msg.read).length;
+    
+    setUnreadCount(unreadMsg + unreadAlarms + unreadFriendMessages);
     setUnreadAlarmCount(unreadAlarms);
-  }, [student]);
+  }, [student, friendMessages]);
 
   // 공지사항 불러오기
   useEffect(() => {
@@ -1058,6 +1077,63 @@ _무중임_태_중_황태- 황무황---중태
       if (broadcastTimeoutRef.current) clearTimeout(broadcastTimeoutRef.current);
     };
   }, []);
+
+  // 친구 메시지 실시간 수신
+  useEffect(() => {
+    if (!studentId || !student) return;
+    
+    const actualStudentId = student.id || studentId;
+    const q = query(
+      collection(db, 'studentMessages'),
+      where('toId', '==', actualStudentId),
+      orderBy('timestamp', 'desc')
+    );
+    
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const messages = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      
+      // 중복 메시지 제거 (id 기준)
+      const uniqueMessages = messages.filter((message, index, self) => 
+        index === self.findIndex((m) => m.id === message.id)
+      );
+      
+      console.log('친구 메시지 수신:', uniqueMessages);
+      console.log('현재 studentId:', studentId);
+      setFriendMessages(uniqueMessages);
+    });
+    
+    return () => unsubscribe();
+  }, [studentId, student]);
+
+  // 메시지 토큰 시스템 초기화 및 관리
+  useEffect(() => {
+    if (!student) return;
+
+    const today = new Date().toDateString(); // 오늘 날짜 문자열
+    const studentTokens = student.dailyMessageTokens || 10;
+    const studentResetDate = student.tokenResetDate;
+
+    // 날짜가 바뀌었거나 처음 설정하는 경우
+    if (!studentResetDate || studentResetDate !== today) {
+      // Firebase에서 토큰을 10개로 리셋하고 날짜 업데이트
+      updateDoc(doc(db, 'students', studentId), {
+        dailyMessageTokens: 10,
+        tokenResetDate: today
+      }).then(() => {
+        setDailyMessageTokens(10);
+        setTokenResetDate(today);
+      }).catch(error => {
+        console.error('토큰 리셋 실패:', error);
+      });
+    } else {
+      // 같은 날짜면 저장된 토큰 수 사용
+      setDailyMessageTokens(studentTokens);
+      setTokenResetDate(studentResetDate);
+    }
+  }, [student, studentId]);
 
   // 메시지 보내기
   const handleSendMessage = async () => {
@@ -1118,6 +1194,88 @@ _무중임_태_중_황태- 황무황---중태
     setShowSelfPraiseModal(false);
     setSelfPraiseText('');
     setSelfPraiseExp(10);
+  };
+
+  // 친구 메시지 읽음 처리
+  const markFriendMessagesAsRead = async () => {
+    try {
+      const unreadMessages = friendMessages.filter(msg => !msg.read);
+      if (unreadMessages.length > 0) {
+        // 각 메시지를 읽음 처리
+        const batch = writeBatch(db);
+        unreadMessages.forEach(msg => {
+          const docRef = doc(db, 'studentMessages', msg.id);
+          batch.update(docRef, { read: true });
+        });
+        await batch.commit();
+      }
+    } catch (error) {
+      console.error('메시지 읽음 처리 실패:', error);
+    }
+  };
+
+  // 친구에게 메시지 보내기
+  const handleSendFriendMessage = async () => {
+    if (!selectedFriendForMessage || !friendMessageText.trim()) return;
+    
+    // 토큰 확인
+    if (dailyMessageTokens <= 0) {
+      setPraiseResultMsg('오늘의 메시지 토큰을 모두 사용했습니다! 내일 다시 시도해주세요. 🕒');
+      setPraiseResultEffect(true);
+      setTimeout(() => setPraiseResultEffect(false), 3000);
+      return;
+    }
+    
+    try {
+      // studentMessages 컬렉션에 메시지 저장
+      const actualStudentId = student.id || studentId;
+      const messageData = {
+        fromId: actualStudentId,
+        fromName: student.name,
+        toId: selectedFriendForMessage.id,
+        toName: selectedFriendForMessage.name,
+        message: friendMessageText.trim(),
+        timestamp: Date.now(),
+        read: false
+      };
+      
+      console.log('메시지 전송 시작:', messageData);
+      
+      // 중복 전송 방지를 위한 추가 체크
+      if (isSendingMessage) {
+        console.log('이미 메시지 전송 중, 중복 전송 방지');
+        return;
+      }
+      setIsSendingMessage(true);
+      
+      const docRef = await addDoc(collection(db, 'studentMessages'), messageData);
+      console.log('메시지 전송 완료, 문서 ID:', docRef.id);
+      
+      // 토큰 차감
+      const newTokenCount = dailyMessageTokens - 1;
+      await updateDoc(doc(db, 'students', studentId), {
+        dailyMessageTokens: newTokenCount
+      });
+      setDailyMessageTokens(newTokenCount);
+      
+      // 성공 메시지 표시 (기존 praiseResult 시스템 활용)
+      setPraiseResultMsg(`${selectedFriendForMessage.name}에게 메시지를 보냈습니다! 💌 (남은 토큰: ${newTokenCount}개)`);
+      setPraiseResultEffect(true);
+      setTimeout(() => setPraiseResultEffect(false), 2000);
+      
+      // 모달 닫기
+      setShowFriendMessageModal(false);
+      setSelectedFriendForMessage(null);
+      setFriendMessageText('');
+      
+    } catch (error) {
+      console.error('메시지 전송 실패:', error);
+      setPraiseResultMsg('메시지 전송 중 오류가 발생했습니다. 다시 시도해 주세요.');
+      setPraiseResultEffect(true);
+      setTimeout(() => setPraiseResultEffect(false), 2000);
+    } finally {
+      setIsSendingMessage(false);
+    }
   };
 
   // 역사 데이터 생성
@@ -2242,7 +2400,7 @@ _무중임_태_중_황태- 황무황---중태
           <img src="/jar2.png" alt="유리병" style={{ width: 32, height: 32, objectFit: 'contain', filter: 'drop-shadow(0 2px 6px #b2ebf2a0)' }} />
         </div>
         {/* 학습일지 버튼 */}
-        <button onClick={() => window.open('https://script.google.com/a/macros/jammanbo.kr/s/AKfycbzJe87NO0gfiGJ58h19F5r3zebgkkek3NSqMKAfFexDc_9bzN3NBFhwbPgv1hNLkT9s/exec', '_blank')} style={{ background: '#fffde7', border: 'none', borderRadius: 999, padding: '8px 18px', boxShadow: '0 2px 8px #b2ebf240', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}>
+        <button onClick={() => setShowLearningJournalModal(true)} style={{ background: '#fffde7', border: 'none', borderRadius: 999, padding: '8px 18px', boxShadow: '0 2px 8px #b2ebf240', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}>
           <span style={{ fontWeight: 700, color: '#1976d2', fontSize: 28, lineHeight: '1', display: 'flex', alignItems: 'center' }} role="img" aria-label="notebook">📒</span>
           <span style={{ fontWeight: 700, color: '#1976d2', fontSize: 16, marginLeft: 2 }}>학습일지</span>
         </button>
@@ -2616,6 +2774,25 @@ _무중임_태_중_황태- 황무황---중태
               )}
               <Box mt={1.5}>
                 <Button fullWidth sx={{ mb: 1, borderRadius: 999, fontWeight: 'bold', background: '#ffe4ec', border: '2px solid #ffb6b9', color: '#d72660', boxShadow: '0 2px 8px #f8bbd0a0', fontSize: 16, letterSpacing: '-0.5px', py: 1.2, '&:hover': { background: '#ffd6e0' } }} onClick={() => { console.log('메시지 버튼 클릭'); setShowMsgModal(true); }} startIcon={<EmojiEventsIcon />}>메시지 보내기</Button>
+                <div style={{ position: 'relative', display: 'inline-block', width: '100%' }}>
+                  <Button fullWidth sx={{ mb: 1, borderRadius: 999, fontWeight: 'bold', background: '#e0f7fa', border: '2px solid #b2ebf2', color: '#1976d2', boxShadow: '0 2px 8px #b2ebf240', fontSize: 16, letterSpacing: '-0.5px', py: 1.2, '&:hover': { background: '#b2ebf2' } }} onClick={() => { console.log('친구 메시지 버튼 클릭'); setShowFriendMessageModal(true); }} startIcon={<EmojiEventsIcon />}>친구에게 메시지</Button>
+                  <div style={{
+                    position: 'absolute',
+                    top: '-8px',
+                    right: '8px',
+                    background: '#ff4444',
+                    color: '#fff',
+                    fontSize: '11px',
+                    fontWeight: 'bold',
+                    padding: '3px 8px',
+                    borderRadius: '12px',
+                    boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
+                    zIndex: 10,
+                    fontFamily: '"Roboto", "Helvetica", "Arial", sans-serif'
+                  }}>
+                    업데이트
+                  </div>
+                </div>
                 <Button fullWidth sx={{ mb: 1, borderRadius: 999, fontWeight: 'bold', background: '#ffe4ec', border: '2px solid #ffb6b9', color: '#d72660', boxShadow: '0 2px 8px #f8bbd0a0', fontSize: 16, letterSpacing: '-0.5px', py: 1.2, '&:hover': { background: '#ffd6e0' } }} onClick={() => { console.log('친구 칭찬 버튼 클릭'); setShowPraiseModal(true); }} startIcon={<CelebrationIcon />}>친구 칭찬하기</Button>
                 <Button fullWidth sx={{ borderRadius: 999, fontWeight: 'bold', background: '#ffe4ec', border: '2px solid #ffb6b9', color: '#d72660', boxShadow: '0 2px 8px #f8bbd0a0', fontSize: 16, letterSpacing: '-0.5px', py: 1.2, '&:hover': { background: '#ffd6e0' } }} onClick={() => { console.log('나 칭찬 버튼 클릭'); setShowSelfPraiseModal(true); }} startIcon={<CelebrationIcon />}>나 칭찬하기</Button>
               </Box>
@@ -2996,11 +3173,16 @@ _무중임_태_중_황태- 황무황---중태
               <span role="img" aria-label="bell">🔔</span> 알림함
             </div>
             {/* 탭 UI */}
-            <div style={{ display: 'flex', gap: 12, marginBottom: 18, flexWrap: 'wrap', justifyContent: 'center' }}>
-              {['메시지', '퀘스트 승인여부', '알람'].map(tab => (
+            <div style={{ display: 'flex', gap: 8, marginBottom: 18, flexWrap: 'wrap', justifyContent: 'center' }}>
+              {['메시지', '친구 메시지', '퀘스트 승인여부', '알람'].map(tab => (
                 <button
                   key={tab}
-                  onClick={() => setNotificationTab(tab)}
+                  onClick={() => {
+                    setNotificationTab(tab);
+                    if (tab === '친구 메시지') {
+                      markFriendMessagesAsRead();
+                    }
+                  }}
                   style={{
                     fontWeight: notificationTab === tab ? 700 : 500,
                     borderRadius: 999,
@@ -3029,6 +3211,44 @@ _무중임_태_중_황태- 황무황---중태
                   if (messageList.length === 0) return <div style={{ color: '#888', fontSize: 16, margin: '32px 0' }}>새로운 메시지가 없습니다.</div>;
                   return messageList.map((m, i) => (
                     <div key={i} style={{ background: '#fffde7', borderRadius: 12, padding: '10px 14px', marginBottom: 8, color: '#ff9800', fontWeight: 600, textAlign: 'left', fontSize: 15 }}>{m.text}</div>
+                  ));
+                } else if (notificationTab === '친구 메시지') {
+                  // 친구들로부터 받은 메시지들
+                  if (friendMessages.length === 0) return <div style={{ color: '#888', fontSize: 16, margin: '32px 0' }}>받은 메시지가 없습니다.</div>;
+                  return friendMessages.map((msg, i) => (
+                    <div key={`friend-msg-${msg.id || msg.timestamp}-${i}`} style={{ 
+                      background: '#e8f5e8', 
+                      borderRadius: 12, 
+                      padding: '12px 16px', 
+                      marginBottom: 8, 
+                      textAlign: 'left', 
+                      fontSize: 15,
+                      border: '2px solid #c8e6c9'
+                    }}>
+                      <div style={{ 
+                        fontWeight: 700, 
+                        color: '#2e7d32', 
+                        fontSize: 14, 
+                        marginBottom: 4, 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        gap: 6 
+                      }}>
+                        <span role="img" aria-label="friend">👥</span>
+                        {msg.fromName}님으로부터
+                        <span style={{ fontSize: 12, color: '#666', fontWeight: 400 }}>
+                          {new Date(msg.timestamp).toLocaleString('ko-KR', { 
+                            month: 'short', 
+                            day: 'numeric', 
+                            hour: '2-digit', 
+                            minute: '2-digit' 
+                          })}
+                        </span>
+                      </div>
+                      <div style={{ color: '#1b5e20', fontWeight: 500, lineHeight: '1.4' }}>
+                        {msg.message}
+                      </div>
+                    </div>
                   ));
                 } else if (notificationTab === '퀘스트 승인여부') {
                   // 다양한 성공/실패 status를 모두 포함
@@ -4165,15 +4385,7 @@ _무중임_태_중_황태- 황무황---중태
               textAlign: 'center'
             }}>
               <div style={{ fontSize: 18, fontWeight: 600, color: '#FF9800' }}>
-                현재 잔액: {(() => {
-                  // 거래 내역이 있으면 최신 거래의 잔액을 사용, 없으면 student.balance 사용
-                  if (student.transactionHistory && student.transactionHistory.length > 0) {
-                    const latestTransaction = student.transactionHistory
-                      .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))[0];
-                    return latestTransaction.balanceAfter || 0;
-                  }
-                  return student.balance || 0;
-                })()}원
+                현재 잔액: {student.balance || 0}원
               </div>
             </div>
 
@@ -4655,6 +4867,231 @@ _무중임_태_중_황태- 황무황---중태
         </div>
       )}
 
+      {/* 친구 메시지 보내기 모달 */}
+      {showFriendMessageModal && (
+        <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(0,0,0,0.32)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10000 }}>
+          <div style={{ background: '#fff', borderRadius: 32, padding: 36, minWidth: 340, maxWidth: 420, boxShadow: '0 12px 64px #1976d220', textAlign: 'center', border: '4px solid #1976d2', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+            <div style={{ fontSize: 28, color: '#1976d2', marginBottom: 18, fontWeight: 900, letterSpacing: '-1.5px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
+              <span role="img" aria-label="message">💌</span> 친구에게 메시지
+            </div>
+            
+            {/* 토큰 표시 */}
+            <div style={{ 
+              background: dailyMessageTokens > 0 ? '#e8f5e8' : '#fff3e0', 
+              borderRadius: 12, 
+              padding: '8px 16px', 
+              marginBottom: 16,
+              border: `2px solid ${dailyMessageTokens > 0 ? '#c8e6c9' : '#ffcc02'}`,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 6
+            }}>
+              <span role="img" aria-label="token" style={{ fontSize: 18 }}>
+                {dailyMessageTokens > 0 ? '🎫' : '⏰'}
+              </span>
+              <span style={{ 
+                fontWeight: 600, 
+                color: dailyMessageTokens > 0 ? '#2e7d32' : '#f57c00',
+                fontSize: 14 
+              }}>
+                {dailyMessageTokens > 0 
+                  ? `오늘 ${dailyMessageTokens}개의 메시지 토큰 남음`
+                  : '오늘의 메시지 토큰을 모두 사용했습니다'
+                }
+              </span>
+            </div>
+            
+            {/* 친구 선택 */}
+            <div style={{ width: '100%', marginBottom: 18 }}>
+              <div style={{ fontWeight: 600, fontSize: 16, marginBottom: 8, color: '#1976d2', textAlign: 'left' }}>받을 친구 선택</div>
+              <select
+                value={selectedFriendForMessage?.id || ''}
+                onChange={(e) => {
+                  const friendId = e.target.value;
+                  if (friendId && studentsSnapshot) {
+                    const friendDoc = studentsSnapshot.docs.find(doc => 
+                      (doc.data().id || doc.id) === friendId
+                    );
+                    if (friendDoc) {
+                      const friendData = friendDoc.data();
+                      setSelectedFriendForMessage({
+                        id: friendId,
+                        name: friendData.name
+                      });
+                    }
+                  } else {
+                    setSelectedFriendForMessage(null);
+                  }
+                }}
+                style={{
+                  width: '100%',
+                  borderRadius: 14,
+                  border: '2px solid #e0f7fa',
+                  padding: 12,
+                  fontSize: 16,
+                  outline: 'none',
+                  background: '#f7faf7',
+                  color: '#222',
+                  boxSizing: 'border-box'
+                }}
+              >
+                <option value="">친구를 선택하세요</option>
+                {studentsSnapshot && studentsSnapshot.docs.map(doc => {
+                  const friend = doc.data();
+                  const friendId = friend.id ? friend.id : doc.id;
+                  if (friendId === studentId) return null; // 자기 자신 제외
+                  return (
+                    <option key={friendId} value={friendId}>
+                      {friend.name}
+                    </option>
+                  );
+                })}
+              </select>
+            </div>
+            
+            {/* 메시지 입력 */}
+            <div style={{ width: '100%', marginBottom: 24 }}>
+              <div style={{ fontWeight: 600, fontSize: 16, marginBottom: 8, color: '#1976d2', textAlign: 'left' }}>메시지 내용</div>
+              <textarea
+                value={friendMessageText}
+                onChange={(e) => setFriendMessageText(e.target.value)}
+                style={{
+                  width: '100%',
+                  minHeight: 80,
+                  borderRadius: 14,
+                  border: '2px solid #e0f7fa',
+                  padding: 12,
+                  fontSize: 16,
+                  outline: 'none',
+                  background: '#f7faf7',
+                  color: '#222',
+                  resize: 'vertical',
+                  boxSizing: 'border-box'
+                }}
+                placeholder="친구에게 보낼 메시지를 입력하세요"
+              />
+            </div>
+            
+            {/* 버튼들 */}
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
+              <button
+                onClick={() => {
+                  setShowFriendMessageModal(false);
+                  setSelectedFriendForMessage(null);
+                  setFriendMessageText('');
+                }}
+                style={{
+                  fontWeight: 700,
+                  borderRadius: 999,
+                  background: '#ffe4ec',
+                  color: '#d72660',
+                  border: 'none',
+                  padding: '12px 24px',
+                  fontSize: 16,
+                  boxShadow: '0 2px 8px #f8bbd0a0',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s'
+                }}
+              >
+                취소
+              </button>
+              <button
+                onClick={handleSendFriendMessage}
+                disabled={!selectedFriendForMessage || !friendMessageText.trim() || dailyMessageTokens <= 0 || isSendingMessage}
+                style={{
+                  fontWeight: 700,
+                  borderRadius: 999,
+                  background: selectedFriendForMessage && friendMessageText.trim() && dailyMessageTokens > 0 && !isSendingMessage ? '#e0f7fa' : '#f5f5f5',
+                  color: selectedFriendForMessage && friendMessageText.trim() && dailyMessageTokens > 0 && !isSendingMessage ? '#1976d2' : '#aaa',
+                  border: 'none',
+                  padding: '12px 24px',
+                  fontSize: 16,
+                  boxShadow: '0 2px 8px #b2ebf240',
+                  cursor: selectedFriendForMessage && friendMessageText.trim() && dailyMessageTokens > 0 ? 'pointer' : 'not-allowed',
+                  transition: 'all 0.2s'
+                }}
+              >
+                {isSendingMessage ? '전송 중... ⏳' : '전송 📨'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 공지사항 광고 모달 */}
+      {showBroadcastModal && broadcastNotice && (
+        <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(0,0,0,0.32)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10000 }}>
+          <div style={{ background: '#fff', borderRadius: 32, padding: 36, minWidth: 340, maxWidth: 420, boxShadow: '0 12px 64px #1976d220', textAlign: 'center', border: '4px solid #1976d2', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+            <div style={{ fontSize: 28, color: '#1976d2', marginBottom: 18, fontWeight: 900, letterSpacing: '-1.5px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
+              <span role="img" aria-label="megaphone">📢</span> 공지사항
+            </div>
+            
+            {/* 내용 */}
+            <div style={{
+              fontSize: 16,
+              lineHeight: '1.6',
+              marginBottom: 24,
+              padding: '20px 24px',
+              background: '#f7faf7',
+              borderRadius: 16,
+              border: '2px solid #e0f7fa',
+              color: '#333',
+              minHeight: 60,
+              maxHeight: 200,
+              overflowY: 'auto',
+              width: '100%',
+              boxSizing: 'border-box',
+              whiteSpace: 'pre-wrap'
+            }}>
+              {broadcastNotice.content || '공지사항 내용이 없습니다.'}
+            </div>
+            
+            {/* 버튼 */}
+            <button
+              onClick={() => {
+                if (broadcastNotice && broadcastNotice.broadcastTime) {
+                  markBroadcastAsSeen(broadcastNotice.id, broadcastNotice.broadcastTime);
+                }
+                setShowBroadcastModal(false);
+                setBroadcastNotice(null);
+              }}
+              style={{
+                fontWeight: 700,
+                borderRadius: 999,
+                background: '#e0f7fa',
+                color: '#1976d2',
+                border: 'none',
+                padding: '12px 32px',
+                fontSize: 16,
+                boxShadow: '0 2px 8px #b2ebf240',
+                cursor: 'pointer',
+                transition: 'all 0.2s'
+              }}
+              onMouseOver={(e) => {
+                e.target.style.background = '#b2ebf2';
+                e.target.style.transform = 'translateY(-1px)';
+                e.target.style.boxShadow = '0 4px 12px #b2ebf260';
+              }}
+              onMouseOut={(e) => {
+                e.target.style.background = '#e0f7fa';
+                e.target.style.transform = 'translateY(0)';
+                e.target.style.boxShadow = '0 2px 8px #b2ebf240';
+              }}
+            >
+              확인했어요! 👍
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* 학습일지 모달 */}
+      <LearningJournalModal
+        isOpen={showLearningJournalModal}
+        onClose={() => setShowLearningJournalModal(false)}
+        studentName={student?.name || ''}
+      />
+
       <style jsx>{`
         @keyframes firework-0 {
           0% { transform: translateY(0) scale(1); opacity: 1; }
@@ -4695,6 +5132,15 @@ _무중임_태_중_황태- 황무황---중태
           0% { transform: scale(1); }
           50% { transform: scale(1.2); }
           100% { transform: scale(1); }
+        }
+        @keyframes modalAppear {
+          0% { transform: scale(0.8) translateY(20px); opacity: 0; }
+          100% { transform: scale(1) translateY(0); opacity: 1; }
+        }
+        @keyframes bounce {
+          0%, 20%, 50%, 80%, 100% { transform: translateY(0); }
+          40% { transform: translateY(-10px); }
+          60% { transform: translateY(-5px); }
         }
       `}</style>
     </div>

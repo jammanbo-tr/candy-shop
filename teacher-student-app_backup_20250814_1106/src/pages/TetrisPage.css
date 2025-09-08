@@ -1,0 +1,1344 @@
+.tetris-container {
+  min-height: 100vh;
+  background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+  padding: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+}
+
+/* 상단 헤더 - 현대적이고 깔끔한 스타일 */
+.tetris-header {
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(20px);
+  padding: 20px 24px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+}
+
+.tetris-title {
+  margin: 0;
+  font-size: 28px;
+  font-weight: 700;
+  color: #1e293b;
+  letter-spacing: -0.025em;
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+}
+
+.player-name {
+  font-size: 16px;
+  font-weight: 600;
+  color: #475569;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  padding: 8px 16px;
+  border-radius: 12px;
+  border: 2px solid transparent;
+  background-origin: border-box;
+  background-clip: padding-box, border-box;
+}
+
+.game-area {
+  padding: 40px 24px;
+  max-width: 1400px;
+  margin: 0 auto;
+  padding-bottom: 200px; /* 모바일 컨트롤을 위한 하단 여백 */
+}
+
+.game-content {
+  display: flex;
+  gap: 48px;
+  justify-content: center;
+  align-items: flex-start;
+  margin-bottom: 40px;
+}
+
+.game-board-container {
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(20px);
+  border-radius: 16px;
+  padding: 24px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.game-board {
+  display: grid;
+  grid-template-columns: repeat(10, 32px);
+  grid-template-rows: repeat(20, 32px);
+  gap: 1px;
+  background: linear-gradient(135deg, #1e293b, #334155);
+  border: none;
+  border-radius: 12px;
+  padding: 12px;
+  box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.cell {
+  width: 32px;
+  height: 32px;
+  border-radius: 4px;
+  position: relative;
+  transition: all 0.2s ease;
+  border: 1px solid transparent;
+}
+
+.cell.empty {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.cell.filled {
+  box-shadow: 
+    inset 2px 2px 4px rgba(255, 255, 255, 0.3),
+    inset -2px -2px 4px rgba(0, 0, 0, 0.2),
+    0 2px 4px rgba(0, 0, 0, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+}
+
+.cell.active {
+  animation: subtlePulse 1.5s ease-in-out infinite;
+}
+
+.cell.event-block {
+  animation: subtleGlow 2s ease-in-out infinite alternate;
+}
+
+.event-image {
+  width: 80%;
+  height: 80%;
+  object-fit: contain;
+  position: absolute;
+  top: 10%;
+  left: 10%;
+  z-index: 2;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.3));
+}
+
+.info-panel {
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(20px);
+  border-radius: 16px;
+  padding: 24px;
+  min-width: 300px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.score-container {
+  text-align: center;
+  margin-bottom: 24px;
+  padding: 20px;
+  background: linear-gradient(135deg, #667eea, #764ba2);
+  border-radius: 12px;
+  color: white;
+  box-shadow: 0 4px 20px rgba(102, 126, 234, 0.3);
+}
+
+.score-container h3 {
+  margin: 0 0 8px 0;
+  font-size: 14px;
+  font-weight: 600;
+  opacity: 0.9;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.score-value {
+  font-size: 32px;
+  font-weight: 700;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', monospace;
+}
+
+.level-lines-container {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.level-info, .lines-info {
+  flex: 1;
+  text-align: center;
+  padding: 16px 12px;
+  background: linear-gradient(135deg, #64748b, #475569);
+  border-radius: 12px;
+  color: white;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.level-info .label, .lines-info .label {
+  display: block;
+  font-size: 12px;
+  margin-bottom: 4px;
+  opacity: 0.8;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  font-weight: 600;
+}
+
+.level-info .value, .lines-info .value {
+  display: block;
+  font-size: 24px;
+  font-weight: 700;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', monospace;
+}
+
+.next-piece-container {
+  margin-bottom: 24px;
+  text-align: center;
+}
+
+.next-piece-container h3 {
+  margin: 0 0 16px 0;
+  font-size: 14px;
+  font-weight: 700;
+  color: #1e293b;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.next-piece-preview {
+  background: linear-gradient(135deg, #1e293b, #334155);
+  border-radius: 12px;
+  padding: 20px;
+  border: none;
+  box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.2);
+  min-height: 80px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.next-piece-grid {
+  /* 그리드 스타일은 인라인으로 적용됨 */
+}
+
+.next-cell {
+  border-radius: 3px;
+  border: 1px solid transparent;
+}
+
+.next-cell.filled {
+  box-shadow: 
+    inset 1px 1px 2px rgba(255, 255, 255, 0.3),
+    inset -1px -1px 2px rgba(0, 0, 0, 0.2),
+    0 1px 2px rgba(0, 0, 0, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+}
+
+.next-cell.empty {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.game-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* 현대적 스타일 모바일 컨트롤 - 하단 고정 레이어 */
+.mobile-controls-minecraft {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 1000;
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(20px);
+  padding: 16px;
+  border-top: 1px solid rgba(0, 0, 0, 0.05);
+  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.1);
+}
+
+.controls-container {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-radius: 16px;
+  padding: 20px;
+  margin: 0 auto;
+  max-width: 700px;
+  width: 100%;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+}
+
+/* D-Pad 스타일 - 크기 확대 */
+.dpad-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.dpad {
+  position: relative;
+  width: 220px;
+  height: 220px;
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  grid-template-rows: 1fr 1fr 1fr;
+  gap: 6px;
+}
+
+.dpad-btn {
+  background: linear-gradient(135deg, #667eea, #764ba2);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  position: relative;
+  overflow: hidden;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-weight: 600;
+  min-height: 65px;
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+}
+
+.dpad-btn:active {
+  background: linear-gradient(135deg, #5a67d8, #6b46c1);
+  transform: scale(0.95);
+  box-shadow: 0 2px 8px rgba(102, 126, 234, 0.4);
+}
+
+.dpad-empty {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.dpad-left {
+  grid-column: 1;
+  grid-row: 2;
+}
+
+.dpad-center {
+  grid-column: 2;
+  grid-row: 2;
+  background: linear-gradient(135deg, #64748b, #475569);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 50%;
+  box-shadow: 0 4px 12px rgba(100, 116, 139, 0.3);
+}
+
+.dpad-right {
+  grid-column: 3;
+  grid-row: 2;
+}
+
+.dpad-down {
+  grid-column: 2;
+  grid-row: 3;
+}
+
+.btn-face {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: white;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+.btn-icon {
+  font-size: 28px;
+  font-weight: 600;
+}
+
+/* 액션 버튼들 - 크기 확대 */
+.action-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* 액션 버튼들 - 한 줄 배치 */
+.action-buttons-horizontal {
+  display: flex;
+  flex-direction: row;
+  gap: 16px;
+}
+
+.action-btn {
+  background: linear-gradient(135deg, #64748b, #475569);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 16px;
+  padding: 24px 28px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-weight: 600;
+  min-width: 130px;
+  min-height: 75px;
+  box-shadow: 0 4px 12px rgba(100, 116, 139, 0.3);
+}
+
+.action-btn:active {
+  background: linear-gradient(135deg, #52525b, #3f3f46);
+  transform: scale(0.95);
+  box-shadow: 0 2px 8px rgba(100, 116, 139, 0.4);
+}
+
+.action-btn .btn-face {
+  color: white;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+.btn-label {
+  font-size: 15px;
+  font-weight: 600;
+  margin-bottom: 4px;
+  letter-spacing: 0.3px;
+}
+
+.action-btn .btn-icon {
+  font-size: 26px;
+}
+
+/* 모바일 일시정지 버튼 */
+.mobile-pause-btn {
+  background: linear-gradient(135deg, #10b981, #059669);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 16px;
+  padding: 18px 22px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-weight: 600;
+  width: 100%;
+  margin-bottom: 16px;
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+}
+
+.mobile-pause-btn:active {
+  background: linear-gradient(135deg, #0d9488, #047857);
+  transform: scale(0.95);
+  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.4);
+}
+
+.mobile-pause-btn .btn-face {
+  color: white;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+.mobile-pause-btn .btn-label {
+  font-size: 12px;
+  font-weight: bold;
+  margin-bottom: 2px;
+  letter-spacing: 0.5px;
+}
+
+.mobile-pause-btn .btn-icon {
+  font-size: 16px;
+}
+
+/* 호버 효과 */
+.dpad-btn:hover, .action-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(102, 126, 234, 0.4);
+}
+
+/* 기존 모바일 컨트롤 숨기기 */
+.mobile-controls {
+  display: none;
+}
+
+/* 모달 오버레이 - 현대적 스타일 */
+.game-over-overlay, .ranking-overlay, .pause-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(12px);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+}
+
+/* 모달 기본 스타일 - 현대적이고 깔끔한 디자인 */
+.game-over-modal, .ranking-modal, .pause-modal {
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(20px);
+  border-radius: 20px;
+  padding: 40px;
+  text-align: center;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  max-width: 90vw;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+/* 게임 오버 모달 */
+.game-over-modal {
+  max-width: 500px;
+}
+
+.game-over-modal h2 {
+  color: #1e293b;
+  margin-bottom: 24px;
+  font-weight: 700;
+  font-size: 32px;
+  letter-spacing: -0.025em;
+}
+
+.game-over-content p {
+  color: #475569;
+  margin-bottom: 12px;
+  font-size: 18px;
+  font-weight: 500;
+}
+
+.final-score {
+  font-size: 48px;
+  font-weight: 700;
+  background: linear-gradient(135deg, #667eea, #764ba2);
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  margin: 20px 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', monospace;
+}
+
+.game-stats {
+  display: flex;
+  justify-content: center;
+  gap: 32px;
+  margin-top: 24px;
+  font-size: 16px;
+  color: #64748b;
+}
+
+.game-stats strong {
+  color: #1e293b;
+  font-weight: 700;
+}
+
+.loading-message {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  margin-top: 32px;
+  color: #64748b;
+  font-size: 16px;
+  font-weight: 500;
+}
+
+.loading-spinner {
+  width: 20px;
+  height: 20px;
+  border: 2px solid #e2e8f0;
+  border-top: 2px solid #667eea;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* 일시정지 모달 */
+.pause-modal {
+  max-width: 400px;
+}
+
+.pause-modal h2 {
+  color: #1e293b;
+  margin-bottom: 16px;
+  font-weight: 700;
+  font-size: 24px;
+}
+
+.pause-modal p {
+  color: #64748b;
+  margin-bottom: 24px;
+  font-size: 16px;
+}
+
+/* 랭킹 모달 */
+.ranking-modal {
+  min-width: 600px;
+  max-width: 700px;
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.modal-header h2 {
+  color: #1e293b;
+  margin: 0;
+  font-weight: 700;
+  font-size: 24px;
+  letter-spacing: -0.025em;
+}
+
+.close-btn {
+  background: none;
+  border: none;
+  font-size: 24px;
+  color: #94a3b8;
+  cursor: pointer;
+  padding: 8px;
+  border-radius: 8px;
+  transition: all 0.2s ease;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.close-btn:hover {
+  background: rgba(148, 163, 184, 0.1);
+  color: #64748b;
+}
+
+.my-rank-info {
+  background: linear-gradient(135deg, #667eea, #764ba2);
+  color: white;
+  padding: 20px;
+  border-radius: 12px;
+  margin-bottom: 24px;
+  box-shadow: 0 4px 20px rgba(102, 126, 234, 0.3);
+}
+
+.my-rank-info h3 {
+  margin: 0 0 12px 0;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.rank-summary {
+  display: flex;
+  justify-content: center;
+  gap: 20px;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.rank-number {
+  font-size: 20px;
+  font-weight: 700;
+  background: rgba(255, 255, 255, 0.2);
+  padding: 8px 16px;
+  border-radius: 12px;
+}
+
+.rank-score {
+  font-size: 18px;
+  font-weight: 700;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', monospace;
+}
+
+.ranking-list-container {
+  max-height: 400px;
+  overflow-y: auto;
+  margin-bottom: 24px;
+}
+
+.ranking-list-container h3 {
+  color: #1e293b;
+  margin-bottom: 16px;
+  font-size: 16px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.ranking-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ranking-item {
+  display: flex;
+  align-items: center;
+  padding: 16px;
+  background: rgba(248, 250, 252, 0.8);
+  border-radius: 12px;
+  border: 1px solid rgba(0, 0, 0, 0.05);
+  transition: all 0.2s ease;
+}
+
+.ranking-item:hover {
+  background: rgba(248, 250, 252, 1);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.ranking-item.top-rank {
+  background: linear-gradient(135deg, #f59e0b, #d97706);
+  color: white;
+  border: 1px solid #d97706;
+  box-shadow: 0 4px 16px rgba(245, 158, 11, 0.3);
+}
+
+.ranking-item.my-score {
+  background: linear-gradient(135deg, #667eea, #764ba2);
+  color: white;
+  border: 1px solid #764ba2;
+  box-shadow: 0 4px 16px rgba(102, 126, 234, 0.3);
+}
+
+.rank-position {
+  margin-right: 16px;
+  font-size: 16px;
+  font-weight: 700;
+  min-width: 40px;
+  text-align: center;
+}
+
+.medal {
+  font-size: 20px;
+}
+
+.rank-info {
+  flex: 1;
+  text-align: left;
+}
+
+.rank-nickname {
+  font-size: 16px;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+.rank-details {
+  display: flex;
+  gap: 12px;
+  font-size: 12px;
+  opacity: 0.8;
+  font-weight: 500;
+}
+
+.rank-date {
+  font-size: 11px;
+  opacity: 0.6;
+  min-width: 80px;
+  text-align: right;
+  font-weight: 500;
+}
+
+.ranking-buttons {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+}
+
+.game-instructions {
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(20px);
+  border-radius: 16px;
+  padding: 24px;
+  text-align: center;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.game-instructions h3 {
+  margin: 0 0 20px 0;
+  color: #1e293b;
+  font-size: 16px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.instructions-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+  font-size: 14px;
+  color: #475569;
+}
+
+.instructions-grid div {
+  padding: 12px 16px;
+  background: rgba(102, 126, 234, 0.05);
+  border-radius: 8px;
+  border: 1px solid rgba(102, 126, 234, 0.1);
+  font-weight: 500;
+}
+
+.congratulations {
+  color: #f59e0b;
+  font-weight: 700;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+  animation: gentleCelebration 2s ease-in-out infinite alternate;
+  font-size: 14px;
+  margin-top: 12px;
+}
+
+@keyframes subtlePulse {
+  0% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.02); opacity: 0.9; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+@keyframes subtleGlow {
+  0% { box-shadow: inset 2px 2px 4px rgba(255, 255, 255, 0.3), inset -2px -2px 4px rgba(0, 0, 0, 0.2), 0 0 8px rgba(102, 126, 234, 0.3); }
+  100% { box-shadow: inset 2px 2px 4px rgba(255, 255, 255, 0.3), inset -2px -2px 4px rgba(0, 0, 0, 0.2), 0 0 16px rgba(102, 126, 234, 0.5); }
+}
+
+@keyframes gentleCelebration {
+  0% { transform: scale(1); }
+  100% { transform: scale(1.02); }
+}
+
+/* 레벨업 메시지 - 우측 배치, 줄바뀜 방지 */
+.level-up-message {
+  position: fixed;
+  top: 30%;
+  right: 20px;
+  transform: translateY(-50%);
+  background: linear-gradient(135deg, #667eea, #764ba2, #f093fb);
+  color: white;
+  padding: 24px 32px;
+  border-radius: 20px;
+  font-size: 32px;
+  font-weight: 800;
+  text-align: center;
+  z-index: 2000;
+  box-shadow: 
+    0 0 30px rgba(102, 126, 234, 0.8),
+    0 0 60px rgba(118, 75, 162, 0.6),
+    0 15px 45px rgba(0, 0, 0, 0.3);
+  animation: levelUpExplosionRight 3s ease-in-out;
+  border: 3px solid rgba(255, 255, 255, 0.5);
+  text-shadow: 0 0 15px rgba(255, 255, 255, 0.8);
+  white-space: nowrap;
+  will-change: transform, opacity;
+  backface-visibility: hidden;
+  transform-style: preserve-3d;
+}
+
+@keyframes levelUpExplosionRight {
+  0% { 
+    transform: translateY(-50%) translateX(80px) scale(0.5);
+    opacity: 0;
+  }
+  20% { 
+    transform: translateY(-50%) translateX(0) scale(1.2);
+    opacity: 1;
+  }
+  30% {
+    transform: translateY(-50%) translateX(0) scale(1.1);
+  }
+  80% { 
+    transform: translateY(-50%) translateX(0) scale(1);
+    opacity: 1;
+  }
+  100% { 
+    transform: translateY(-50%) translateX(30px) scale(0.9);
+    opacity: 0;
+  }
+}
+
+/* 이벤트 점수 표시 - 성능 최적화 */
+.event-score-display {
+  position: fixed;
+  top: 60%;
+  right: 30px;
+  background: linear-gradient(135deg, #10b981, #059669, #34d399);
+  color: white;
+  padding: 20px 32px;
+  border-radius: 16px;
+  font-size: 28px;
+  font-weight: 700;
+  z-index: 1500;
+  box-shadow: 
+    0 0 25px rgba(16, 185, 129, 0.8),
+    0 0 50px rgba(5, 150, 105, 0.6),
+    0 12px 40px rgba(0, 0, 0, 0.3);
+  animation: eventScoreFireworksLarge 2s ease-in-out;
+  border: 2px solid rgba(255, 255, 255, 0.4);
+  text-shadow: 0 0 12px rgba(255, 255, 255, 0.9);
+  white-space: nowrap;
+  will-change: transform, opacity;
+  backface-visibility: hidden;
+  transform-style: preserve-3d;
+}
+
+@keyframes eventScoreFireworksLarge {
+  0% { 
+    transform: translateY(-20px) scale(0.5);
+    opacity: 0;
+  }
+  25% {
+    transform: translateY(0) scale(1.3);
+    opacity: 1;
+  }
+  35% { 
+    transform: translateY(0) scale(1.1);
+    opacity: 1;
+  }
+  75% { 
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+  100% { 
+    transform: translateY(-15px) scale(0.8);
+    opacity: 0;
+  }
+}
+
+/* 폭죽 파티클 효과 - 성능 최적화 */
+.event-score-display::before {
+  content: '';
+  position: absolute;
+  top: -15px;
+  left: -15px;
+  right: -15px;
+  bottom: -15px;
+  background: radial-gradient(circle, rgba(255, 215, 0, 0.2) 0%, transparent 60%);
+  border-radius: 50%;
+  animation: fireworksGlow 2s ease-in-out;
+  z-index: -1;
+  will-change: transform, opacity;
+}
+
+@keyframes fireworksGlow {
+  0% { 
+    transform: scale(0);
+    opacity: 0;
+  }
+  30% { 
+    transform: scale(1.5);
+    opacity: 0.6;
+  }
+  70% { 
+    transform: scale(1.2);
+    opacity: 0.3;
+  }
+  100% { 
+    transform: scale(2);
+    opacity: 0;
+  }
+}
+
+/* 레벨업 시 배경 플래시 효과 */
+.level-up-flash {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: radial-gradient(circle, rgba(102, 126, 234, 0.3) 0%, transparent 70%);
+  z-index: 1900;
+  animation: backgroundFlash 1s ease-out;
+  pointer-events: none;
+}
+
+@keyframes backgroundFlash {
+  0% { 
+    opacity: 0;
+    transform: scale(0.5);
+  }
+  30% { 
+    opacity: 1;
+    transform: scale(1.2);
+  }
+  100% { 
+    opacity: 0;
+    transform: scale(2);
+  }
+}
+
+/* 캔디 타임 효과 */
+.candy-time-message {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: linear-gradient(135deg, #ff6b6b, #feca57, #ff9ff3, #54a0ff);
+  color: white;
+  padding: 40px 80px;
+  border-radius: 25px;
+  font-size: 56px;
+  font-weight: 900;
+  text-align: center;
+  z-index: 2100;
+  box-shadow: 
+    0 0 50px rgba(255, 107, 107, 0.9),
+    0 0 100px rgba(254, 202, 87, 0.7),
+    0 25px 75px rgba(0, 0, 0, 0.4);
+  animation: candyTimeExplosion 3s ease-in-out;
+  border: 4px solid rgba(255, 255, 255, 0.6);
+  text-shadow: 
+    0 0 25px rgba(255, 255, 255, 1),
+    0 0 50px rgba(255, 107, 107, 0.8);
+}
+
+@keyframes candyTimeExplosion {
+  0% { 
+    transform: translate(-50%, -50%) scale(0.2) rotate(-20deg);
+    opacity: 0;
+    filter: blur(15px);
+  }
+  10% { 
+    transform: translate(-50%, -50%) scale(1.5) rotate(15deg);
+    opacity: 1;
+    filter: blur(0px);
+  }
+  20% {
+    transform: translate(-50%, -50%) scale(1.2) rotate(-8deg);
+  }
+  30% {
+    transform: translate(-50%, -50%) scale(1.3) rotate(5deg);
+  }
+  40% {
+    transform: translate(-50%, -50%) scale(1.1) rotate(-2deg);
+  }
+  85% { 
+    transform: translate(-50%, -50%) scale(1) rotate(0deg);
+    opacity: 1;
+    filter: blur(0px);
+  }
+  100% { 
+    transform: translate(-50%, -50%) scale(0.6) rotate(0deg);
+    opacity: 0;
+    filter: blur(8px);
+  }
+}
+
+/* 캔디 파티클 */
+.candy-particle {
+  position: fixed;
+  width: 40px;
+  height: 40px;
+  z-index: 2000;
+  pointer-events: none;
+  animation: candyParticleFloat 3s ease-out forwards;
+}
+
+.candy-particle img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  filter: drop-shadow(0 0 10px rgba(255, 255, 255, 0.8));
+}
+
+@keyframes candyParticleFloat {
+  0% {
+    opacity: 0;
+    transform: scale(0) rotate(0deg) translate(0, 0);
+  }
+  10% {
+    opacity: 1;
+    transform: scale(1.5) rotate(180deg) translate(calc(var(--end-x) * 0.2), calc(var(--end-y) * 0.2));
+  }
+  30% {
+    opacity: 1;
+    transform: scale(1.2) rotate(360deg) translate(calc(var(--end-x) * 0.5), calc(var(--end-y) * 0.5));
+  }
+  60% {
+    opacity: 0.9;
+    transform: scale(1) rotate(540deg) translate(calc(var(--end-x) * 0.8), calc(var(--end-y) * 0.8));
+  }
+  100% {
+    opacity: 0;
+    transform: scale(0.3) rotate(720deg) translate(var(--end-x), var(--end-y));
+  }
+}
+
+/* 캔디 타임 배경 효과 */
+.candy-time-background {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: 
+    radial-gradient(circle at 20% 30%, rgba(255, 107, 107, 0.3) 0%, transparent 50%),
+    radial-gradient(circle at 80% 70%, rgba(254, 202, 87, 0.3) 0%, transparent 50%),
+    radial-gradient(circle at 50% 50%, rgba(255, 159, 243, 0.2) 0%, transparent 60%);
+  z-index: 1950;
+  animation: candyTimeBackground 3s ease-in-out;
+  pointer-events: none;
+}
+
+@keyframes candyTimeBackground {
+  0% { 
+    opacity: 0;
+    transform: scale(0.8);
+  }
+  30% { 
+    opacity: 1;
+    transform: scale(1.1);
+  }
+  70% { 
+    opacity: 0.8;
+    transform: scale(1);
+  }
+  100% { 
+    opacity: 0;
+    transform: scale(1.2);
+  }
+}
+
+/* 모바일 반응형 */
+@media (max-width: 768px) {
+  .tetris-container {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+  
+  .tetris-header {
+    padding: 12px 16px;
+    flex-shrink: 0;
+  }
+  
+  .tetris-title {
+    font-size: 20px;
+  }
+  
+  .player-name {
+    font-size: 12px;
+    padding: 4px 8px;
+  }
+  
+  .game-area {
+    flex: 1;
+    padding: 16px 12px;
+    padding-bottom: 180px;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+  
+  .game-content {
+    flex: 1;
+    display: flex;
+    flex-direction: row;
+    gap: 12px;
+    min-height: 0;
+    align-items: stretch;
+  }
+  
+  .game-board-container {
+    flex: 1;
+    padding: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  
+  .game-board {
+    grid-template-columns: repeat(10, 24px);
+    grid-template-rows: repeat(20, 24px);
+    gap: 1px;
+    padding: 8px;
+  }
+  
+  .cell {
+    width: 24px;
+    height: 24px;
+  }
+  
+  .info-panel {
+    min-width: 140px;
+    width: 140px;
+    padding: 16px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  
+  .score-container {
+    padding: 12px;
+    margin-bottom: 12px;
+  }
+  
+  .score-container h3 {
+    font-size: 10px;
+    margin-bottom: 4px;
+  }
+  
+  .score-value {
+    font-size: 20px;
+  }
+  
+  .level-lines-container {
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+  
+  .level-info, .lines-info {
+    padding: 8px 6px;
+  }
+  
+  .level-info .label, .lines-info .label {
+    font-size: 9px;
+  }
+  
+  .level-info .value, .lines-info .value {
+    font-size: 16px;
+  }
+  
+  .next-piece-container {
+    margin-bottom: 12px;
+  }
+  
+  .next-piece-container h3 {
+    font-size: 10px;
+    margin-bottom: 8px;
+  }
+  
+  .next-piece-grid {
+    width: 80px;
+    height: 80px;
+  }
+  
+  .next-cell {
+    width: 16px;
+    height: 16px;
+  }
+  
+  .ranking-modal {
+    min-width: auto;
+    width: 95vw;
+    padding: 24px;
+  }
+  
+  .modal-header h2 {
+    font-size: 20px;
+  }
+  
+  .ranking-item {
+    padding: 12px;
+  }
+  
+  .rank-nickname {
+    font-size: 14px;
+  }
+  
+  .rank-details {
+    font-size: 11px;
+  }
+  
+  .instructions-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .game-over-modal, .pause-modal {
+    padding: 24px;
+    margin: 20px;
+  }
+  
+  .final-score {
+    font-size: 36px;
+  }
+  
+  /* 모바일 컨트롤 조정 */
+  .mobile-controls-minecraft {
+    padding: 12px;
+  }
+  
+  .controls-container {
+    padding: 16px;
+    max-width: 100%;
+  }
+  
+  .dpad {
+    width: 160px;
+    height: 160px;
+  }
+  
+  .dpad-btn {
+    min-height: 50px;
+  }
+  
+  .btn-icon {
+    font-size: 22px;
+  }
+  
+  .action-btn {
+    min-width: 100px;
+    min-height: 60px;
+    padding: 18px 20px;
+  }
+  
+  .btn-label {
+    font-size: 13px;
+  }
+  
+  .action-btn .btn-icon {
+    font-size: 20px;
+  }
+}
+
+/* 태블릿 크기 (769px ~ 1024px) */
+@media (min-width: 769px) and (max-width: 1024px) {
+  .game-area {
+    padding-bottom: 200px;
+  }
+  
+  .controls-container {
+    padding: 18px;
+  }
+  
+  .dpad {
+    width: 200px;
+    height: 200px;
+  }
+  
+  .dpad-btn {
+    min-height: 60px;
+  }
+  
+  .btn-icon {
+    font-size: 26px;
+  }
+  
+  .action-btn {
+    min-width: 120px;
+    min-height: 70px;
+    padding: 22px 26px;
+  }
+  
+  .btn-label {
+    font-size: 14px;
+  }
+  
+  .action-btn .btn-icon {
+    font-size: 24px;
+  }
+}
+
+/* 데스크톱에서는 모바일 컨트롤 숨기기 */
+@media (min-width: 1025px) {
+  .mobile-controls-minecraft {
+    display: none;
+  }
+  
+  .game-area {
+    padding-bottom: 40px; /* 데스크톱에서는 원래 여백 */
+  }
+} 

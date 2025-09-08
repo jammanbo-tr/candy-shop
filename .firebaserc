@@ -1,6 +1,7 @@
 {
   "projects": {
-    "staging": "candy-shop-8394b"
+    "staging": "candy-shop-8394b",
+    "default": "candy-shop-8394b"
   },
   "targets": {},
   "etags": {}

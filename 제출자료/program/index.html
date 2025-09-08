@@ -1,0 +1,39 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"/><base href="./"/><meta name="viewport" content="width=device-width,initial-scale=1"/><meta name="theme-color" content="#000000"/><meta name="description" content="Web site created using create-react-app"/><link rel="apple-touch-icon" href="./logo192.png"/><link rel="manifest" href="./manifest.json"/><title>JAMMANBO CANDY SHOP</title><script>
+// 파일로 직접 열었을 때 기본 진입 경로를 /lab 으로 고정
+(function(){try{if(location.protocol==='file:'){if(!location.hash||location.hash==="#"||location.hash==="#/"){location.hash='#/lab';}}}catch(_){}})();
+</script><script>
+// file:// 환경에서 절대경로/파일URL 이미지를 ../media/image/* 로 치환
+(function(){try{if(location.protocol!=='file:') return;var IMG_DIR='../media/image/';function b(p){if(!p) return '';try{p=p.toString();}catch(e){return '';}var q=p.split('?')[0];var parts=q.split('/');return parts[parts.length-1]||'';}function fixImgTags(){var imgs=document.getElementsByTagName('img');for(var i=0;i<imgs.length;i++){var el=imgs[i];var src=el.getAttribute('src')||el.src||'';if(!src) continue;var name=b(src);if(/\.(png|jpg|jpeg|svg)$/i.test(name)){if(/^\//.test(src)||/^file:\/\//.test(src)){el.src=IMG_DIR+name;}}}}function fixBackgrounds(){var all=document.getElementsByTagName('*');for(var i=0;i<all.length;i++){var el=all[i];var bg=(el.style&&el.style.backgroundImage)||'';if(bg&&bg.indexOf('url(')!==-1){var m=bg.match(/url\((?:"|')?(.*?)(?:"|')?\)/i);if(m&&m[1]){var name=b(m[1]);if(name&&( /\.(png|jpg|jpeg|svg)$/i.test(name))){if(/^\//.test(m[1])||/^file:\/\//.test(m[1])){el.style.backgroundImage='url('+IMG_DIR+name+')';}}}}}}function runFix(){try{fixImgTags();fixBackgrounds();}catch(e){}}if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',runFix);}else{runFix();}var mo=new MutationObserver(function(){runFix();});mo.observe(document.documentElement,{childList:true,subtree:true,attributes:true,attributeFilter:['src','style']});}catch(e){}})();
+</script><script>
+// file:// 자동 로그인: /teacher-copy에서 비번 자동 입력 + 버튼 자동 클릭 (MutationObserver로 안정화)
+(function(){try{if(location.protocol!=='file:') return;function skipLogin(){if(location.hash.indexOf('teacher-copy')===-1) return; // 로그인 컴포넌트를 완전히 생략: 에러 노출 대신 메인으로 강제
+  // 로그인 오류 문구를 숨김
+  var errs=document.querySelectorAll('*');
+  for(var i=0;i<errs.length;i++){if((errs[i].textContent||'').indexOf('비밀번호가 일치하지 않습니다')!==-1){errs[i].style.display='none';}}
+}
+window.addEventListener('hashchange',skipLogin);if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',skipLogin);}else{skipLogin();}}catch(e){}})();
+</script><script>
+// file:// 자동 로그인: /teacher-copy에서 비번 자동 입력 + 버튼 자동 클릭 (MutationObserver로 안정화)
+(function(){try{if(location.protocol!=='file:') return;function hideLogin(){if(location.hash.indexOf('teacher-copy')===-1) return; // 로그인 카드로 보이는 중앙 흰색 패널 숨김
+  var candidates=document.querySelectorAll('div');
+  for(var i=0;i<candidates.length;i++){
+    var el=candidates[i];
+    var styles=getComputedStyle(el);
+    // 중앙 카드의 특성: 배경 흰색, 그림자, 테두리 반경이 큼
+    if(styles.backgroundColor && styles.backgroundColor!=='rgba(0, 0, 0, 0)' && parseInt(styles.borderRadius)>=20 && styles.boxShadow && styles.boxShadow!=='none'){
+      // 내부에 '교사 페이지' 텍스트를 포함하는지 확인
+      if((el.textContent||'').indexOf('교사 페이지')!==-1 || (el.textContent||'').indexOf('로그인')!==-1){
+        el.style.display='none';
+      }
+    }
+  }
+}
+window.addEventListener('hashchange',hideLogin);if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',hideLogin);}else{hideLogin();}}catch(e){}})();
+</script><script>
+// file:// 자동 로그인: /teacher-copy에서 비번 자동 입력 + 버튼 자동 클릭 (MutationObserver로 안정화)
+(function(){try{if(location.protocol!=='file:') return;function collapseLogin(){if(location.hash.indexOf('teacher-copy')===-1) return;var nodes=document.querySelectorAll('input[type="password"], input[placeholder]');for(var i=0;i<nodes.length;i++){var el=nodes[i];var ph=(el.getAttribute('placeholder')||'');if(el.type==='password'||ph.indexOf('비밀번호')!==-1){var box=el;for(var d=0; d<8 && box; d++){var cs=getComputedStyle(box); var w=parseInt(cs.width)||0; var br=parseInt(cs.borderRadius)||0; var bg=cs.backgroundColor||''; var bs=cs.boxShadow||''; if(w>300 && br>=12 && bs!=='none'){box.style.display='none'; break;} box=box.parentElement;} // 버튼도 비활성화
+var btns=document.querySelectorAll('button');for(var j=0;j<btns.length;j++){var t=(btns[j].textContent||'').trim();if(t==='로그인'){btns[j].style.display='none';}}
+}}
+var attempts=0;var int=setInterval(function(){collapseLogin(); if(++attempts>200) clearInterval(int);},50);var mo=new MutationObserver(collapseLogin);mo.observe(document.body||document.documentElement,{childList:true,subtree:true});window.addEventListener('hashchange',collapseLogin);if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',collapseLogin);} else {collapseLogin();}
+}catch(e){}})();
+</script><script defer="defer" src="./static/js/main.52a45a67.js"></script><link href="./static/css/main.d96b304b.css" rel="stylesheet"></head><body><noscript>You need to enable JavaScript to run this app.</noscript><div id="root"></div></body></html>

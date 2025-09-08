@@ -1397,6 +1397,8 @@ const KoreanHistoryMindMapPage = () => {
   const [graphData, setGraphData] = useState({ nodes: [], links: [] });
   const [graphRef, setGraphRef] = useState(null);
 
+  // 기본 ForceGraph2D 설정만 사용 (롤백)
+
   // Firestore 실시간 동기화
   // - classId가 있으면 해당 학급 경로 구독
   // - 없으면 '단일 저장소' 경로 구독 (/korean-history-mindmap 전용)
@@ -2019,47 +2021,58 @@ const KoreanHistoryMindMapPage = () => {
             enableZoomInteraction={true}
             enablePanInteraction={true}
             d3Force="charge"
-            d3ForceStrength={-240}
-            cooldownTicks={200}
-            onEngineStop={() => setGraphRef.current?.zoomToFit(400)}
+            d3ForceStrength={-200}
+            cooldownTicks={100}
+            onEngineStop={() => graphRef?.zoomToFit(400)}
             onNodeClick={handleNodeClick}
-            d3ForceDistanceMin={50}
-            d3ForceDistanceMax={500}
+            d3ForceDistanceMin={80}
+            d3ForceDistanceMax={600}
             linkDistance={link => {
-              // 키워드 노드들을 더 멀리, 더 다양하게 배치
-              if (link.target.type === 'keyword') {
-                const baseDistance = 180;
-                const hashValue = link.target.name.length * 7 + (link.target.id || 0);
-                const angleVariation = (hashValue % 360) * Math.PI / 180;
-                const distanceVariation = Math.sin(angleVariation) * 80 + Math.cos(angleVariation * 1.7) * 60;
-                return Math.max(120, baseDistance + distanceVariation);
+              const sourceNode = graphData.nodes.find(n => n.id === link.source);
+              const targetNode = graphData.nodes.find(n => n.id === link.target);
+              
+              // 중심에서 토픽으로: 적당한 거리
+              if (sourceNode?.type === 'center' && targetNode?.type === 'topic') {
+                return 120;
               }
-              if (link.target.type === 'topic') return 100;
-              return 80;
+              
+              // 토픽에서 키워드로: 주제별로 다른 방향으로 클러스터링
+              if (sourceNode?.type === 'topic' && targetNode?.type === 'keyword') {
+                const topicIndex = Object.keys(KOREAN_HISTORY_TOPICS).indexOf(sourceNode.name);
+                const keywordIndex = targetNode.name.charCodeAt(0) % 360;
+                
+                // 각 주제마다 다른 방향으로 클러스터 생성
+                const baseAngle = (topicIndex * 72) * Math.PI / 180; // 5개 주제 * 72도
+                const keywordAngle = baseAngle + (keywordIndex % 60 - 30) * Math.PI / 180;
+                
+                // 거리를 다양하게 하여 자연스러운 클러스터 형성
+                return 60 + (keywordIndex % 30);
+              }
+              
+              return 100;
             }}
             linkStrength={link => {
-              // 약한 링크로 더 유연한 배치
-              if (link.target.type === 'keyword') return 0.15;
+              // 키워드들을 강하게 끌어당김
+              if (link.target.type === 'keyword') return 0.8;
+              if (link.target.type === 'topic') return 0.3;
               return 0.4;
             }}
-            d3ForceChargeStrength={-250}
-            d3ForceCollideStrength={0.8}
-            d3ForceCollideRadius={node => node.val + 25}
+            d3ForceChargeStrength={-150} // 반발력을 줄여서 노드들이 더 가까이
+            d3ForceCollideStrength={0.3} // 충돌 강도를 줄여서 겹칠 수 있게
+            d3ForceCollideRadius={node => {
+              if (node.type === 'keyword') return node.val + 5; // 작은 충돌 반지름
+              if (node.type === 'topic') return node.val + 20;
+              return node.val + 15;
+            }}
             d3ForceRadialStrength={node => {
-              // 방사형 힘을 약하게 적용
-              if (node.type === 'keyword') return 0.05;
+              // 방사형 힘을 없애고 자유롭게 클러스터링
               return 0;
             }}
             d3ForceRadialRadius={node => {
-              // 각 키워드마다 다른 반지름으로 레이어드 배치
-              if (node.type === 'keyword') {
-                const hashValue = (node.name || '').length * 13 + (node.id || 0) * 7;
-                return 200 + (hashValue % 150);
-              }
               return 0;
             }}
             d3ForceCenter={[0, 0]}
-            d3ForceCenterStrength={0.1}
+            d3ForceCenterStrength={0.05}
             warmupTicks={100}
             minZoom={0.2}
             maxZoom={3}

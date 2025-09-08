@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useCollection } from 'react-firebase-hooks/firestore';
-import { collection, doc, updateDoc, arrayUnion, setDoc, getDocs, query, orderBy, deleteDoc, getDoc, addDoc, limit, onSnapshot, writeBatch } from 'firebase/firestore';
+import { collection, doc, updateDoc, arrayUnion, setDoc, getDocs, query, orderBy, deleteDoc, getDoc, addDoc, limit, onSnapshot, writeBatch, where } from 'firebase/firestore';
 import { db } from '../firebase';
 import StudentCard from '../components/StudentCard';
 import NotificationsActiveIcon from '@mui/icons-material/NotificationsActive';
@@ -23,6 +23,7 @@ import HistoryIcon from '@mui/icons-material/History';
 import QuizSystem from "../components/QuizSystem";
 import EmotionDashboardModal from '../components/EmotionDashboardModal';
 import AIAnalysisModal from '../components/AIAnalysisModal';
+import LearningJournalViewModal from '../components/LearningJournalViewModal';
 
 const LEVELS = [
   '알사탕',
@@ -127,12 +128,26 @@ const TeacherPage = () => {
   const [gameStep, setGameStep] = useState('select'); // select | reaction
   const [targetColor, setTargetColor] = useState(null);
   const [currentColor, setCurrentColor] = useState(null);
+  
+  // 토큰 통계 관련 상태
+  const [showTokenStatsModal, setShowTokenStatsModal] = useState(false);
+  const [tokenStats, setTokenStats] = useState({
+    weekly: {},
+    monthly: {},
+    loading: false
+  });
+  
+  // 학생별 메시지 내역 관련 상태
+  const [showStudentMessagesModal, setShowStudentMessagesModal] = useState(false);
+  const [selectedStudentForMessages, setSelectedStudentForMessages] = useState(null);
+  const [studentMessageHistory, setStudentMessageHistory] = useState([]);
   const [gameStarted, setGameStarted] = useState(false);
   const [startTime, setStartTime] = useState(0);
   const [reactionTime, setReactionTime] = useState(null);
   const [gameError, setGameError] = useState('');
   const [topRecords, setTopRecords] = useState([]);
   const [isClickable, setIsClickable] = useState(false);
+  const [showLearningJournalModal, setShowLearningJournalModal] = useState(false);
   const [studentName, setStudentName] = useState('');
   // 공지사항 상태 추가
   const [showNoticeModal, setShowNoticeModal] = useState(false);
@@ -147,6 +162,8 @@ const TeacherPage = () => {
   // 공지/예약 탭 상태 추가
   const [noticeTab, setNoticeTab] = useState('notice'); // 'notice' | 'alarm'
   const [alertMsg, setAlertMsg] = useState('');
+  // 친구 메시지 관련 상태
+  const [studentMessages, setStudentMessages] = useState([]);
   // 정렬 상태 추가
   const [spendSort, setSpendSort] = useState({ key: 'ts', order: 'desc' }); // key: 'name'|'items'|'amount'|'ts', order: 'asc'|'desc'
   const [auth, setAuth] = useState(false);
@@ -775,6 +792,160 @@ const TeacherPage = () => {
     }
   };
 
+  // 토큰 조정 함수
+  const handleAdjustTokens = async (studentData, adjustment) => {
+    try {
+      const studentRef = doc(db, 'students', studentData.id);
+      const currentTokens = studentData.dailyMessageTokens || 0;
+      const newTokens = Math.max(0, Math.min(10, currentTokens + adjustment)); // 0-10 범위로 제한
+      
+      await updateDoc(studentRef, {
+        dailyMessageTokens: newTokens
+      });
+      
+      // 성공 메시지 표시
+      setAlertMsg(`${studentData.name}의 메시지 토큰이 ${newTokens}개로 조정되었습니다.`);
+      setTimeout(() => setAlertMsg(''), 3000);
+    } catch (error) {
+      console.error('토큰 조정 오류:', error);
+      setAlertMsg('토큰 조정 중 오류가 발생했습니다.');
+      setTimeout(() => setAlertMsg(''), 3000);
+    }
+  };
+
+  // 보너스 토큰 지급 함수
+  const handleGiveBonusTokens = async (tokenCount = 5) => {
+    if (selectedIds.length === 0) {
+      setAlertMsg('보너스 토큰을 받을 학생을 선택해주세요.');
+      setTimeout(() => setAlertMsg(''), 3000);
+      return;
+    }
+
+    try {
+      const batch = writeBatch(db);
+      let successCount = 0;
+
+      for (const studentId of selectedIds) {
+        const studentRef = doc(db, 'students', studentId);
+        const studentDoc = await getDoc(studentRef);
+        
+        if (studentDoc.exists()) {
+          const currentTokens = studentDoc.data().dailyMessageTokens || 0;
+          const newTokens = Math.min(10, currentTokens + tokenCount); // 최대 10개로 제한
+          
+          batch.update(studentRef, {
+            dailyMessageTokens: newTokens
+          });
+          successCount++;
+        }
+      }
+
+      await batch.commit();
+      setAlertMsg(`${successCount}명의 학생에게 보너스 토큰 ${tokenCount}개를 지급했습니다!`);
+      setTimeout(() => setAlertMsg(''), 3000);
+      setSelectedIds([]); // 선택 해제
+    } catch (error) {
+      console.error('보너스 토큰 지급 오류:', error);
+      setAlertMsg('보너스 토큰 지급 중 오류가 발생했습니다.');
+      setTimeout(() => setAlertMsg(''), 3000);
+    }
+  };
+
+  // 토큰 통계 가져오기 함수
+  const fetchTokenStats = async () => {
+    setTokenStats(prev => ({ ...prev, loading: true }));
+    
+    try {
+      const studentMessagesQuery = query(collection(db, 'studentMessages'), orderBy('timestamp', 'desc'));
+      const snapshot = await getDocs(studentMessagesQuery);
+      
+      const now = new Date();
+      const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      const oneMonthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+      
+      const weeklyStats = {};
+      const monthlyStats = {};
+      
+      snapshot.docs.forEach(doc => {
+        const data = doc.data();
+        const messageDate = new Date(data.timestamp);
+        const studentName = data.fromName;
+        
+        // 주간 통계
+        if (messageDate >= oneWeekAgo) {
+          if (!weeklyStats[studentName]) {
+            weeklyStats[studentName] = 0;
+          }
+          weeklyStats[studentName]++;
+        }
+        
+        // 월간 통계
+        if (messageDate >= oneMonthAgo) {
+          if (!monthlyStats[studentName]) {
+            monthlyStats[studentName] = 0;
+          }
+          monthlyStats[studentName]++;
+        }
+      });
+      
+      setTokenStats({
+        weekly: weeklyStats,
+        monthly: monthlyStats,
+        loading: false
+      });
+    } catch (error) {
+      console.error('토큰 통계 가져오기 오류:', error);
+      setTokenStats(prev => ({ ...prev, loading: false }));
+    }
+  };
+
+  // 학생별 메시지 내역 가져오기 함수
+  const fetchStudentMessages = async (student) => {
+    setSelectedStudentForMessages(student);
+    setStudentMessageHistory([]);
+    setShowStudentMessagesModal(true);
+    
+    try {
+      // 해당 학생이 보낸 메시지 가져오기
+      const sentMessagesQuery = query(
+        collection(db, 'studentMessages'), 
+        where('fromId', '==', student.id),
+        orderBy('timestamp', 'desc')
+      );
+      const sentSnapshot = await getDocs(sentMessagesQuery);
+      
+      // 해당 학생이 받은 메시지 가져오기
+      const receivedMessagesQuery = query(
+        collection(db, 'studentMessages'), 
+        where('toId', '==', student.id),
+        orderBy('timestamp', 'desc')
+      );
+      const receivedSnapshot = await getDocs(receivedMessagesQuery);
+      
+      const sentMessages = sentSnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+        type: 'sent'
+      }));
+      
+      const receivedMessages = receivedSnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+        type: 'received'
+      }));
+      
+      // 모든 메시지를 시간순으로 정렬
+      const allMessages = [...sentMessages, ...receivedMessages]
+        .sort((a, b) => b.timestamp - a.timestamp);
+      
+      setStudentMessageHistory(allMessages);
+    } catch (error) {
+      console.error('학생 메시지 내역 가져오기 오류:', error);
+      setAlertMsg('메시지 내역을 불러오는 중 오류가 발생했습니다.');
+      setTimeout(() => setAlertMsg(''), 3000);
+    }
+  };
+
   // 메시지 모달
   const handleSendMessage = async () => {
     if (!messageText.trim()) return;
@@ -1149,6 +1320,24 @@ const TeacherPage = () => {
     const snap = await getDocs(q);
     setAlarms(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
   };
+
+  // 학생 간 메시지 실시간 구독
+  useEffect(() => {
+    const q = query(
+      collection(db, 'studentMessages'),
+      orderBy('timestamp', 'desc')
+    );
+    
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const messages = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      setStudentMessages(messages);
+    });
+    
+    return () => unsubscribe();
+  }, []);
 
   // 알람 저장
   const handleSaveAlarm = async () => {
@@ -1708,6 +1897,28 @@ const TeacherPage = () => {
             }}
           >메세지 보내기</button>
           <button
+            onClick={() => handleGiveBonusTokens(5)}
+            disabled={selectedIds.length === 0}
+            style={{
+              background: '#fff3e0',
+              border: '2px solid #ff9800',
+              color: '#e65100', 
+              fontWeight: 'bold', 
+              borderRadius: 12, 
+              boxShadow: '0 2px 8px #ffcc8040', 
+              padding: '8px 18px', 
+              fontSize: 14, 
+              minWidth: 70, 
+              transition: 'all 0.2s', 
+              cursor: 'pointer',
+              opacity: selectedIds.length === 0 ? 0.5 : 1
+            }}
+            title="선택한 학생들에게 메시지 토큰 5개를 보너스로 지급합니다"
+          >
+            <span style={{ fontSize: 16, marginRight: 4 }}>🎫</span>
+            보너스 토큰
+          </button>
+          <button
             onClick={() => {
           
               if (selectedIds.length === 0) {
@@ -1814,7 +2025,7 @@ const TeacherPage = () => {
                 }}
               selected={selectedIds.includes(student.id)}
               onSelect={() => handleSelect(student.id)}
-              onOptionClick={(type) => {
+              onOptionClick={(type, studentData) => {
                 if (type === 'exp') handleGiveExp();
                   else if (type === 'message') {
                     setSelectedStudent(student);
@@ -1822,6 +2033,8 @@ const TeacherPage = () => {
                   }
                 else if (type === 'quest') setShowQuestModal(true);
                   else if (type === 'couponEvent') handleTriggerCouponEvent(student.id);
+                  else if (type === 'addToken') handleAdjustTokens(studentData, 1);
+                  else if (type === 'removeToken') handleAdjustTokens(studentData, -1);
               }}
               expEffect={expEffectIds && expEffectIds.includes(student.id)}
               levelUpEffect={levelUpEffectIds && levelUpEffectIds.includes(student.id)}
@@ -1836,9 +2049,18 @@ const TeacherPage = () => {
         <div style={{ position: 'fixed', top: 24, right: 32, zIndex: 2000, display: 'flex', flexDirection: 'row', gap: 18, alignItems: 'center' }}>
           {/* AI 분석 아이콘 버튼 */}
           <div style={{ width: 40, height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', position: 'relative' }} title="AI 학습일지 분석" onClick={() => setShowAIAnalysisModal(true)}>
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M12 2C13.1 2 14 2.9 14 4C14 5.1 13.1 6 12 6C10.9 6 10 5.1 10 4C10 2.9 10.9 2 12 2ZM21 9V7L15 1H5C3.89 1 3 1.89 3 3V21C3 22.11 3.89 23 5 23H19C20.11 23 21 22.11 21 21V9ZM19 21H5V3H13V9H19V21Z" fill="#667eea"/>
-              <path d="M7 12H17V14H7V12ZM7 16H13V18H7V16Z" fill="#667eea"/>
+            <svg width="30.36" height="30.36" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M12 2C13.1 2 14 2.9 14 4C14 5.1 13.1 6 12 6C10.9 6 10 5.1 10 4C10 2.9 10.9 2 12 2ZM21 9V7L15 1H5C3.89 1 3 1.89 3 3V21C3 22.11 3.89 23 5 23H19C20.11 23 21 22.11 21 21V9ZM19 21H5V3H13V9H19V21Z" fill="#1976d2"/>
+              <path d="M7 12H17V14H7V12ZM7 16H13V18H7V16Z" fill="#1976d2"/>
+            </svg>
+          </div>
+          
+          {/* 토큰 통계 아이콘 버튼 */}
+          <div style={{ width: 40, height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', position: 'relative' }} title="메시지 토큰 통계" onClick={() => { setShowTokenStatsModal(true); fetchTokenStats(); }}>
+            <svg width="34.56" height="34.56" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M7 17V7H9V17H7ZM11 17V12H13V17H11ZM15 17V14H17V17H15Z" fill="#1976d2"/>
+              <path d="M5 19V21H19V19H5ZM5 5V7H19V5H5Z" fill="#1976d2"/>
+              <circle cx="18" cy="6" r="2" fill="#1976d2"/>
             </svg>
           </div>
           
@@ -1880,6 +2102,12 @@ const TeacherPage = () => {
             <HistoryIcon style={{ color: '#2e7d32', fontSize: 28 }} />
             <span style={{ fontWeight: 700, color: '#2e7d32', fontSize: 16 }}>역사학습</span>
           </button>
+          <button onClick={() => setShowLearningJournalModal(true)} style={{ background: '#e3f2fd', border: 'none', borderRadius: 999, padding: '8px 18px', boxShadow: '0 2px 8px #b2ebf240', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, fontWeight: 700, color: '#1565c0', fontSize: 16 }} title="학습일지 조회">
+            <svg xmlns="http://www.w3.org/2000/svg" style={{ color: '#1565c0', fontSize: 28, width: 28, height: 28 }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.746 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+            </svg>
+            <span style={{ fontWeight: 700, color: '#1565c0', fontSize: 16 }}>학습일지</span>
+          </button>
         </div>
         {/* 알림 모달 UI */}
         {showTeacherAlarm && (
@@ -1888,6 +2116,7 @@ const TeacherPage = () => {
               <div style={{ fontWeight: 700, fontSize: '1.25rem', marginBottom: 18, color: '#1976d2', letterSpacing: '-0.5px' }}>학생 요청 알림</div>
               <div style={{ display: 'flex', gap: 12, marginBottom: 16 }}>
                 <button onClick={() => setAlarmTab('message')} style={{ fontWeight: alarmTab==='message'?700:500, borderRadius: 999, background: alarmTab==='message' ? '#e0f7fa' : '#f7faf7', color: '#1976d2', border: 'none', padding: '7px 18px', fontSize: 15, boxShadow: '0 2px 8px #b2ebf240', cursor: 'pointer', transition: 'all 0.2s' }}>메시지</button>
+                <button onClick={() => setAlarmTab('friendMessages')} style={{ fontWeight: alarmTab==='friendMessages'?700:500, borderRadius: 999, background: alarmTab==='friendMessages' ? '#e0f7fa' : '#f7faf7', color: '#1976d2', border: 'none', padding: '7px 18px', fontSize: 14, boxShadow: '0 2px 8px #b2ebf240', cursor: 'pointer', transition: 'all 0.2s' }}>친구들끼리의 메시지</button>
                 <button onClick={() => setAlarmTab('praise')} style={{ fontWeight: alarmTab==='praise'?700:500, borderRadius: 999, background: alarmTab==='praise' ? '#e0f7fa' : '#f7faf7', color: '#1976d2', border: 'none', padding: '7px 18px', fontSize: 15, boxShadow: '0 2px 8px #b2ebf240', cursor: 'pointer', transition: 'all 0.2s' }}>칭찬 요청</button>
                 <button onClick={() => setAlarmTab('quest')} style={{ fontWeight: alarmTab==='quest'?700:500, borderRadius: 999, background: alarmTab==='quest' ? '#e0f7fa' : '#f7faf7', color: '#1976d2', border: 'none', padding: '7px 18px', fontSize: 15, boxShadow: '0 2px 8px #b2ebf240', cursor: 'pointer', transition: 'all 0.2s' }}>퀘스트 요청</button>
                 <button onClick={() => setAlarmTab('historyMessage')} style={{ fontWeight: alarmTab==='historyMessage'?700:500, borderRadius: 999, background: alarmTab==='historyMessage' ? '#e0f7fa' : '#f7faf7', color: '#1976d2', border: 'none', padding: '7px 18px', fontSize: 15, boxShadow: '0 2px 8px #b2ebf240', cursor: 'pointer', transition: 'all 0.2s' }}>과거 메시지</button>
@@ -1997,6 +2226,65 @@ const TeacherPage = () => {
                       </li>
                     ))}
                   </ul>
+                </>
+              )}
+              {alarmTab === 'friendMessages' && (
+                <>
+                  <div style={{ fontWeight: 600, marginBottom: 16, color: '#1976d2', textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                    <span role="img" aria-label="friends">👥</span>
+                    친구들끼리 주고받은 메시지
+                  </div>
+                  {studentMessages.length === 0 ? (
+                    <div style={{ textAlign: 'center', color: '#888', fontSize: 16, margin: '32px 0' }}>
+                      친구들 간의 메시지가 없습니다.
+                    </div>
+                  ) : (
+                    <ul style={{ listStyle: 'none', padding: 0, margin: 0, maxHeight: 400, overflowY: 'auto' }}>
+                      {studentMessages.map(msg => (
+                        <li key={msg.id} style={{ 
+                          background: '#f8f9fa', 
+                          borderRadius: 12, 
+                          padding: '12px 16px', 
+                          marginBottom: 12,
+                          border: '2px solid #e9ecef'
+                        }}>
+                          <div style={{ 
+                            fontSize: 13, 
+                            color: '#6c757d', 
+                            marginBottom: 6,
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center'
+                          }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                              <span style={{ fontWeight: 600, color: '#495057' }}>{msg.fromName}</span>
+                              <span>→</span>
+                              <span style={{ fontWeight: 600, color: '#495057' }}>{msg.toName}</span>
+                            </div>
+                            <span style={{ fontSize: 12 }}>
+                              {new Date(msg.timestamp).toLocaleString('ko-KR', { 
+                                month: 'short', 
+                                day: 'numeric', 
+                                hour: '2-digit', 
+                                minute: '2-digit' 
+                              })}
+                            </span>
+                          </div>
+                          <div style={{ 
+                            color: '#212529', 
+                            fontSize: 14,
+                            lineHeight: '1.4',
+                            background: '#fff',
+                            padding: '8px 12px',
+                            borderRadius: 8,
+                            border: '1px solid #dee2e6'
+                          }}>
+                            {msg.message}
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                 </>
               )}
               {alarmTab === 'historyPraise' && (
@@ -2248,7 +2536,7 @@ const TeacherPage = () => {
         {/* 유리병 모달 */}
         {showJarModal && (
           <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(0,0,0,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 4000 }}>
-            <div style={{ background: '#fff', padding: 32, borderRadius: 48, minWidth: 340, boxShadow: '0 4px 32px #b2ebf240', maxWidth: '90vw', position: 'relative', border: '6px solid #b2ebf2' }}>
+            <div style={{ background: '#fff', padding: 40, borderRadius: 32, minWidth: 500, minHeight: '60vh', boxShadow: '0 4px 32px #b2ebf240', maxWidth: '90vw', maxHeight: '85vh', position: 'relative', border: '6px solid #b2ebf2', overflow: 'auto' }}>
               <div style={{ fontWeight: 700, fontSize: '1.5rem', marginBottom: 18, color: '#1976d2', letterSpacing: '-0.5px', textAlign: 'center' }}>학급 캔디 유리병</div>
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: 12 }}>
                 {/* 사탕 그리드형 배치 */}
@@ -2260,12 +2548,12 @@ const TeacherPage = () => {
                     allCandies.push({ img: candyImages[idx], idx });
                   }
                 });
-                const perRow = 10;
+                const perRow = 15;
                 const numRows = Math.ceil(allCandies.length / perRow);
                 return (
-                  <div style={{ width: 320, height: 380, marginBottom: 8, display: 'flex', flexDirection: 'column-reverse', justifyContent: 'flex-start', alignItems: 'center', gap: 4 }}>
+                  <div style={{ width: '100%', minHeight: '40vh', marginBottom: 16, display: 'flex', flexDirection: 'column-reverse', justifyContent: 'center', alignItems: 'center', gap: 6 }}>
                     {Array.from({ length: numRows }).map((_, rowIdx) => (
-                      <div key={rowIdx} style={{ display: 'flex', flexDirection: 'row', justifyContent: 'flex-start', alignItems: 'flex-end', gap: 4, minHeight: 36 }}>
+                      <div key={rowIdx} style={{ display: 'flex', flexDirection: 'row', justifyContent: 'center', alignItems: 'flex-end', gap: 6, minHeight: 40 }}>
                         {Array.from({ length: perRow }).map((_, colIdx) => {
                           const candy = allCandies[rowIdx * perRow + colIdx];
                           return candy ? (
@@ -3726,6 +4014,193 @@ const TeacherPage = () => {
         gasUrl="https://script.google.com/macros/s/AKfycbz83KKePJKN2AWlnohCBNezYXEZsh2cEBSkAQzHISvbxu0pO3p3DqAMIGO3DNqiwOnX/exec?page=board"
       />
 
+      {/* 토큰 통계 모달 */}
+      {showTokenStatsModal && (
+        <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 5000 }}>
+          <div style={{ background: '#fff', padding: '32px', borderRadius: 20, minWidth: 700, maxWidth: '90vw', maxHeight: '80vh', overflowY: 'auto', boxShadow: '0 8px 32px rgba(0,0,0,0.3)', border: '3px solid #26c6da' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+              <h2 style={{ margin: 0, color: '#1976d2', fontSize: '1.5rem', display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span role="img" aria-label="stats">📊</span>
+                메시지 토큰 사용 통계
+              </h2>
+              <button 
+                onClick={() => setShowTokenStatsModal(false)}
+                style={{ background: 'none', border: 'none', fontSize: 24, cursor: 'pointer', color: '#666' }}
+              >×</button>
+            </div>
+
+            {tokenStats.loading ? (
+              <div style={{ textAlign: 'center', padding: '40px 0', color: '#666' }}>
+                통계를 불러오는 중...
+              </div>
+            ) : (
+              <div>
+                {/* 주간 통계 */}
+                <div style={{ marginBottom: 32 }}>
+                  <h3 style={{ color: '#e65100', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span role="img" aria-label="week">📅</span>
+                    주간 메시지 발송 현황 (최근 7일)
+                  </h3>
+                  <div style={{ background: '#fff8e1', padding: '16px', borderRadius: 12, border: '2px solid #ffc107' }}>
+                    {Object.keys(tokenStats.weekly).length === 0 ? (
+                      <div style={{ textAlign: 'center', color: '#666', padding: '20px 0' }}>
+                        최근 7일간 발송된 메시지가 없습니다.
+                      </div>
+                    ) : (
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 12 }}>
+                        {Object.entries(tokenStats.weekly)
+                          .sort(([,a], [,b]) => b - a)
+                          .map(([name, count]) => {
+                            const student = studentRows.find(s => s.name === name);
+                            return (
+                              <div key={name} style={{ 
+                                background: '#fff', 
+                                padding: '12px', 
+                                borderRadius: 8, 
+                                textAlign: 'center',
+                                border: '1px solid #ffcc02',
+                                cursor: student ? 'pointer' : 'default',
+                                transition: 'all 0.2s'
+                              }}
+                              onClick={() => student && fetchStudentMessages(student)}
+                              onMouseEnter={(e) => student && (e.target.style.transform = 'scale(1.05)')}
+                              onMouseLeave={(e) => student && (e.target.style.transform = 'scale(1)')}
+                              >
+                                <div style={{ fontWeight: 'bold', color: '#e65100' }}>{name}</div>
+                                <div style={{ fontSize: '1.2em', color: '#ff6f00', fontWeight: 'bold' }}>{count}개</div>
+                                {student && <div style={{ fontSize: '0.8em', color: '#666', marginTop: 4 }}>클릭하여 메시지 내역 보기</div>}
+                              </div>
+                            );
+                          })}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* 월간 통계 */}
+                <div>
+                  <h3 style={{ color: '#1976d2', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span role="img" aria-label="month">🗓️</span>
+                    월간 메시지 발송 현황 (최근 30일)
+                  </h3>
+                  <div style={{ background: '#e3f2fd', padding: '16px', borderRadius: 12, border: '2px solid #2196f3' }}>
+                    {Object.keys(tokenStats.monthly).length === 0 ? (
+                      <div style={{ textAlign: 'center', color: '#666', padding: '20px 0' }}>
+                        최근 30일간 발송된 메시지가 없습니다.
+                      </div>
+                    ) : (
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 12 }}>
+                        {Object.entries(tokenStats.monthly)
+                          .sort(([,a], [,b]) => b - a)
+                          .map(([name, count]) => {
+                            const student = studentRows.find(s => s.name === name);
+                            return (
+                              <div key={name} style={{ 
+                                background: '#fff', 
+                                padding: '12px', 
+                                borderRadius: 8, 
+                                textAlign: 'center',
+                                border: '1px solid #42a5f5',
+                                cursor: student ? 'pointer' : 'default',
+                                transition: 'all 0.2s'
+                              }}
+                              onClick={() => student && fetchStudentMessages(student)}
+                              onMouseEnter={(e) => student && (e.target.style.transform = 'scale(1.05)')}
+                              onMouseLeave={(e) => student && (e.target.style.transform = 'scale(1)')}
+                              >
+                                <div style={{ fontWeight: 'bold', color: '#1976d2' }}>{name}</div>
+                                <div style={{ fontSize: '1.2em', color: '#1565c0', fontWeight: 'bold' }}>{count}개</div>
+                                {student && <div style={{ fontSize: '0.8em', color: '#666', marginTop: 4 }}>클릭하여 메시지 내역 보기</div>}
+                              </div>
+                            );
+                          })}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* 학생별 메시지 내역 모달 */}
+      {showStudentMessagesModal && selectedStudentForMessages && (
+        <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 5001 }}>
+          <div style={{ background: '#fff', padding: '32px', borderRadius: 20, minWidth: 600, maxWidth: '90vw', maxHeight: '80vh', overflowY: 'auto', boxShadow: '0 8px 32px rgba(0,0,0,0.3)', border: '3px solid #26c6da' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+              <h2 style={{ margin: 0, color: '#26c6da', fontSize: '1.5rem', display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span role="img" aria-label="messages">💬</span>
+                {selectedStudentForMessages.name}의 메시지 내역
+              </h2>
+              <button 
+                onClick={() => setShowStudentMessagesModal(false)}
+                style={{ background: 'none', border: 'none', fontSize: 24, cursor: 'pointer', color: '#666' }}
+              >×</button>
+            </div>
+
+            {studentMessageHistory.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '40px 0', color: '#666' }}>
+                아직 주고받은 메시지가 없습니다.
+              </div>
+            ) : (
+              <div style={{ maxHeight: '60vh', overflowY: 'auto' }}>
+                {studentMessageHistory.map((message) => (
+                  <div key={message.id} style={{ 
+                    marginBottom: '16px',
+                    padding: '16px',
+                    borderRadius: '12px',
+                    background: message.type === 'sent' ? '#e8f5e8' : '#f0f8ff',
+                    border: `2px solid ${message.type === 'sent' ? '#4caf50' : '#2196f3'}`
+                  }}>
+                    <div style={{ 
+                      display: 'flex', 
+                      justifyContent: 'space-between', 
+                      alignItems: 'center',
+                      marginBottom: 8
+                    }}>
+                      <div style={{ 
+                        fontSize: '0.9em', 
+                        fontWeight: 'bold',
+                        color: message.type === 'sent' ? '#2e7d32' : '#1565c0'
+                      }}>
+                        {message.type === 'sent' 
+                          ? `→ ${message.toName}에게 보냄` 
+                          : `← ${message.fromName}에게서 받음`
+                        }
+                      </div>
+                      <div style={{ 
+                        fontSize: '0.8em', 
+                        color: '#666' 
+                      }}>
+                        {new Date(message.timestamp).toLocaleString('ko-KR')}
+                      </div>
+                    </div>
+                    <div style={{ 
+                      fontSize: '1em',
+                      color: '#333',
+                      lineHeight: '1.4'
+                    }}>
+                      {message.message}
+                    </div>
+                    {!message.read && (
+                      <div style={{ 
+                        fontSize: '0.8em', 
+                        color: '#ff5722',
+                        marginTop: 4,
+                        fontWeight: 'bold'
+                      }}>
+                        미확인
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* 단소급수미션 모달 */}
       {showRecorderModal && (
         <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(0,0,0,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 5000 }}>
@@ -3896,6 +4371,12 @@ const TeacherPage = () => {
           </div>
         </div>
       )}
+
+      {/* 학습일지 조회 모달 */}
+      <LearningJournalViewModal
+        isOpen={showLearningJournalModal}
+        onClose={() => setShowLearningJournalModal(false)}
+      />
     </React.Fragment>
   );
 }

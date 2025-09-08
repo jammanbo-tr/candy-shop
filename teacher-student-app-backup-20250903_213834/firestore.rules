@@ -1,0 +1,52 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // 기존 컬렉션들에 대한 접근 권한
+    match /{document=**} {
+      allow read, write: if request.time < timestamp.date(2025, 12, 31);
+    }
+    
+    // 사본 컬렉션들에 대한 접근 권한 (copy_ 접두사)
+    match /copy_students/{document} {
+      allow read, write: if true;
+    }
+    
+    match /copy_items/{document} {
+      allow read, write: if true;
+    }
+    
+    match /copy_notifications/{document} {
+      allow read, write: if true;
+    }
+    
+    match /copy_notices/{document} {
+      allow read, write: if true;
+    }
+    
+    match /copy_alarms/{document} {
+      allow read, write: if true;
+    }
+    
+    match /copy_boards/{document=**} {
+      allow read, write: if true;
+    }
+    
+    match /copy_emotionAttendance/{document} {
+      allow read, write: if true;
+    }
+    
+    match /copy_attendance/{document} {
+      allow read, write: if true;
+    }
+    
+    match /copy_tetrisScores/{document} {
+      allow read, write: if true;
+    }
+    
+    match /copy_reactionGameRecords/{document} {
+      allow read, write: if true;
+    }
+  }
+}

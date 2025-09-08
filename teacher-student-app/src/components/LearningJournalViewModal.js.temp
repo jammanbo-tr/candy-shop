@@ -1,0 +1,1468 @@
+import React, { useState, useEffect } from 'react';
+import { db } from '../firebase';
+import { collection, getDocs, doc, updateDoc } from 'firebase/firestore';
+
+const STUDENTS = [
+  '김규민', '김범준', '김성준', '김수겸', '김주원', '문기훈', '박동하', '백주원',
+  '백지원', '손정환', '이도윤', '이예준', '임재희', '조은빈', '조찬희', '최서윤',
+  '최서현', '한서우', '황리아', '김주하', '이해원', '하지수', '테스트'
+];
+
+const PERIODS = ['1교시', '2교시', '3교시', '4교시', '5교시', '6교시', '기타 교시'];
+
+const LearningJournalViewModal = ({ isOpen, onClose, selectedDate, refreshData }) => {
+  const [data, setData] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [draggedEntry, setDraggedEntry] = useState(null);
+
+  // 점수에 따른 색상 계산 함수
+  const getScoreColor = (score, type) => {
+    const numScore = parseFloat(score);
+    if (type === 'understanding') {
+      // 이해도: 1점(빨강) -> 5점(초록)
+      if (numScore >= 4.5) return '#2e7d32'; // 진한 초록
+      if (numScore >= 3.5) return '#4caf50'; // 초록
+      if (numScore >= 2.5) return '#8bc34a'; // 연한 초록
+      if (numScore >= 1.5) return '#ff9800'; // 주황
+      return '#f44336'; // 빨강
+    } else {
+      // 만족도: 1점(빨강) -> 5점(분홍/빨강 계열)
+      if (numScore >= 4.5) return '#c62828'; // 진한 빨강
+      if (numScore >= 3.5) return '#e53935'; // 빨강
+      if (numScore >= 2.5) return '#ef5350'; // 연한 빨강
+      if (numScore >= 1.5) return '#ff7043'; // 주황빨강
+      return '#ff8a65'; // 연한 주황빨강
+    }
+  };
+  const [availablePeriods, setAvailablePeriods] = useState([...PERIODS]);
+  const [showMoveConfirmation, setShowMoveConfirmation] = useState(false);
+  const [pendingMove, setPendingMove] = useState(null);
+  const [showEmptyStudents, setShowEmptyStudents] = useState(true);
+  const [showCompletedOnly, setShowCompletedOnly] = useState(false);
+  const [selectedPeriodFilter, setSelectedPeriodFilter] = useState('전체');
+  const [selectedDateFilter, setSelectedDateFilter] = useState(new Date().toISOString().split('T')[0]); // 특정 날짜 필터
+  const [dragOverCell, setDragOverCell] = useState(null); // 드래그 호버 중인 셀
+
+  const fetchData = async () => {
+    setLoading(true);
+    try {
+      let journals = [];
+      
+      if (selectedDate) {
+        const dateStr = selectedDate.toISOString().split('T')[0];
+        try {
+          const dayQuery = collection(db, `journals/${dateStr}/entries`);
+          const daySnapshot = await getDocs(dayQuery);
+          
+          daySnapshot.forEach(doc => {
+            journals.push({
+              id: doc.id,
+              date: dateStr,
+              ...doc.data()
+            });
+          });
+        } catch (error) {
+          console.log(`${dateStr} 데이터 없음`);
+        }
+      } else {
+        // 최근 30일간의 데이터 조회
+        const today = new Date();
+        
+        for (let i = 0; i < 30; i++) {
+          const d = new Date(today);
+          d.setDate(d.getDate() - i);
+          const dateStr = d.toISOString().split('T')[0];
+          
+          try {
+            const dayQuery = collection(db, `journals/${dateStr}/entries`);
+            const daySnapshot = await getDocs(dayQuery);
+            
+            daySnapshot.forEach(doc => {
+              journals.push({
+                id: doc.id,
+                date: dateStr,
+                ...doc.data()
+              });
+            });
+          } catch (error) {
+            // 조용히 무시
+          }
+        }
+      }
+
+      journals.sort((a, b) => {
+        const dateA = a.createdAt?.toDate?.() || new Date(a.date);
+        const dateB = b.createdAt?.toDate?.() || new Date(b.date);
+        return dateB - dateA;
+      });
+      
+      setData(journals);
+      
+      // 모든 교시를 항상 표시 (데이터가 없어도)
+      setAvailablePeriods([...PERIODS]);
+      
+    } catch (error) {
+      console.error('데이터 가져오기 오류:', error);
+    }
+    setLoading(false);
+  };
+
+  useEffect(() => {
+    if (isOpen) {
+      fetchData();
+    }
+  }, [isOpen, selectedDate]);
+
+  const handleMoveEntry = async (entry, newPeriod, skipRefresh = false) => {
+    try {
+      await updateDoc(doc(db, `journals/${entry.date}/entries`, entry.id), {
+        period: newPeriod
+      });
+      
+      if (!skipRefresh) {
+        // 실시간 업데이트: 로컬 데이터 수정
+        setData(prevData => 
+          prevData.map(item => 
+            item.id === entry.id 
+              ? { ...item, period: newPeriod }
+              : item
+          )
+        );
+      }
+      
+      if (refreshData) refreshData();
+    } catch (error) {
+      console.error('교시 이동 오류:', error);
+      alert('교시 이동 중 오류가 발생했습니다.');
+    }
+  };
+
+  const handleDragStart = (e, entry) => {
+    setDraggedEntry({ ...entry, originalPeriod: entry.period });
+    // 더 매끄러운 드래그 효과
+    e.target.style.opacity = '0.7';
+    e.target.style.transform = 'rotate(3deg) scale(1.05)';
+    e.target.style.transition = 'all 0.2s ease';
+    e.target.style.cursor = 'grabbing';
+    e.target.style.zIndex = '1000';
+  };
+
+  const handleDragEnd = (e) => {
+    e.target.style.opacity = '1';
+    e.target.style.transform = 'rotate(0deg) scale(1)';
+    e.target.style.cursor = 'move';
+    e.target.style.zIndex = 'auto';
+    setDraggedEntry(null);
+    setDragOverCell(null);
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+  };
+
+  const handleDragEnter = (e, period, studentName) => {
+    e.preventDefault();
+    if (draggedEntry && draggedEntry.studentName === studentName) {
+      setDragOverCell(`${studentName}-${period}`);
+    }
+  };
+
+  const handleDragLeave = (e) => {
+    e.preventDefault();
+    // 셀을 완전히 벗어났을 때만 리셋
+    if (!e.currentTarget.contains(e.relatedTarget)) {
+      setDragOverCell(null);
+    }
+  };
+
+  const handleDrop = (e, targetPeriod, targetStudent) => {
+    e.preventDefault();
+    
+    if (!draggedEntry || targetPeriod === draggedEntry.originalPeriod) {
+      return;
+    }
+    
+    // 같은 학생의 데이터만 이동 가능
+    if (draggedEntry.studentName !== targetStudent) {
+      alert(`⚠️ ${draggedEntry.studentName}의 데이터는 다른 학생 행으로 이동할 수 없습니다.`);
+      return;
+    }
+    
+    // 해당 교시에 이미 데이터가 있는지 확인
+    const existingEntry = data.find(entry => 
+      entry.studentName === targetStudent && entry.period === targetPeriod
+    );
+    
+    if (existingEntry) {
+      // 덮어쓰기 확인
+      setPendingMove({ 
+        draggedEntry, 
+        targetPeriod, 
+        targetStudent, 
+        existingEntry,
+        isOverwrite: true
+      });
+      setShowMoveConfirmation(true);
+    } else {
+      // 빈 칸으로 이동 - 확인 모달 표시
+      setPendingMove({ 
+        draggedEntry, 
+        targetPeriod, 
+        targetStudent, 
+        existingEntry: null,
+        isOverwrite: false
+      });
+      setShowMoveConfirmation(true);
+    }
+  };
+
+  const confirmMove = async () => {
+    if (pendingMove) {
+      await handleMoveEntry(pendingMove.draggedEntry, pendingMove.targetPeriod);
+    }
+    setShowMoveConfirmation(false);
+    setPendingMove(null);
+  };
+
+  const cancelMove = () => {
+    setShowMoveConfirmation(false);
+    setPendingMove(null);
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <>
+      <div style={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        zIndex: 10000
+      }}>
+        <div style={{
+          backgroundColor: 'white',
+          borderRadius: '12px',
+          maxWidth: '98vw',
+          maxHeight: '95vh',
+          width: '1932px',
+          overflow: 'hidden',
+          boxShadow: '0 20px 40px rgba(0, 0, 0, 0.3)'
+        }}>
+        {/* 헤더 */}
+        <div style={{
+          padding: '24px',
+          borderBottom: '1px solid #e8eaed',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+            <h2 style={{ fontSize: '24px', fontWeight: 'bold', color: '#333', margin: 0 }}>
+              📚 학습일지 조회 🍭
+            </h2>
+            
+            {/* 특정일 고르기 캘린더 */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <label style={{ fontSize: '14px', fontWeight: '600', color: '#666' }}>
+                📅 특정일 보기:
+              </label>
+              <input
+                type="date"
+                value={selectedDateFilter || ''}
+                onChange={(e) => {
+                  const selectedValue = e.target.value;
+                  setSelectedDateFilter(selectedValue || null);
+                }}
+                max={new Date().toISOString().split('T')[0]} // 오늘까지만 선택 가능
+                min={new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]} // 30일 전부터
+                style={{
+                  padding: '8px 12px',
+                  border: '2px solid #e1e5e9',
+                  borderRadius: '8px',
+                  fontSize: '13px',
+                  backgroundColor: 'white',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease'
+                }}
+                onFocus={(e) => {
+                  e.target.style.borderColor = '#4285f4';
+                  e.target.style.boxShadow = '0 0 0 2px rgba(66, 133, 244, 0.2)';
+                }}
+                onBlur={(e) => {
+                  e.target.style.borderColor = '#e1e5e9';
+                  e.target.style.boxShadow = 'none';
+                }}
+              />
+              {selectedDateFilter && (
+                <button
+                  onClick={() => setSelectedDateFilter(null)}
+                  style={{
+                    padding: '6px 12px',
+                    backgroundColor: '#f1f3f4',
+                    border: '1px solid #dadce0',
+                    borderRadius: '6px',
+                    fontSize: '12px',
+                    cursor: 'pointer',
+                    color: '#5f6368',
+                    transition: 'all 0.2s ease'
+                  }}
+                  onMouseOver={(e) => {
+                    e.target.style.backgroundColor = '#e8eaed';
+                  }}
+                  onMouseOut={(e) => {
+                    e.target.style.backgroundColor = '#f1f3f4';
+                  }}
+                >
+                  🗑️ 전체 보기
+                </button>
+              )}
+            </div>
+          </div>
+          
+          <button
+            onClick={onClose}
+            style={{
+              background: 'none',
+              border: 'none',
+              fontSize: '24px',
+              cursor: 'pointer',
+              color: '#666'
+            }}
+          >
+            ✕
+          </button>
+        </div>
+
+        {/* 뷰 모드 선택 */}
+        <div style={{
+          padding: '16px 24px',
+          borderBottom: '1px solid #e8eaed',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center'
+        }}>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button
+              style={{
+                padding: '8px 16px',
+                borderRadius: '8px',
+                border: 'none',
+                backgroundColor: 'transparent',
+                color: '#666',
+                fontSize: '14px',
+                fontWeight: '600',
+                cursor: 'pointer',
+                transition: 'all 0.2s'
+              }}
+            >
+              📋 리스트 보기
+            </button>
+            <button
+              style={{
+                padding: '8px 16px',
+                borderRadius: '8px',
+                border: 'none',
+                backgroundColor: '#4285f4',
+                color: 'white',
+                fontSize: '14px',
+                fontWeight: '600',
+                cursor: 'pointer',
+                transition: 'all 0.2s'
+              }}
+            >
+              📊 테이블 보기
+            </button>
+          </div>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button style={{
+              padding: '8px 16px',
+              borderRadius: '8px',
+              border: 'none',
+              backgroundColor: '#34A853',
+              color: 'white',
+              fontSize: '12px',
+              fontWeight: '600',
+              cursor: 'pointer'
+            }}>
+              📊 CSV 다운로드
+            </button>
+            <button style={{
+              padding: '8px 16px',
+              borderRadius: '8px',
+              border: 'none',
+              backgroundColor: '#EA4335',
+              color: 'white',
+              fontSize: '12px',
+              fontWeight: '600',
+              cursor: 'pointer'
+            }}>
+              📄 PDF 다운로드
+            </button>
+          </div>
+        </div>
+
+        {/* 컨텐츠 영역 */}
+        <div style={{ maxHeight: '60vh', overflowY: 'auto', padding: '24px' }}>
+          {loading ? (
+            <div style={{ textAlign: 'center', padding: '40px', color: '#666' }}>
+              데이터를 불러오는 중...
+            </div>
+          ) : data.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '40px', color: '#666' }}>
+              <div style={{ marginBottom: '16px' }}><img src="/lv2.png" alt="journal" style={{ width: '48px', height: '48px' }} /></div>
+              <h3 style={{ color: '#333', marginBottom: '8px' }}>
+                학습일지가 없습니다
+              </h3>
+              <p style={{ color: '#666', fontSize: '14px' }}>
+                {selectedDate 
+                  ? `${selectedDate.toLocaleDateString('ko-KR')}에 작성된 학습일지가 없습니다.`
+                  : '작성된 학습일지가 없습니다.'
+                }
+              </p>
+            </div>
+          ) : (
+            <div>
+              <div style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                marginBottom: '20px'
+              }}>
+                <h3 style={{
+                  fontSize: '18px',
+                  fontWeight: 'bold',
+                  color: '#202124',
+                  margin: 0
+                }}>
+                  📊 학습데이터 ({
+                    selectedDateFilter ? 
+                      data.filter(entry => entry.date === selectedDateFilter).length :
+                      data.length
+                  }개)
+                </h3>
+                
+                {/* 필터 옵션 */}
+                <div style={{
+                  display: 'flex',
+                  gap: '12px',
+                  alignItems: 'center'
+                }}>
+                  {/* 교시 필터 */}
+                  <select
+                    value={selectedPeriodFilter}
+                    onChange={(e) => setSelectedPeriodFilter(e.target.value)}
+                    style={{
+                      padding: '6px 12px',
+                      border: '1px solid #ddd',
+                      borderRadius: '6px',
+                      fontSize: '13px',
+                      backgroundColor: 'white',
+                      cursor: 'pointer',
+                      outline: 'none'
+                    }}
+                  >
+                    <option value="전체">📚 전체</option>
+                    {availablePeriods.map(period => (
+                      <option key={period} value={period}>
+                        🕐 {period}
+                      </option>
+                    ))}
+                    <option value="작성된교시">✏️ 작성된 교시</option>
+                  </select>
+
+                  <label style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    fontSize: '13px',
+                    color: '#666',
+                    cursor: 'pointer'
+                  }}>
+                    <input
+                      type="checkbox"
+                      checked={showEmptyStudents}
+                      onChange={(e) => setShowEmptyStudents(e.target.checked)}
+                      style={{
+                        width: '14px',
+                        height: '14px',
+                        cursor: 'pointer'
+                      }}
+                    />
+                    빈 학생 표시
+                  </label>
+                </div>
+              </div>
+              
+              {/* 날짜별 테이블 뷰 */}
+              <div style={{ overflowX: 'auto' }}>
+                {(() => {
+                  // 날짜별로 데이터 그룹핑
+                  const dataByDate = {};
+                  data.forEach(entry => {
+                    if (!dataByDate[entry.date]) {
+                      dataByDate[entry.date] = [];
+                    }
+                    dataByDate[entry.date].push(entry);
+                  });
+                  
+                  // 오늘 날짜 자동 추가 (데이터가 없어도 빈 테이블 표시)
+                  const today = new Date().toISOString().split('T')[0];
+                  if (!dataByDate[today]) {
+                    dataByDate[today] = [];
+                  }
+                  
+                  // 어제 날짜도 추가 (필요한 경우)
+                  const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+                  if (!dataByDate[yesterday]) {
+                    dataByDate[yesterday] = [];
+                  }
+                  
+                  // 날짜 순으로 정렬 (최신 순)
+                  const sortedDates = Object.keys(dataByDate).sort((a, b) => new Date(b) - new Date(a));
+                  
+                  if (sortedDates.length === 0) {
+                    return (
+                      <div style={{
+                        textAlign: 'center',
+                        padding: '60px 20px',
+                        color: '#666',
+                        backgroundColor: '#f8f9fa',
+                        borderRadius: '12px',
+                        border: '2px dashed #ddd'
+                      }}>
+                        <div style={{ marginBottom: '16px' }}><img src="/lv3.png" alt="no data" style={{ width: '48px', height: '48px' }} /></div>
+                        <div style={{ fontSize: '18px', fontWeight: 'bold', marginBottom: '8px' }}>
+                          학습일지 데이터가 없습니다
+                        </div>
+                        <div style={{ fontSize: '14px', color: '#999' }}>
+                          선택한 날짜에 작성된 학습일지를 찾을 수 없습니다.
+                        </div>
+                      </div>
+                    );
+                  }
+                  
+                  // 날짜 필터 적용
+                  const filteredDates = selectedDateFilter ? 
+                    sortedDates.filter(date => date === selectedDateFilter) : 
+                    sortedDates;
+                  
+                  return filteredDates.map((date, dateIndex) => {
+                    const dateEntries = dataByDate[date];
+                    const formattedDate = new Date(date).toLocaleDateString('ko-KR', {
+                      year: 'numeric',
+                      month: 'long', 
+                      day: 'numeric',
+                      weekday: 'long'
+                    });
+                    
+                    return (
+                      <div key={date} style={{ 
+                        marginBottom: dateIndex === filteredDates.length - 1 ? '0' : '40px',
+                        boxShadow: '0 4px 16px rgba(0,0,0,0.1)',
+                        borderRadius: '16px',
+                        overflow: 'hidden',
+                        backgroundColor: 'white'
+                      }}>
+                        {/* 날짜 헤더 */}
+                        <div style={{
+                          padding: '20px 24px',
+                          background: 'linear-gradient(135deg, #1a73e8 0%, #4285f4 50%, #34a853 100%)',
+                          color: 'white',
+                          fontSize: '20px',
+                          fontWeight: 'bold',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '12px',
+                          position: 'relative',
+                          overflow: 'hidden'
+                        }}>
+                          <div style={{
+                            position: 'absolute',
+                            top: 0,
+                            left: 0,
+                            right: 0,
+                            bottom: 0,
+                            background: 'linear-gradient(45deg, rgba(255,255,255,0.1) 25%, transparent 25%, transparent 50%, rgba(255,255,255,0.1) 50%, rgba(255,255,255,0.1) 75%, transparent 75%)',
+                            backgroundSize: '20px 20px'
+                          }} />
+                          <span style={{ position: 'relative', zIndex: 1 }}>📅 {formattedDate}</span>
+                          
+                          {/* 날짜 필터 버튼 */}
+                          <button
+                            onClick={() => {
+                              setSelectedDateFilter(selectedDateFilter === date ? null : date);
+                            }}
+                            style={{
+                              backgroundColor: selectedDateFilter === date ? 'rgba(255,255,255,0.4)' : 'rgba(255,255,255,0.25)',
+                              border: selectedDateFilter === date ? '2px solid rgba(255,255,255,0.8)' : '2px solid transparent',
+                              color: 'white',
+                              padding: '6px 12px',
+                              borderRadius: '20px',
+                              fontSize: '12px',
+                              fontWeight: '600',
+                              cursor: 'pointer',
+                              transition: 'all 0.2s ease',
+                              position: 'relative',
+                              zIndex: 1,
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '4px'
+                            }}
+                            onMouseOver={(e) => {
+                              if (selectedDateFilter !== date) {
+                                e.target.style.backgroundColor = 'rgba(255,255,255,0.35)';
+                              }
+                            }}
+                            onMouseOut={(e) => {
+                              if (selectedDateFilter !== date) {
+                                e.target.style.backgroundColor = 'rgba(255,255,255,0.25)';
+                              }
+                            }}
+                          >
+                            📅 {selectedDateFilter === date ? '전체 보기' : '이 날만 보기'}
+                          </button>
+                          
+                          <div style={{
+                            marginLeft: 'auto',
+                            backgroundColor: dateEntries.length === 0 ? 'rgba(255,193,7,0.3)' : 'rgba(255,255,255,0.25)',
+                            padding: '8px 16px',
+                            borderRadius: '20px',
+                            fontSize: '14px',
+                            fontWeight: '600',
+                            position: 'relative',
+                            zIndex: 1,
+                            border: dateEntries.length === 0 ? '2px solid rgba(255,255,255,0.5)' : 'none'
+                          }}>
+                            {dateEntries.length === 0 ? (
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                <img src="/lv4.png" alt="waiting" style={{ width: '16px', height: '16px' }} />
+                                <span>작성 대기 중</span>
+                              </div>
+                            ) : (
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                <img src="/lv5.png" alt="completed" style={{ width: '16px', height: '16px' }} />
+                                <span>총 {dateEntries.length}개 작성</span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                        
+                        {/* 해당 날짜 테이블 */}
+                        <table style={{
+                          width: '100%',
+                          borderCollapse: 'collapse',
+                          fontSize: '14px',
+                          backgroundColor: 'white'
+                        }}>
+                          <thead>
+                            <tr>
+                              <th style={{ 
+                                padding: '16px 20px', 
+                                border: '1px solid #e8eaed', 
+                                backgroundColor: '#34a853',
+                                color: 'white',
+                                fontWeight: 'bold',
+                                width: '140px',
+                                textAlign: 'center',
+                                fontSize: '15px'
+                              }}>
+                                👤 학생명
+                              </th>
+                              {(() => {
+                                // 필터에 따라 표시할 교시 결정
+                                let periodsToShow = availablePeriods;
+                                if (selectedPeriodFilter === '작성된교시') {
+                                  periodsToShow = [...new Set(dateEntries.map(entry => entry.period).filter(Boolean))];
+                                } else if (selectedPeriodFilter !== '전체') {
+                                  periodsToShow = [selectedPeriodFilter];
+                                }
+                                return periodsToShow.map(period => (
+                                  <th
+                                    key={period}
+                                    style={{
+                                      padding: '16px 20px',
+                                      border: '1px solid #e8eaed',
+                                      backgroundColor: '#34a853',
+                                      color: 'white',
+                                      fontWeight: 'bold',
+                                      minWidth: '220px',
+                                      textAlign: 'center',
+                                      fontSize: '15px'
+                                    }}
+                                  >
+                                    🕐 {period}
+                                  </th>
+                                ));
+                              })()}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {STUDENTS.filter(studentName => {
+                              const studentEntries = dateEntries.filter(entry => entry.studentName === studentName);
+                              
+                              // 빈 학생 숨기기 옵션
+                              if (!showEmptyStudents && studentEntries.length === 0) {
+                                return false;
+                              }
+                              
+                              return true;
+                            }).map((studentName, studentIndex, filteredStudents) => {
+                              const studentEntries = dateEntries.filter(entry => entry.studentName === studentName);
+                              const isLastRow = studentIndex === filteredStudents.length - 1;
+                              
+                              return (
+                                <tr key={`${date}-${studentName}`} style={{
+                                  backgroundColor: studentIndex % 2 === 0 ? '#fafafa' : 'white'
+                                }}>
+                                  <td style={{ 
+                                    padding: '16px 20px', 
+                                    border: `1px solid #e8eaed${isLastRow ? '' : ''}`,
+                                    fontWeight: 'bold',
+                                    backgroundColor: studentEntries.length > 0 ? '#e8f5e8' : '#f5f5f5',
+                                    textAlign: 'center',
+                                    width: '140px',
+                                    verticalAlign: 'top',
+                                    borderBottom: isLastRow ? 'none' : '1px solid #e8eaed',
+                                    whiteSpace: 'nowrap'
+                                  }}>
+                                    <div style={{
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'center',
+                                      gap: '8px'
+                                    }}>
+                                      <img src="/lv1.png" alt="student" style={{ width: '16px', height: '16px' }} /> <span style={{ fontSize: '14px' }}>{studentName}</span>
+                                    </div>
+                                  </td>
+                                  {(() => {
+                                    // 필터에 따라 표시할 교시 결정
+                                    let periodsToShow = availablePeriods;
+                                    if (selectedPeriodFilter === '작성된교시') {
+                                      periodsToShow = [...new Set(dateEntries.map(entry => entry.period).filter(Boolean))];
+                                    } else if (selectedPeriodFilter !== '전체') {
+                                      periodsToShow = [selectedPeriodFilter];
+                                    }
+                                    return periodsToShow.map((period, periodIndex) => {
+                                      const entry = studentEntries.find(e => e.period === period);
+                                      const isLastColumn = periodIndex === periodsToShow.length - 1;
+                                      
+                                      return (
+                                      <td
+                                        key={period}
+                                        onDragOver={handleDragOver}
+                                        onDragEnter={(e) => handleDragEnter(e, period, studentName)}
+                                        onDragLeave={handleDragLeave}
+                                        onDrop={(e) => handleDrop(e, period, studentName)}
+                                        style={{
+                                          padding: '12px',
+                                          border: '1px solid #e8eaed',
+                                          verticalAlign: 'top',
+                                          borderRight: isLastColumn ? 'none' : '1px solid #e8eaed',
+                                          borderBottom: isLastRow ? 'none' : '1px solid #e8eaed',
+                                          // 드래그 오버 시 시각적 효과
+                                          backgroundColor: dragOverCell === `${studentName}-${period}` ? 
+                                            (entry ? 'rgba(255, 235, 59, 0.3)' : 'rgba(33, 150, 243, 0.15)') : 
+                                            'transparent',
+                                          transition: 'background-color 0.2s ease, transform 0.2s ease',
+                                          transform: dragOverCell === `${studentName}-${period}` ? 'scale(1.02)' : 'scale(1)',
+                                          boxShadow: dragOverCell === `${studentName}-${period}` ? 
+                                            '0 4px 12px rgba(0,0,0,0.15)' : 'none'
+                                        }}
+                                      >
+                                        {entry ? (
+                                          <div
+                                            draggable
+                                            onDragStart={(e) => handleDragStart(e, entry)}
+                                            onDragEnd={handleDragEnd}
+                                            style={{
+                                              padding: '16px',
+                                              backgroundColor: '#e8f5e8',
+                                              border: '2px solid #34a853',
+                                              borderRadius: '12px',
+                                              cursor: 'move',
+                                              fontSize: '13px',
+                                              transition: 'all 0.3s ease',
+                                              boxShadow: '0 3px 6px rgba(52, 168, 83, 0.2)',
+                                              minHeight: '120px',
+                                              position: 'relative'
+                                            }}
+                                            onMouseOver={(e) => {
+                                              if (!draggedEntry) {
+                                                e.currentTarget.style.transform = 'translateY(-2px) scale(1.02)';
+                                                e.currentTarget.style.boxShadow = '0 6px 12px rgba(52, 168, 83, 0.3)';
+                                                e.currentTarget.style.cursor = 'grab';
+                                              }
+                                            }}
+                                            onMouseOut={(e) => {
+                                              if (!draggedEntry) {
+                                                e.currentTarget.style.transform = 'translateY(0) scale(1)';
+                                                e.currentTarget.style.boxShadow = '0 3px 6px rgba(52, 168, 83, 0.2)';
+                                                e.currentTarget.style.cursor = 'move';
+                                              }
+                                            }}
+                                          >
+                                            {/* 점수 표시 */}
+                                            <div style={{ 
+                                              display: 'flex', 
+                                              gap: '10px', 
+                                              marginBottom: '12px',
+                                              justifyContent: 'space-between'
+                                            }}>
+                                              <span style={{ 
+                                                fontSize: '12px', 
+                                                fontWeight: 'bold',
+                                                color: getScoreColor(entry.understanding, 'understanding'),
+                                                backgroundColor: 'white',
+                                                padding: '4px 10px',
+                                                borderRadius: '15px',
+                                                border: `2px solid ${getScoreColor(entry.understanding, 'understanding')}`,
+                                                boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+                                              }}>
+                                                🟢 {entry.understanding}점
+                                              </span>
+                                              <span style={{ 
+                                                fontSize: '12px', 
+                                                fontWeight: 'bold',
+                                                color: getScoreColor(entry.satisfaction, 'satisfaction'),
+                                                backgroundColor: 'white',
+                                                padding: '4px 10px',
+                                                borderRadius: '15px',
+                                                border: `2px solid ${getScoreColor(entry.satisfaction, 'satisfaction')}`,
+                                                boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+                                              }}>
+                                                ❤️ {entry.satisfaction}점
+                                              </span>
+                                            </div>
+
+                                            {/* 키워드 섹션 */}
+                                            {entry.keyword && (
+                                              <div style={{ 
+                                                marginBottom: '10px', 
+                                                fontSize: '13px',
+                                                backgroundColor: '#fff8e1',
+                                                padding: '8px 12px',
+                                                borderRadius: '8px',
+                                                border: '2px solid #ffc107',
+                                                boxShadow: '0 2px 4px rgba(255, 193, 7, 0.2)'
+                                              }}>
+                                                <span style={{ fontWeight: 'bold', color: '#f57c00' }}>
+                                                  🔑 {entry.keyword}
+                                                </span>
+                                              </div>
+                                            )}
+                                            
+                                            {/* 학습 내용 섹션 */}
+                                            <div style={{ 
+                                              fontSize: '12px', 
+                                              color: '#444',
+                                              backgroundColor: 'white',
+                                              padding: '10px 12px',
+                                              borderRadius: '8px',
+                                              border: '1px solid #ddd',
+                                              lineHeight: '1.5',
+                                              minHeight: '50px',
+                                              boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.1)'
+                                            }}>
+                                              <div style={{ display: 'flex', alignItems: 'flex-start', gap: '6px' }}>
+                                                <img src="/lv6.png" alt="content" style={{ width: '14px', height: '14px', marginTop: '2px' }} />
+                                                <span style={{ fontWeight: '500' }}>
+                                                  {entry.content ? 
+                                                    entry.content.substring(0, 80) + (entry.content.length > 80 ? '...' : '') 
+                                                    : '내용 없음'
+                                                  }
+                                                </span>
+                                              </div>
+                                            </div>
+                                          </div>
+                                        ) : (
+                                          <div style={{ 
+                                            color: dragOverCell === `${studentName}-${period}` ? '#1976d2' : '#999', 
+                                            textAlign: 'center', 
+                                            padding: '24px 16px',
+                                            border: dragOverCell === `${studentName}-${period}` ? 
+                                              '3px solid #2196f3' : '2px dashed #ddd',
+                                            borderRadius: '12px',
+                                            backgroundColor: dragOverCell === `${studentName}-${period}` ? 
+                                              '#e3f2fd' : '#fafafa',
+                                            transition: 'all 0.2s ease',
+                                            minHeight: '120px',
+                                            display: 'flex',
+                                            flexDirection: 'column',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            fontSize: '13px',
+                                            transform: dragOverCell === `${studentName}-${period}` ? 'scale(1.05)' : 'scale(1)',
+                                            boxShadow: dragOverCell === `${studentName}-${period}` ? 
+                                              '0 8px 16px rgba(33, 150, 243, 0.3)' : 'none'
+                                          }}
+                                          onMouseOver={(e) => {
+                                            if (dragOverCell !== `${studentName}-${period}`) {
+                                              e.currentTarget.style.backgroundColor = '#f0f8ff';
+                                              e.currentTarget.style.borderColor = '#4285f4';
+                                            }
+                                          }}
+                                          onMouseOut={(e) => {
+                                            if (dragOverCell !== `${studentName}-${period}`) {
+                                              e.currentTarget.style.backgroundColor = '#fafafa';
+                                              e.currentTarget.style.borderColor = '#ddd';
+                                            }
+                                          }}
+                                          >
+                                            <div style={{ marginBottom: '8px' }}><img src="/lv7.png" alt="empty" style={{ width: '24px', height: '24px' }} /></div>
+                                            <div style={{ fontWeight: '500', marginBottom: '4px' }}>빈 칸</div>
+                                            <div style={{ fontSize: '11px', color: '#ccc' }}>
+                                              드래그하여 이동
+                                            </div>
+                                          </div>
+                                        )}
+                                      </td>
+                                    );
+                                    });
+                                  })()}
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                        
+                        {/* 빈 테이블 안내 메시지 */}
+                        {dateEntries.length === 0 && (
+                          <div style={{
+                            padding: '32px 24px',
+                            textAlign: 'center',
+                            backgroundColor: '#f8f9fa',
+                            borderTop: '3px dashed #ddd'
+                          }}>
+                            <div style={{ marginBottom: '16px' }}><img src="/lv8.png" alt="no journal" style={{ width: '48px', height: '48px' }} /></div>
+                            <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#666', marginBottom: '8px' }}>
+                              {date === new Date().toISOString().split('T')[0] ? 
+                                '오늘의 학습일지를 작성해보세요!' : 
+                                '이 날의 학습일지가 없습니다'
+                              }
+                            </div>
+                            <div style={{ fontSize: '14px', color: '#999', lineHeight: '1.5' }}>
+                              {date === new Date().toISOString().split('T')[0] ? 
+                                '학생들이 학습일지를 작성하면 여기에 표시됩니다.\n드래그 앤 드롭으로 교시를 이동할 수도 있어요!' :
+                                '해당 날짜에는 작성된 학습일지가 없습니다.\n다른 날짜를 확인해보세요.'
+                              }
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  });
+                })()}
+              </div>
+
+              {/* 교시별 평균 분석 */}
+              <div style={{ marginTop: '32px' }}>
+                <h3 style={{
+                  fontSize: '18px',
+                  fontWeight: 'bold',
+                  color: '#202124',
+                  marginBottom: '20px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  background: 'linear-gradient(135deg, #4285f4, #34a853)',
+                  WebkitBackgroundClip: 'text',
+                  WebkitTextFillColor: 'transparent'
+                }}>
+                  📈 교시별 평균 분석
+                </h3>
+                
+                <div style={{ 
+                  display: 'grid', 
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', 
+                  gap: '20px'
+                }}>
+                  {(() => {
+                    // 필터에 따라 표시할 교시 결정
+                    let periodsToShow = availablePeriods;
+                    if (selectedPeriodFilter === '작성된교시') {
+                      periodsToShow = [...new Set(data.map(entry => entry.period).filter(Boolean))];
+                    } else if (selectedPeriodFilter !== '전체') {
+                      periodsToShow = [selectedPeriodFilter];
+                    }
+                    
+                    return periodsToShow.map(period => {
+                      // 날짜 필터 적용된 데이터만 사용
+                      const filteredData = selectedDateFilter ? 
+                        data.filter(entry => entry.date === selectedDateFilter) : 
+                        data;
+                      const periodEntries = filteredData.filter(entry => entry.period === period);
+                      const avgUnderstanding = periodEntries.length > 0 
+                        ? (periodEntries.reduce((sum, entry) => sum + (entry.understanding || 0), 0) / periodEntries.length).toFixed(1)
+                        : '0.0';
+                      const avgSatisfaction = periodEntries.length > 0 
+                        ? (periodEntries.reduce((sum, entry) => sum + (entry.satisfaction || 0), 0) / periodEntries.length).toFixed(1)
+                        : '0.0';
+                      
+                    
+                    return (
+                      <div key={period} style={{
+                        backgroundColor: '#f8f9fa',
+                        borderRadius: '12px',
+                        padding: '16px',
+                        border: '1px solid #e8eaed',
+                        boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+                      }}>
+                        <h4 style={{
+                          fontSize: '16px',
+                          fontWeight: 'bold',
+                          color: '#4285f4',
+                          marginBottom: '12px',
+                          textAlign: 'center'
+                        }}>
+                          🕐 {period}
+                        </h4>
+                        
+                        {/* 이해도 */}
+                        <div style={{ marginBottom: '16px' }}>
+                          <div style={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            marginBottom: '6px'
+                          }}>
+                            <span style={{ fontSize: '13px', fontWeight: '500', color: '#34a853' }}>
+                              🟢 이해도
+                            </span>
+                            <span style={{ fontSize: '16px', fontWeight: 'bold', color: '#34a853' }}>
+                              {avgUnderstanding}점
+                            </span>
+                          </div>
+                          <div style={{
+                            height: '8px',
+                            backgroundColor: '#e8f5e8',
+                            borderRadius: '4px',
+                            overflow: 'hidden'
+                          }}>
+                            <div style={{
+                              width: `${(parseFloat(avgUnderstanding) / 5) * 100}%`,
+                              height: '100%',
+                              backgroundColor: getScoreColor(avgUnderstanding, 'understanding'),
+                              borderRadius: '4px',
+                              transition: 'width 0.3s ease'
+                            }}></div>
+                          </div>
+                        </div>
+
+                        {/* 만족도 */}
+                        <div>
+                          <div style={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            marginBottom: '6px'
+                          }}>
+                            <span style={{ fontSize: '13px', fontWeight: '500', color: '#ea4335' }}>
+                              ❤️ 만족도
+                            </span>
+                            <span style={{ fontSize: '16px', fontWeight: 'bold', color: '#ea4335' }}>
+                              {avgSatisfaction}점
+                            </span>
+                          </div>
+                          <div style={{
+                            height: '8px',
+                            backgroundColor: '#fde8e8',
+                            borderRadius: '4px',
+                            overflow: 'hidden'
+                          }}>
+                            <div style={{
+                              width: `${(parseFloat(avgSatisfaction) / 5) * 100}%`,
+                              height: '100%',
+                              backgroundColor: getScoreColor(avgSatisfaction, 'satisfaction'),
+                              borderRadius: '4px',
+                              transition: 'width 0.3s ease'
+                            }}></div>
+                          </div>
+                        </div>
+
+                        <div style={{
+                          marginTop: '12px',
+                          fontSize: '12px',
+                          color: '#666',
+                          textAlign: 'center',
+                          backgroundColor: 'white',
+                          padding: '6px',
+                          borderRadius: '6px'
+                        }}>
+                          👥 {periodEntries.length}명 참여
+                        </div>
+                      </div>
+                      );
+                    });
+                  })()}
+                </div>
+              </div>
+
+              {/* 통계 요약 */}
+              <div style={{ marginTop: '32px' }}>
+                <h3 style={{
+                  fontSize: '16px',
+                  fontWeight: 'bold',
+                  color: '#202124',
+                  marginBottom: '16px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px'
+                }}>
+                  📊 통계 요약
+                </h3>
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+                  gap: '16px'
+                }}>
+                  {(() => {
+                    // 날짜 필터 적용된 데이터만 사용
+                    const statsData = selectedDateFilter ? 
+                      data.filter(entry => entry.date === selectedDateFilter) : 
+                      data;
+                    
+                    const avgUnderstanding = statsData.length > 0 ? 
+                      (statsData.reduce((sum, entry) => sum + (entry.understanding || 0), 0) / statsData.length).toFixed(1) : '0.0';
+                    const avgSatisfaction = statsData.length > 0 ? 
+                      (statsData.reduce((sum, entry) => sum + (entry.satisfaction || 0), 0) / statsData.length).toFixed(1) : '0.0';
+                    
+                    return (
+                      <>
+                        <div style={{
+                          padding: '16px',
+                          backgroundColor: selectedDateFilter ? '#e3f2fd' : '#f8f9fa',
+                          borderRadius: '8px',
+                          border: selectedDateFilter ? '2px solid #2196f3' : '1px solid #e8eaed',
+                          position: 'relative'
+                        }}>
+                          {selectedDateFilter && (
+                            <div style={{
+                              position: 'absolute',
+                              top: '-8px',
+                              right: '8px',
+                              backgroundColor: '#2196f3',
+                              color: 'white',
+                              padding: '2px 8px',
+                              borderRadius: '10px',
+                              fontSize: '10px',
+                              fontWeight: 'bold'
+                            }}>
+                              특정일
+                            </div>
+                          )}
+                          <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#1a73e8' }}>
+                            {statsData.length}
+                          </div>
+                          <div style={{ fontSize: '12px', color: '#666' }}>
+                            {selectedDateFilter ? 
+                              `${new Date(selectedDateFilter).toLocaleDateString('ko-KR', { month: 'long', day: 'numeric' })} 학습일지 수` : 
+                              '총 학습일지 수'
+                            }
+                          </div>
+                        </div>
+                        <div style={{
+                          padding: '16px',
+                          backgroundColor: selectedDateFilter ? '#e8f5e8' : '#f8f9fa',
+                          borderRadius: '8px',
+                          border: selectedDateFilter ? '2px solid #4caf50' : '1px solid #e8eaed',
+                          position: 'relative'
+                        }}>
+                          {selectedDateFilter && (
+                            <div style={{
+                              position: 'absolute',
+                              top: '-8px',
+                              right: '8px',
+                              backgroundColor: '#4caf50',
+                              color: 'white',
+                              padding: '2px 8px',
+                              borderRadius: '10px',
+                              fontSize: '10px',
+                              fontWeight: 'bold'
+                            }}>
+                              특정일
+                            </div>
+                          )}
+                          <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#34a853' }}>
+                            {avgUnderstanding}점
+                          </div>
+                          <div style={{ fontSize: '12px', color: '#666' }}>
+                            {selectedDateFilter ? 
+                              `${new Date(selectedDateFilter).toLocaleDateString('ko-KR', { month: 'long', day: 'numeric' })} 평균 이해도` : 
+                              '전체 평균 이해도'
+                            }
+                          </div>
+                        </div>
+                        <div style={{
+                          padding: '16px',
+                          backgroundColor: selectedDateFilter ? '#ffebee' : '#f8f9fa',
+                          borderRadius: '8px',
+                          border: selectedDateFilter ? '2px solid #f44336' : '1px solid #e8eaed',
+                          position: 'relative'
+                        }}>
+                          {selectedDateFilter && (
+                            <div style={{
+                              position: 'absolute',
+                              top: '-8px',
+                              right: '8px',
+                              backgroundColor: '#f44336',
+                              color: 'white',
+                              padding: '2px 8px',
+                              borderRadius: '10px',
+                              fontSize: '10px',
+                              fontWeight: 'bold'
+                            }}>
+                              특정일
+                            </div>
+                          )}
+                          <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#ea4335' }}>
+                            {avgSatisfaction}점
+                          </div>
+                          <div style={{ fontSize: '12px', color: '#666' }}>
+                            {selectedDateFilter ? 
+                              `${new Date(selectedDateFilter).toLocaleDateString('ko-KR', { month: 'long', day: 'numeric' })} 평균 만족도` : 
+                              '전체 평균 만족도'
+                            }
+                          </div>
+                        </div>
+                      </>
+                    );
+                  })()}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+      </div>
+
+      {/* 이동 확인 모달 */}
+      {showMoveConfirmation && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.7)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 10001
+        }}>
+          <div style={{
+            backgroundColor: 'white',
+            borderRadius: '16px',
+            padding: '32px',
+            maxWidth: '500px',
+            width: '90%',
+            boxShadow: '0 20px 40px rgba(0, 0, 0, 0.3)'
+          }}>
+            <div style={{
+              textAlign: 'center',
+              marginBottom: '24px'
+            }}>
+              <div style={{ marginBottom: '16px' }}>
+                <img src={pendingMove?.isOverwrite ? "/lv9.png" : "/lv10.png"} alt={pendingMove?.isOverwrite ? "warning" : "move"} style={{ width: '48px', height: '48px' }} />
+              </div>
+              <h3 style={{
+                fontSize: '20px',
+                fontWeight: 'bold',
+                color: '#333',
+                marginBottom: '8px'
+              }}>
+                {pendingMove?.isOverwrite ? '데이터 덮어쓰기 확인' : '데이터 이동 확인'}
+              </h3>
+              <p style={{ color: '#666', lineHeight: '1.5' }}>
+                {pendingMove?.isOverwrite ? (
+                  <>
+                    <strong>{pendingMove?.targetPeriod}</strong>에 이미 데이터가 있습니다.<br/>
+                    기존 데이터를 새 데이터로 교체하시겠습니까?
+                  </>
+                ) : (
+                  <>
+                    <strong>{pendingMove?.draggedEntry?.studentName}</strong>님의 데이터를<br/>
+                    <strong>{pendingMove?.targetPeriod}</strong>로 이동하시겠습니까?
+                  </>
+                )}
+              </p>
+            </div>
+
+            {pendingMove?.isOverwrite && (
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: '1fr 1fr',
+                gap: '16px',
+                marginBottom: '16px'
+              }}>
+                <div style={{
+                  padding: '16px',
+                  backgroundColor: '#fef2f2',
+                  borderRadius: '8px',
+                  border: '1px solid #fecaca'
+                }}>
+                  <div style={{ fontSize: '12px', color: '#dc2626', fontWeight: 'bold', marginBottom: '8px' }}>
+                    삭제될 데이터
+                  </div>
+                  <div style={{ fontSize: '11px', color: '#666', lineHeight: '1.4' }}>
+                    <div style={{ marginBottom: '4px' }}>
+                      <strong>이해도:</strong> {pendingMove?.existingEntry?.understanding}점
+                    </div>
+                    <div style={{ marginBottom: '4px' }}>
+                      <strong>만족도:</strong> {pendingMove?.existingEntry?.satisfaction}점
+                    </div>
+                    {pendingMove?.existingEntry?.keyword && (
+                      <div style={{ marginBottom: '4px' }}>
+                        <strong>키워드:</strong> {pendingMove.existingEntry.keyword}
+                      </div>
+                    )}
+                    <div style={{ 
+                      marginTop: '6px',
+                      padding: '4px 6px',
+                      backgroundColor: 'rgba(255,255,255,0.7)',
+                      borderRadius: '4px',
+                      fontSize: '10px'
+                    }}>
+                      <strong>내용:</strong> {pendingMove?.existingEntry?.content 
+                        ? (pendingMove.existingEntry.content.length > 50 
+                            ? pendingMove.existingEntry.content.substring(0, 50) + '...'
+                            : pendingMove.existingEntry.content)
+                        : '내용 없음'}
+                    </div>
+                  </div>
+                </div>
+                <div style={{
+                  padding: '16px',
+                  backgroundColor: '#f0fdf4',
+                  borderRadius: '8px',
+                  border: '1px solid #bbf7d0'
+                }}>
+                  <div style={{ fontSize: '12px', color: '#16a34a', fontWeight: 'bold', marginBottom: '8px' }}>
+                    새로운 데이터
+                  </div>
+                  <div style={{ fontSize: '11px', color: '#666', lineHeight: '1.4' }}>
+                    <div style={{ marginBottom: '4px' }}>
+                      <strong>이해도:</strong> {pendingMove?.draggedEntry?.understanding}점
+                    </div>
+                    <div style={{ marginBottom: '4px' }}>
+                      <strong>만족도:</strong> {pendingMove?.draggedEntry?.satisfaction}점
+                    </div>
+                    {pendingMove?.draggedEntry?.keyword && (
+                      <div style={{ marginBottom: '4px' }}>
+                        <strong>키워드:</strong> {pendingMove.draggedEntry.keyword}
+                      </div>
+                    )}
+                    <div style={{ 
+                      marginTop: '6px',
+                      padding: '4px 6px',
+                      backgroundColor: 'rgba(255,255,255,0.7)',
+                      borderRadius: '4px',
+                      fontSize: '10px'
+                    }}>
+                      <strong>내용:</strong> {pendingMove?.draggedEntry?.content 
+                        ? (pendingMove.draggedEntry.content.length > 50 
+                            ? pendingMove.draggedEntry.content.substring(0, 50) + '...'
+                            : pendingMove.draggedEntry.content)
+                        : '내용 없음'}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {!pendingMove?.isOverwrite && (
+              <div style={{
+                padding: '20px',
+                backgroundColor: '#f0f8ff',
+                borderRadius: '12px',
+                border: '2px solid #3b82f6',
+                marginBottom: '16px',
+                textAlign: 'center'
+              }}>
+                <div style={{ marginBottom: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+                  <img src="/lv11.png" alt="preview" style={{ width: '32px', height: '32px' }} />
+                  <span style={{ fontSize: '16px' }}>➡️</span>
+                  <img src="/lv1.png" alt="calendar" style={{ width: '32px', height: '32px' }} />
+                </div>
+                <div style={{ fontSize: '14px', fontWeight: '600', color: '#1e40af', marginBottom: '8px' }}>
+                  이동할 데이터 미리보기
+                </div>
+                <div style={{ fontSize: '13px', color: '#475569', lineHeight: '1.4' }}>
+                  <div style={{ marginBottom: '6px' }}>
+                    🟢 <strong>이해도:</strong> {pendingMove?.draggedEntry?.understanding}점 |  
+                    ❤️ <strong>만족도:</strong> {pendingMove?.draggedEntry?.satisfaction}점
+                  </div>
+                  {pendingMove?.draggedEntry?.keyword && (
+                    <div style={{ marginBottom: '6px' }}>
+                      🔑 <strong>키워드:</strong> {pendingMove?.draggedEntry?.keyword}
+                    </div>
+                  )}
+                  <div style={{ 
+                    marginTop: '8px',
+                    padding: '8px 12px',
+                    backgroundColor: 'rgba(255,255,255,0.8)',
+                    borderRadius: '6px',
+                    fontSize: '12px',
+                    border: '1px solid #bfdbfe'
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: '6px' }}>
+                      <img src="/lv6.png" alt="content" style={{ width: '12px', height: '12px', marginTop: '1px' }} />
+                      <span><strong>내용:</strong> {pendingMove?.draggedEntry?.content 
+                        ? (pendingMove?.draggedEntry?.content.length > 60 
+                            ? pendingMove?.draggedEntry?.content.substring(0, 60) + '...'
+                            : pendingMove?.draggedEntry?.content)
+                      : '내용 없음'}</span>
+                    </div>
+                </div>
+              </div>
+            )}
+
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <button
+                onClick={cancelMove}
+                style={{
+                  flex: 1,
+                  padding: '12px',
+                  backgroundColor: '#f3f4f6',
+                  color: '#374151',
+                  border: 'none',
+                  borderRadius: '8px',
+                  fontSize: '14px',
+                  fontWeight: '600',
+                  cursor: 'pointer'
+                }}
+              >
+                취소
+              </button>
+              <button
+                onClick={confirmMove}
+                style={{
+                  flex: 1,
+                  padding: '12px',
+                  backgroundColor: pendingMove?.isOverwrite ? '#ef4444' : '#3b82f6',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '8px',
+                  fontSize: '14px',
+                  fontWeight: '600',
+                  cursor: 'pointer'
+                }}
+              >
+                {pendingMove?.isOverwrite ? '덮어쓰기' : '이동하기'}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+      </div>
+      )}
+    </>
+  );
+};
+
+export default LearningJournalViewModal;

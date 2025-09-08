@@ -14,6 +14,7 @@ import SportsEsportsIcon from '@mui/icons-material/SportsEsports';
 import CampaignIcon from '@mui/icons-material/Campaign';
 import TextField from '@mui/material/TextField';
 import AccessTimeIcon from '@mui/icons-material/AccessTime';
+import QuizSystem from '../components/QuizSystem';
 
 // 학생 관리 컴포넌트
 const StudentManagement = ({ students, onUpdateStudent }) => {
@@ -32,6 +33,8 @@ const NotificationManagement = ({ notifications, onUpdateNotification }) => {
 
 // 메인 TeacherPage 컴포넌트
 const TeacherPage = () => {
+  console.log('🏫 TeacherPage 컴포넌트가 렌더링됩니다');
+  
   // 모든 useState, useEffect 등 Hook 선언 (최상단)
   const [auth, setAuth] = useState(false);
   const [pwInput, setPwInput] = useState('');
@@ -67,6 +70,11 @@ const TeacherPage = () => {
   const [alarmContent, setAlarmContent] = useState('');
   const [alarmTime, setAlarmTime] = useState('');
   const [alarmSaving, setAlarmSaving] = useState(false);
+
+  // 상태 변수들 중 게임 관련 제거하고 퀴즈만 남기기
+  const [showQuizModal, setShowQuizModal] = useState(false);
+  
+  console.log('📊 TeacherPage 상태 초기화 완료 - showQuizModal:', showQuizModal);
 
   // 학생 데이터 변환
   const students = studentsSnapshot?.docs.map(doc => ({
@@ -284,6 +292,9 @@ const TeacherPage = () => {
           <NotificationManagement notifications={notifications} onUpdateNotification={handleUpdateNotification} />
 
           {/* 테스트 문구 (배포 확인용) */}
+          <div style={{ position: 'fixed', top: 10, left: 10, zIndex: 9999, background: 'red', color: 'white', fontWeight: 700, fontSize: 14, borderRadius: 8, padding: '8px 12px', boxShadow: '0 2px 8px rgba(0,0,0,0.3)' }}>
+            🔥 DEBUG: showQuizModal = {showQuizModal ? 'TRUE' : 'FALSE'}
+          </div>
           <div style={{ position: 'fixed', top: 32, right: 32, zIndex: 3000, background: '#fffde7', color: '#d72660', fontWeight: 700, fontSize: 16, borderRadius: 8, padding: '6px 18px', boxShadow: '0 2px 8px #fbc02d40' }}>
             테스트문구: 공지&예약 버튼 배포 확인용
           </div>
@@ -294,7 +305,7 @@ const TeacherPage = () => {
             <div style={{ width: 40, height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', position: 'relative' }} title="학급 캔디 유리병" onClick={() => setShowJarModal(true)}>
               <img src="/jar2.png" alt="유리병" style={{ width: 32, height: 32, objectFit: 'contain', filter: 'drop-shadow(0 2px 6px #b2ebf2a0)' }} />
             </div>
-            {/* 캔디숍 버튼 */}
+          {/* 캔디숍 버튼 */}
             <button onClick={() => setShowAddItemModal(true)} style={{ background: '#fffde7', border: 'none', borderRadius: 999, padding: '8px 18px', boxShadow: '0 2px 8px #b2ebf240', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}>
               <StorefrontIcon style={{ color: '#d72660', fontSize: 28 }} />
               <span style={{ fontWeight: 700, color: '#d72660', fontSize: 16 }}>캔디숍</span>
@@ -312,13 +323,13 @@ const TeacherPage = () => {
               <span style={{ fontWeight: 700, color: '#d72660', fontSize: 16 }}>쿠폰함</span>
             </button>
             {/* 공지&예약 버튼 */}
-            <button
+          <button
               onClick={() => setShowNoticeModal(true)}
               style={{ background: '#fffde7', border: 'none', borderRadius: 999, padding: '8px 18px', boxShadow: '0 2px 8px #b2ebf240', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, fontWeight: 700, color: '#f57f17', fontSize: 16 }}
             >
               <CampaignIcon style={{ color: '#f57f17', fontSize: 28 }} />
               <span style={{ fontWeight: 700, color: '#f57f17', fontSize: 16 }}>공지&예약</span>
-            </button>
+          </button>
           </div>
 
           {/* 캔디숍 모달 */}
@@ -523,8 +534,87 @@ const TeacherPage = () => {
               </div>
             </div>
           )}
+
         </>
       )}
+
+      {/* 캔디 퀴즈타임 버튼 (우측 하단 고정) - 항상 표시 */}
+      <div style={{ position: 'fixed', right: 32, bottom: 32, zIndex: 3000 }}>
+        <button onClick={() => {
+          console.log('🎯 캔디 퀴즈타임 버튼 클릭됨!');
+          console.log('현재 showQuizModal 상태:', showQuizModal);
+          setShowQuizModal(true);
+          console.log('setShowQuizModal(true) 호출 완료');
+        }} style={{ background: '#fffde7', border: 'none', borderRadius: 999, padding: '12px 18px', boxShadow: '0 2px 8px #b2ebf240', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}>
+          <SportsEsportsIcon style={{ color: '#1976d2', fontSize: 32 }} />
+          <span style={{ fontWeight: 700, color: '#1976d2', fontSize: 17 }}>🔥 캔디 퀴즈타임 DEBUG</span>
+        </button>
+      </div>
+
+      {/* 캔디 퀴즈타임 모달 */}
+      {(() => {
+        console.log('🔍 모달 렌더링 체크 - showQuizModal:', showQuizModal);
+        if (showQuizModal) {
+          console.log('✅ 모달이 렌더링됩니다!');
+          return (
+            <div style={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              width: '100vw',
+              height: '100vh',
+              background: 'rgba(0,0,0,0.5)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              zIndex: 4000
+            }}>
+              <div style={{
+                position: 'relative',
+                width: '95%',
+                height: '95%',
+                maxWidth: '1200px',
+                maxHeight: '800px',
+                borderRadius: 16,
+                overflow: 'hidden'
+              }}>
+                <button 
+                  onClick={() => {
+                    console.log('❌ 모달 닫기 버튼 클릭됨');
+                    setShowQuizModal(false);
+                  }}
+                  style={{
+                    position: 'absolute',
+                    top: 20,
+                    right: 20,
+                    background: 'rgba(255, 255, 255, 0.9)',
+                    border: 'none',
+                    borderRadius: '50%',
+                    width: 40,
+                    height: 40,
+                    fontSize: 24,
+                    color: '#666',
+                    cursor: 'pointer',
+                    zIndex: 5000,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    boxShadow: '0 4px 16px rgba(0, 0, 0, 0.2)'
+                  }}
+                >
+                  ×
+                </button>
+                <QuizSystem isTeacher={true} currentUser={{name: "Teacher"}} />
+              </div>
+            </div>
+          );
+        } else {
+          console.log('❌ 모달이 렌더링되지 않습니다 (showQuizModal이 false)');
+          return null;
+        }
+      })()}
+
+      {/* 선택된 학생 하단 바 */}
     </div>
   );
 };

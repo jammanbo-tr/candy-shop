@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { db } from '../firebase';
 import { collection, query, where, getDocs, orderBy, doc, getDoc } from 'firebase/firestore';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 import {
   Dialog,
   DialogTitle,
@@ -15,7 +16,10 @@ import {
   TextField,
   Chip,
   IconButton,
-  Paper
+  Paper,
+  Tabs,
+  Tab,
+  Portal
 } from '@mui/material';
 import {
   Close as CloseIcon,
@@ -80,6 +84,24 @@ const EmotionDashboardModal = ({ isOpen, onClose, students }) => {
     averageIntensity: 0
   });
 
+  // 새로운 기능을 위한 상태들
+  const [selectedStudent, setSelectedStudent] = useState(null);
+  const [studentEmotionPattern, setStudentEmotionPattern] = useState([]);
+  const [similarStudents, setSimilarStudents] = useState([]);
+  const [patternAnalyzing, setPatternAnalyzing] = useState(false);
+  const [analysisRange, setAnalysisRange] = useState(7);
+  const [individualStartDate, setIndividualStartDate] = useState('');
+  const [individualEndDate, setIndividualEndDate] = useState('');
+  const [useCustomDateRange, setUseCustomDateRange] = useState(false); // 7, 14, 21일
+  const [aiAnalysisResults, setAiAnalysisResults] = useState([]);
+  const [activeTab, setActiveTab] = useState(0); // 0: 전체 분석, 1: 개별 분석, 2: 감정 클러스터링
+  const [clusteringDate, setClusteringDate] = useState('');
+  const [clusteringData, setClusteringData] = useState([]);
+  const [clusteringAnalysis, setClusteringAnalysis] = useState(null);
+  const [clusteringLoading, setClusteringLoading] = useState(false);
+  const [hoveredStudent, setHoveredStudent] = useState(null);
+  const [tooltipPosition, setTooltipPosition] = useState({ x: 0, y: 0 });
+
   useEffect(() => {
     if (isOpen) {
       // 한국 시간 기준으로 날짜 계산 (EmotionAttendanceModal과 동일하게)
@@ -93,10 +115,23 @@ const EmotionDashboardModal = ({ isOpen, onClose, students }) => {
       setChartEndDate(getKoreaDateString(endDate));
       setChartStartDate(getKoreaDateString(startDate));
       
+      // 개별 학생 분석 기간 초기화 (7일)
+      const individualEnd = new Date();
+      const individualStart = new Date();
+      individualStart.setDate(individualEnd.getDate() - 6); // 7일 전
+      setIndividualEndDate(getKoreaDateString(individualEnd));
+      setIndividualStartDate(getKoreaDateString(individualStart));
+      
+      // 클러스터링 날짜 초기화 (오늘)
+      setClusteringDate(todayString);
+      
       console.log('📅 감정출석부 대시보드 열림 - 날짜 설정:', {
         selectedDate: todayString,
         chartStartDate: getKoreaDateString(startDate),
-        chartEndDate: getKoreaDateString(endDate)
+        chartEndDate: getKoreaDateString(endDate),
+        individualStartDate: getKoreaDateString(individualStart),
+        individualEndDate: getKoreaDateString(individualEnd),
+        clusteringDate: todayString
       });
     }
   }, [isOpen]);
@@ -315,6 +350,645 @@ const EmotionDashboardModal = ({ isOpen, onClose, students }) => {
     }
   };
 
+  // 감정을 강도에 따른 점수로 변환하는 함수 (1-5점 강도를 반영)
+  const getEmotionScore = (emotion, intensity = 3) => {
+    const positiveEmotions = ['기쁨', '평온함', '기대감', 'happy', 'calm', 'excited', 'joy', 'pleasant', 'good', '좋음', '행복', '즐거움'];
+    const negativeEmotions = ['슬픔', '화남', '불안', 'sad', 'angry', 'anxious', 'upset', 'worried', 'stressed', '스트레스', '걱정', '짜증'];
+    
+    // 기본 감정 범주 점수 (1: 부정적, 2: 중립, 3: 긍정적)
+    let baseScore;
+    if (positiveEmotions.includes(emotion)) {
+      baseScore = 3;
+    } else if (negativeEmotions.includes(emotion)) {
+      baseScore = 1;
+    } else {
+      baseScore = 2; // 중립
+    }
+    
+    // 강도(1-5)를 반영하여 세분화 (0.1~5.0 범위)
+    // 강도 1 = 0.5, 강도 2 = 0.7, 강도 3 = 1.0, 강도 4 = 1.3, 강도 5 = 1.5
+    const intensityMultiplier = 0.3 + (intensity * 0.2); // 0.5 ~ 1.5
+    
+    const finalScore = baseScore + (baseScore - 2) * (intensityMultiplier - 1);
+    
+    // 최종 점수를 0.5 ~ 5.0 범위로 제한
+    return Math.max(0.5, Math.min(5.0, finalScore));
+  };
+
+  // 개별 학생의 감정 패턴 분석
+  const analyzeStudentPattern = async (studentId, range = analysisRange, customStart = null, customEnd = null) => {
+    if (!studentId) return;
+    
+    setPatternAnalyzing(true);
+    try {
+      // 지정된 기간의 데이터 수집 - 커스텀 날짜 또는 기본 범위 사용
+      let endDate, startDate;
+      
+      if (useCustomDateRange && customStart && customEnd) {
+        startDate = new Date(customStart);
+        endDate = new Date(customEnd);
+      } else {
+        endDate = new Date();
+        startDate = new Date();
+        startDate.setDate(endDate.getDate() - (range - 1));
+      }
+      
+      const studentData = [];
+      const currentDate = new Date(startDate);
+      
+      while (currentDate <= endDate) {
+        const dateString = getKoreaDateString(currentDate);
+        
+        // 새로운 구조에서 조회
+        try {
+          const emotionRef = doc(db, 'students', studentId, 'emotions', dateString);
+          const emotionDoc = await getDoc(emotionRef);
+          
+          if (emotionDoc.exists()) {
+            const data = emotionDoc.data();
+            studentData.push({
+              date: dateString,
+              emotion: data.emotion,
+              intensity: data.intensity || 3,
+              cause: data.cause || '',
+              score: getEmotionScore(data.emotion, data.intensity),
+              timestamp: data.timestamp
+            });
+          } else {
+            // 기존 구조에서도 조회 시도
+            const legacyQuery = query(
+              collection(db, 'emotionAttendance'),
+              where('date', '==', dateString),
+              where('studentId', '==', studentId)
+            );
+            const legacySnapshot = await getDocs(legacyQuery);
+            
+            if (!legacySnapshot.empty) {
+              const legacyData = legacySnapshot.docs[0].data();
+              studentData.push({
+                date: dateString,
+                emotion: legacyData.emotion,
+                intensity: legacyData.intensity || 3,
+                cause: legacyData.cause || '',
+                score: getEmotionScore(legacyData.emotion, legacyData.intensity),
+                timestamp: legacyData.timestamp
+              });
+            }
+          }
+        } catch (error) {
+          console.error(`날짜 ${dateString} 데이터 조회 오류:`, error);
+        }
+        
+        currentDate.setDate(currentDate.getDate() + 1);
+      }
+      
+      setStudentEmotionPattern(studentData);
+      
+      // 비슷한 패턴의 학생들 찾기
+      await findSimilarStudents(studentId, studentData, range, customStart, customEnd);
+      
+    } catch (error) {
+      console.error('학생 감정 패턴 분석 오류:', error);
+    } finally {
+      setPatternAnalyzing(false);
+    }
+  };
+
+  // 비슷한 감정 패턴을 가진 학생들 찾기
+  const findSimilarStudents = async (targetStudentId, targetPattern, range, customStart = null, customEnd = null) => {
+    if (!students || students.length < 2) {
+      setSimilarStudents([]);
+      return;
+    }
+
+    const similarities = [];
+    
+    for (const student of students) {
+      if (student.id === targetStudentId) continue;
+      
+      // 해당 학생의 전체 감정 패턴 수집 (차트 표시를 위해)
+      const studentData = [];
+      let endDate, startDate;
+      
+      if (useCustomDateRange && customStart && customEnd) {
+        startDate = new Date(customStart);
+        endDate = new Date(customEnd);
+      } else {
+        endDate = new Date();
+        startDate = new Date();
+        startDate.setDate(endDate.getDate() - (range - 1));
+      }
+      const currentDate = new Date(startDate);
+      
+      while (currentDate <= endDate) {
+        const dateString = getKoreaDateString(currentDate);
+        
+        try {
+          const emotionRef = doc(db, 'students', student.id, 'emotions', dateString);
+          const emotionDoc = await getDoc(emotionRef);
+          
+          if (emotionDoc.exists()) {
+            const data = emotionDoc.data();
+            studentData.push({
+              date: dateString,
+              score: getEmotionScore(data.emotion, data.intensity),
+              emotion: data.emotion,
+              intensity: data.intensity || 3,
+              cause: data.cause || '',
+              timestamp: data.timestamp
+            });
+          } else {
+            // 기존 구조에서 조회
+            const legacyQuery = query(
+              collection(db, 'emotionAttendance'),
+              where('date', '==', dateString),
+              where('studentId', '==', student.id)
+            );
+            const legacySnapshot = await getDocs(legacyQuery);
+            
+            if (!legacySnapshot.empty) {
+              const legacyData = legacySnapshot.docs[0].data();
+              studentData.push({
+                date: dateString,
+                score: getEmotionScore(legacyData.emotion, legacyData.intensity),
+                emotion: legacyData.emotion,
+                intensity: legacyData.intensity || 3,
+                cause: legacyData.cause || '',
+                timestamp: legacyData.timestamp
+              });
+            }
+          }
+        } catch (error) {
+          console.error(`학생 ${student.id} 데이터 조회 오류:`, error);
+        }
+        
+        currentDate.setDate(currentDate.getDate() + 1);
+      }
+      
+      // 기본 패턴 유사도 계산 (빠른 필터링용)
+      const basicSimilarity = calculateSimilarity(targetPattern, studentData);
+      if (basicSimilarity > 0.3) { // 30% 이상 유사할 때만 포함 (AI 분석 대상으로)
+        similarities.push({
+          student: student,
+          similarity: basicSimilarity,
+          matchingDays: studentData.filter(d => d.score).length,
+          patternData: studentData
+        });
+      }
+    }
+    
+    // 기본 유사도 순으로 정렬하여 상위 8명 선택 (AI 분석 효율성을 위해)
+    similarities.sort((a, b) => b.similarity - a.similarity);
+    const topSimilarStudents = similarities.slice(0, 8);
+    
+    // AI를 통한 정교한 유사도 분석
+    try {
+      const aiAnalysis = await analyzePatternWithAI(
+        { name: targetStudentId, ...students.find(s => s.id === targetStudentId) }, 
+        targetPattern, 
+        topSimilarStudents
+      );
+      
+      // AI 분석 결과를 바탕으로 유사도 업데이트
+      const enhancedSimilarities = [];
+      topSimilarStudents.forEach(student => {
+        const aiResult = aiAnalysis.find(ai => ai.studentName === student.student.name);
+        if (aiResult && aiResult.similarity >= 40) { // AI가 40% 이상으로 판단한 경우만
+          enhancedSimilarities.push({
+            ...student,
+            similarity: aiResult.similarity / 100, // 0-1 범위로 변환
+            aiAnalysis: aiResult
+          });
+        }
+      });
+      
+      // AI 분석 결과 저장
+      setAiAnalysisResults(aiAnalysis);
+      
+      // AI 기반 유사도 순으로 재정렬하여 상위 4명
+      enhancedSimilarities.sort((a, b) => b.similarity - a.similarity);
+      setSimilarStudents(enhancedSimilarities.slice(0, 4));
+      
+    } catch (aiError) {
+      console.error('AI 분석 실패, 기본 유사도 사용:', aiError);
+      // AI 분석 실패 시 기본 유사도 사용
+      setSimilarStudents(similarities.slice(0, 4));
+    }
+  };
+
+  // Gemini API를 활용한 고도화된 감정 패턴 분석
+  const analyzePatternWithAI = async (targetStudent, targetPattern, comparisonStudents) => {
+    try {
+      const genAI = new GoogleGenerativeAI('AIzaSyDWuEDjA__mWPWE1njZpGPYSG__MnHYycM');
+      const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+
+      // 분석용 데이터 준비
+      const targetPatternText = targetPattern.map(p => 
+        `${p.date}: ${p.emotion}(${p.score.toFixed(1)}점) - 강도:${p.intensity}/5 - 원인:${p.cause || '없음'}`
+      ).join('\n');
+
+      const comparisonTexts = comparisonStudents.map(student => {
+        const patternText = student.patternData.map(p => 
+          `${p.date}: ${p.emotion || '없음'}(${p.score ? p.score.toFixed(1) : 0}점) - 강도:${p.intensity || 3}/5 - 원인:${p.cause || '없음'}`
+        ).join('\n');
+        return `${student.student.name}:\n${patternText}`;
+      }).join('\n\n');
+
+      const prompt = `
+교실 내 학생들의 감정 패턴을 전문적으로 분석해주세요.
+
+# 점수 체계 설명:
+- 감정 점수는 감정 종류와 강도(1-5)를 모두 반영한 0.5-5.0점 범위입니다
+- 1.0점: 매우부정적, 2.0점: 부정적, 3.0점: 중립, 4.0점: 긍정적, 5.0점: 매우긍정적
+- 같은 감정이라도 강도에 따라 점수가 달라집니다 (예: 기쁨 강도1 = 3.5점, 기쁨 강도5 = 4.5점)
+
+# 기준 학생: ${targetStudent.name}
+${targetPatternText}
+
+# 비교 대상 학생들:
+${comparisonTexts}
+
+# 분석 요청사항:
+1. 각 학생과 기준 학생의 감정 패턴 유사도를 정확히 평가해주세요 (0-100%)
+2. 유사도 계산 시 고려사항:
+   - 감정의 종류와 변화 패턴
+   - 감정 강도의 유사성 (점수의 세밀한 변화 포함)
+   - 감정 원인의 공통점
+   - 시간적 흐름에서의 감정 변화 추세
+   - 감정 기복의 주기성과 강도 변화
+
+3. 각 학생별로 다음 형식으로 분석 결과를 제공해주세요:
+   - 학생명: [이름]
+   - 유사도: [0-100 사이 정수]%
+   - 유사한 점: [구체적 설명]
+   - 다른 점: [구체적 설명]
+   - 교육적 시사점: [교사가 알아야 할 내용]
+
+4. 40% 이상의 유사도를 보이는 학생만 "유의미한 유사성"으로 판단해주세요.
+
+응답은 JSON 형태로 제공해주세요:
+{
+  "analysis": [
+    {
+      "studentName": "학생명",
+      "similarity": 유사도숫자,
+      "similarities": "유사한 점",
+      "differences": "다른 점",
+      "educationalInsight": "교육적 시사점"
+    }
+  ]
+}
+      `;
+
+      const result = await model.generateContent(prompt);
+      const response = await result.response;
+      const text = response.text();
+      
+      // JSON 파싱 시도
+      try {
+        const jsonMatch = text.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          const analysisResult = JSON.parse(jsonMatch[0]);
+          return analysisResult.analysis || [];
+        }
+      } catch (parseError) {
+        console.error('AI 응답 파싱 오류:', parseError);
+      }
+      
+      return [];
+    } catch (error) {
+      console.error('AI 분석 오류:', error);
+      return [];
+    }
+  };
+
+  // 감정 클러스터링 분석
+  const performEmotionClustering = async (targetDate) => {
+    if (!targetDate || !students) return;
+    
+    setClusteringLoading(true);
+    try {
+      console.log('📊 감정 클러스터링 분석 시작:', targetDate);
+      
+      // 해당 날짜의 모든 학생 감정 데이터 수집
+      const studentsData = [];
+      
+      if (!students || students.length === 0) {
+        setClusteringAnalysis({ error: '학생 목록이 없습니다.' });
+        return;
+      }
+      
+      for (const student of students) {
+        try {
+          if (!student || !student.id || !student.name) {
+            console.warn('잘못된 학생 데이터:', student);
+            continue;
+          }
+          
+          const emotionRef = doc(db, 'students', student.id, 'emotions', targetDate);
+          const emotionDoc = await getDoc(emotionRef);
+          
+          if (emotionDoc.exists()) {
+            const data = emotionDoc.data();
+            if (data.emotion && typeof data.intensity === 'number' && data.intensity > 0) {
+              const score = getEmotionScore(data.emotion, data.intensity);
+              if (score && !isNaN(score)) {
+                studentsData.push({
+                  id: student.id,
+                  name: student.name || '익명',
+                  emotion: data.emotion || '알 수 없음',
+                  intensity: data.intensity || 3,
+                  score: score,
+                  cause: data.cause || '',
+                  submittedAt: data.submittedAt || null,
+                  // 클러스터링을 위한 2D 좌표 생성 (감정 점수와 강도 기반)
+                  x: score, // 감정 점수를 X축으로
+                  y: data.intensity // 강도를 Y축으로
+                });
+              }
+            }
+          }
+        } catch (error) {
+          console.error(`학생 ${student.name} 감정 데이터 조회 오류:`, error);
+        }
+      }
+      
+      console.log('📊 수집된 학생 데이터:', studentsData);
+      
+      if (studentsData.length < 2) {
+        setClusteringData([]);
+        setClusteringAnalysis({ error: '분석할 데이터가 충분하지 않습니다.' });
+        return;
+      }
+      
+      // 간단한 K-means 클러스터링 (3개 클러스터: 부정적, 중립, 긍정적)
+      const clusters = performKMeansClustering(studentsData, 3);
+      
+      // AI를 활용한 클러스터링 결과 분석
+      let analysis;
+      try {
+        analysis = await analyzeClusteringWithAI(clusters, targetDate);
+      } catch (aiError) {
+        console.warn('AI 분석 실패, 기본 분석으로 대체:', aiError);
+        // AI 분석 실패 시 기본 분석 제공
+        analysis = {
+          overallSummary: `${targetDate}일 총 ${clusters.reduce((sum, c) => sum + c.students.length, 0)}명의 학생이 ${clusters.length}개 그룹으로 분류되었습니다.`,
+          clusterAnalysis: clusters.map(cluster => ({
+            clusterLabel: cluster.label,
+            studentCount: cluster.students.length,
+            characteristics: cluster.students.length > 0 ? `평균 감정점수 ${(cluster.students.reduce((sum, s) => sum + s.score, 0) / cluster.students.length).toFixed(1)}점` : '데이터 없음',
+            commonFactors: '상세 분석을 위해 잠시 후 다시 시도해주세요',
+            teachingStrategy: '개별 학생별 맞춤 지도 권장',
+            attentionLevel: cluster.students.reduce((sum, s) => sum + s.score, 0) / cluster.students.length < 2.5 ? '높음' : '보통'
+          })),
+          recommendations: 'AI 분석이 일시적으로 제한되어 기본 권장사항을 제공합니다. 각 그룹별 특성에 맞는 개별 지도를 권장합니다.',
+          classroomMood: clusters.reduce((sum, c) => sum + c.students.length, 0) > 0 ? '전반적으로 안정적' : '데이터 부족'
+        };
+      }
+      
+      setClusteringData(clusters);
+      setClusteringAnalysis(analysis);
+      
+    } catch (error) {
+      console.error('감정 클러스터링 오류:', error);
+      setClusteringAnalysis({ error: '클러스터링 분석 중 오류가 발생했습니다.' });
+    } finally {
+      setClusteringLoading(false);
+    }
+  };
+
+  // Convex Hull 계산 (Graham Scan 알고리즘)
+  const calculateConvexHull = (points) => {
+    if (points.length < 3) return points;
+    
+    // 최하단 점을 찾고 시작점으로 설정
+    let start = 0;
+    for (let i = 1; i < points.length; i++) {
+      if (points[i].y < points[start].y || 
+          (points[i].y === points[start].y && points[i].x < points[start].x)) {
+        start = i;
+      }
+    }
+    
+    // 시작점을 첫 번째로 이동
+    [points[0], points[start]] = [points[start], points[0]];
+    
+    // 각도에 따라 정렬
+    const startPoint = points[0];
+    points.slice(1).sort((a, b) => {
+      const angleA = Math.atan2(a.y - startPoint.y, a.x - startPoint.x);
+      const angleB = Math.atan2(b.y - startPoint.y, b.x - startPoint.x);
+      return angleA - angleB;
+    });
+    
+    const hull = [points[0], points[1]];
+    
+    for (let i = 2; i < points.length; i++) {
+      // 왼쪽 턴이 아닌 점들 제거
+      while (hull.length > 1) {
+        const cross = (hull[hull.length-1].x - hull[hull.length-2].x) * 
+                     (points[i].y - hull[hull.length-2].y) - 
+                     (hull[hull.length-1].y - hull[hull.length-2].y) * 
+                     (points[i].x - hull[hull.length-2].x);
+        if (cross > 0) break;
+        hull.pop();
+      }
+      hull.push(points[i]);
+    }
+    
+    return hull;
+  };
+
+  // K-means 클러스터링 구현
+  const performKMeansClustering = (data, k = 3) => {
+    // 초기 중심점 설정 (더 넓게 분포하도록 조정)
+    const centroids = [
+      { x: 1.8, y: 2.5, label: '부정적 감정 그룹', color: '#f44336' }, // 부정적
+      { x: 3.0, y: 3.0, label: '중립적 감정 그룹', color: '#ff9800' }, // 중립
+      { x: 4.2, y: 4.0, label: '긍정적 감정 그룹', color: '#4caf50' }  // 긍정적
+    ];
+    
+    const maxIterations = 10;
+    let assignments = new Array(data.length).fill(0);
+    
+    for (let iter = 0; iter < maxIterations; iter++) {
+      // 각 데이터 포인트를 가장 가까운 중심점에 할당
+      const newAssignments = data.map((point, index) => {
+        let minDistance = Infinity;
+        let bestCluster = 0;
+        
+        centroids.forEach((centroid, clusterIndex) => {
+          const distance = Math.sqrt(
+            Math.pow(point.x - centroid.x, 2) + Math.pow(point.y - centroid.y, 2)
+          );
+          if (distance < minDistance) {
+            minDistance = distance;
+            bestCluster = clusterIndex;
+          }
+        });
+        
+        return bestCluster;
+      });
+      
+      // 수렴 검사
+      if (JSON.stringify(assignments) === JSON.stringify(newAssignments)) {
+        break;
+      }
+      assignments = newAssignments;
+      
+      // 중심점 업데이트 (라벨과 색상은 유지)
+      centroids.forEach((centroid, clusterIndex) => {
+        const clusterPoints = data.filter((_, index) => assignments[index] === clusterIndex);
+        if (clusterPoints.length > 0) {
+          centroid.x = clusterPoints.reduce((sum, p) => sum + p.x, 0) / clusterPoints.length;
+          centroid.y = clusterPoints.reduce((sum, p) => sum + p.y, 0) / clusterPoints.length;
+        }
+      });
+    }
+    
+    // 클러스터 결과 정리
+    const clusters = centroids.map((centroid, index) => {
+      const clusterStudents = data.filter((_, dataIndex) => assignments[dataIndex] === index);
+      
+      // 유효한 학생 데이터만 필터링
+      const validStudents = clusterStudents.filter(student => 
+        student && 
+        student.id && 
+        student.name && 
+        student.emotion &&
+        typeof student.intensity === 'number' &&
+        typeof student.score === 'number' &&
+        !isNaN(student.score)
+      );
+      
+      // Convex Hull 계산 (클러스터 경계)
+      const points = validStudents.map(s => ({ x: s.x, y: s.y }));
+      const hull = validStudents.length >= 3 ? calculateConvexHull([...points]) : points;
+      
+      return {
+        id: index,
+        label: centroid.label || `클러스터 ${index + 1}`,
+        color: centroid.color || '#ccc',
+        centroid: { 
+          x: centroid.x || 0, 
+          y: centroid.y || 0 
+        },
+        students: validStudents,
+        hull: hull || [] // 클러스터 경계점들
+      };
+    });
+    
+    return clusters;
+  };
+
+  // AI를 활용한 클러스터링 결과 분석
+  const analyzeClusteringWithAI = async (clusters, targetDate) => {
+    try {
+      const genAI = new GoogleGenerativeAI('AIzaSyDWuEDjA__mWPWE1njZpGPYSG__MnHYycM');
+      const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+
+      // 클러스터 정보를 텍스트로 변환
+      const clusterInfo = clusters.map(cluster => {
+        const studentList = cluster.students.map(s => 
+          `${s.name}: ${s.emotion}(${s.score.toFixed(1)}점, 강도${s.intensity}/5) - 원인: ${s.cause || '없음'}`
+        ).join('\n');
+        
+        return `### ${cluster.label} (${cluster.students.length}명)
+중심점: 감정점수 ${cluster.centroid.x.toFixed(1)}, 강도 ${cluster.centroid.y.toFixed(1)}
+학생들:
+${studentList}`;
+      }).join('\n\n');
+
+      const prompt = `
+${targetDate}일 교실 내 학생들의 감정 클러스터링 분석을 해주세요.
+
+# 클러스터링 결과:
+${clusterInfo}
+
+# 분석 요청사항:
+1. 각 클러스터의 특성과 의미를 분석해주세요
+2. 각 클러스터에 속한 학생들의 공통점을 찾아주세요
+3. 교사가 주목해야 할 클러스터와 그 이유를 제시해주세요
+4. 각 클러스터별 맞춤형 지도 방안을 제안해주세요
+5. 전체적인 교실 분위기와 개선점을 분석해주세요
+
+응답은 JSON 형태로 제공해주세요:
+{
+  "overallSummary": "전체 분석 요약",
+  "clusterAnalysis": [
+    {
+      "clusterLabel": "클러스터명",
+      "studentCount": 학생수,
+      "characteristics": "클러스터 특성",
+      "commonFactors": "공통 요인",
+      "teachingStrategy": "지도 방안",
+      "attentionLevel": "관심도 (높음/보통/낮음)"
+    }
+  ],
+  "recommendations": "전체 권장사항",
+  "classroomMood": "교실 분위기 평가"
+}`;
+
+      const result = await model.generateContent(prompt);
+      const response = result.response.text();
+      
+      // JSON 파싱 시도
+      try {
+        const cleanedResponse = response.replace(/```json\n?|\n?```/g, '').trim();
+        const analysis = JSON.parse(cleanedResponse);
+        return analysis;
+      } catch (parseError) {
+        console.error('AI 응답 파싱 오류:', parseError);
+        return {
+          error: 'AI 분석 결과를 처리하는 중 오류가 발생했습니다.',
+          rawResponse: response
+        };
+      }
+      
+    } catch (error) {
+      console.error('클러스터링 AI 분석 오류:', error);
+      
+      // API 할당량 초과 에러 체크
+      if (error.message && (error.message.includes('quota') || error.message.includes('rate limit'))) {
+        throw new Error('API 할당량 초과: 잠시 후 다시 시도해주세요');
+      }
+      
+      throw new Error('AI 분석 서비스 일시 중단');
+    }
+  };
+
+  // 패턴 유사도 계산 (단순한 피어슨 상관계수 사용 - 백업용)
+  const calculateSimilarity = (pattern1, pattern2) => {
+    if (pattern1.length === 0 || pattern2.length === 0) return 0;
+    
+    // 공통 날짜만 비교
+    const commonData = [];
+    pattern1.forEach(p1 => {
+      const p2 = pattern2.find(p => p.date === p1.date);
+      if (p2) {
+        commonData.push({ score1: p1.score, score2: p2.score });
+      }
+    });
+    
+    if (commonData.length < 2) return 0;
+    
+    const n = commonData.length;
+    const sum1 = commonData.reduce((sum, d) => sum + d.score1, 0);
+    const sum2 = commonData.reduce((sum, d) => sum + d.score2, 0);
+    const sum1Sq = commonData.reduce((sum, d) => sum + d.score1 * d.score1, 0);
+    const sum2Sq = commonData.reduce((sum, d) => sum + d.score2 * d.score2, 0);
+    const sumProducts = commonData.reduce((sum, d) => sum + d.score1 * d.score2, 0);
+    
+    const numerator = sumProducts - (sum1 * sum2 / n);
+    const denominator = Math.sqrt((sum1Sq - sum1 * sum1 / n) * (sum2Sq - sum2 * sum2 / n));
+    
+    if (denominator === 0) return 0;
+    const correlation = numerator / denominator;
+    
+    // -1~1 범위를 0~1로 변환
+    return (correlation + 1) / 2;
+  };
+
   const processChartData = (data) => {
     const dateGroups = {};
     data.forEach(entry => {
@@ -324,8 +998,8 @@ const EmotionDashboardModal = ({ isOpen, onClose, students }) => {
       }
       
       const emotion = entry.emotion;
-      const positiveEmotions = ['기쁨', '평온함', '기대감', 'happy', 'calm', 'excited'];
-      const negativeEmotions = ['슬픔', '화남', '불안', 'sad', 'angry', 'anxious'];
+      const positiveEmotions = ['기쁨', '평온함', '기대감', 'happy', 'calm', 'excited', 'joy', 'pleasant', 'good', '좋음', '행복', '즐거움'];
+      const negativeEmotions = ['슬픔', '화남', '불안', 'sad', 'angry', 'anxious', 'upset', 'worried', 'stressed', '스트레스', '걱정', '짜증'];
       
       if (positiveEmotions.includes(emotion)) {
         dateGroups[date].positive++;
@@ -666,25 +1340,39 @@ const EmotionDashboardModal = ({ isOpen, onClose, students }) => {
   };
 
   return (
-    <Dialog
-      open={isOpen}
-      onClose={onClose}
-      maxWidth="lg"
-      fullWidth
-      ref={dialogRef}
-      PaperProps={{
-        sx: {
-          borderRadius: 3,
+    <Portal>
+      <Dialog
+        open={isOpen}
+        onClose={onClose}
+        maxWidth="xl"
+        fullWidth
+        ref={dialogRef}
+        disableEscapeKeyDown={false}
+        disablePortal={false}
+        keepMounted={false}
+        sx={{
+        zIndex: 9999,
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        '& .MuiDialog-paper': {
           minHeight: '80vh',
-          maxHeight: '90vh',
-          zIndex: 10010,
-          overflow: 'visible' // 스크롤 문제 해결
-        }
-      }}
-      sx={{
-        zIndex: 10010,
+          maxHeight: '95vh',
+          width: '95vw',
+          maxWidth: '1400px',
+          borderRadius: 3,
+          overflow: 'visible',
+          pointerEvents: 'auto',
+          zIndex: 10000,
+          position: 'relative'
+        },
         '& .MuiBackdrop-root': {
-          zIndex: 10008
+          zIndex: 9998,
+          pointerEvents: 'auto',
+          position: 'fixed',
+          backgroundColor: 'rgba(0, 0, 0, 0.5)'
         }
       }}
     >
@@ -760,8 +1448,71 @@ const EmotionDashboardModal = ({ isOpen, onClose, students }) => {
         </Box>
       </DialogTitle>
 
-      <DialogContent ref={dashboardRef} sx={{ p: 3 }}>
-        <Card sx={{ mb: 3, boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }}>
+      <DialogContent ref={dashboardRef} sx={{ 
+        p: 0,
+        pointerEvents: 'auto',
+        '&:focus': {
+          outline: 'none'
+        }
+      }}>
+        {/* 탭 네비게이션 */}
+        <Box sx={{ borderBottom: 1, borderColor: 'divider', px: 3, pt: 2 }}>
+          <Tabs 
+            value={activeTab} 
+            onChange={(event, newValue) => setActiveTab(newValue)}
+            sx={{
+              '& .MuiTabs-indicator': {
+                backgroundColor: '#1976d2',
+                height: 3
+              },
+              '& .MuiTab-root': {
+                textTransform: 'none',
+                fontWeight: 600,
+                fontSize: '1rem',
+                minHeight: 48,
+                '&.Mui-selected': {
+                  color: '#1976d2'
+                }
+              }
+            }}
+          >
+            <Tab 
+              label="📊 전체 감정 분석" 
+              sx={{ 
+                fontSize: '1.1rem',
+                fontWeight: 600,
+                color: activeTab === 0 ? '#1976d2' : '#666'
+              }}
+            />
+            <Tab 
+              label="🔍 개별 학생 분석" 
+              sx={{ 
+                fontSize: '1.1rem',
+                fontWeight: 600,
+                color: activeTab === 1 ? '#1976d2' : '#666'
+              }}
+            />
+            <Tab 
+              label="🎯 감정 클러스터링" 
+              sx={{ 
+                fontSize: '1.1rem',
+                fontWeight: 600,
+                color: activeTab === 2 ? '#1976d2' : '#666'
+              }}
+            />
+          </Tabs>
+        </Box>
+
+        {/* 탭 콘텐츠 */}
+        <Box sx={{ 
+          p: 3,
+          pointerEvents: 'auto',
+          position: 'relative'
+        }}>
+          {/* 전체 감정 분석 탭 */}
+          {activeTab === 0 && (
+            <>
+              <Card sx={{ mb: 3, boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }}>
           <CardContent>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
               <TrendingUpIcon sx={{ color: '#1976d2' }} />
@@ -1190,6 +1941,825 @@ const EmotionDashboardModal = ({ isOpen, onClose, students }) => {
             </CardContent>
           </Card>
         )}
+            </>
+          )}
+
+          {/* 개별 학생 분석 탭 */}
+          {activeTab === 1 && (
+            <>
+              <Card sx={{ mb: 3, boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }}>
+          <CardContent>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 3 }}>
+              <AssessmentIcon sx={{ color: '#9c27b0' }} />
+              <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                🔍 개별 학생 감정 패턴 분석
+              </Typography>
+            </Box>
+            
+            <Box sx={{ mb: 3 }}>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                학생을 선택하고 분석 기간을 설정하여 감정 변화 패턴과 비슷한 패턴을 보이는 교실 내 다른 학생들을 찾아보세요.
+              </Typography>
+              
+              {/* 분석 기간 선택 */}
+              <Box sx={{ mb: 3 }}>
+                <Typography variant="body2" sx={{ mb: 2, fontWeight: 500 }}>분석 기간:</Typography>
+                
+                {/* 빠른 선택 버튼들 */}
+                <Box sx={{ display: 'flex', gap: 1, mb: 2 }}>
+                  {[7, 14, 21].map(days => (
+                    <Chip
+                      key={days}
+                      label={`${days}일`}
+                      onClick={() => {
+                        setUseCustomDateRange(false);
+                        setAnalysisRange(days);
+                        
+                        // 날짜 범위 자동 설정
+                        const endDate = new Date();
+                        const startDate = new Date();
+                        startDate.setDate(endDate.getDate() - (days - 1));
+                        setIndividualEndDate(getKoreaDateString(endDate));
+                        setIndividualStartDate(getKoreaDateString(startDate));
+                        
+                        if (selectedStudent) {
+                          analyzeStudentPattern(selectedStudent.id, days);
+                        }
+                      }}
+                      variant={!useCustomDateRange && analysisRange === days ? 'filled' : 'outlined'}
+                      sx={{
+                        backgroundColor: !useCustomDateRange && analysisRange === days ? '#2196f3' : '#f5f5f5',
+                        color: !useCustomDateRange && analysisRange === days ? 'white' : '#333',
+                        borderColor: !useCustomDateRange && analysisRange === days ? '#2196f3' : '#ddd',
+                        fontWeight: 500,
+                        cursor: 'pointer',
+                        '&:hover': {
+                          backgroundColor: !useCustomDateRange && analysisRange === days ? '#1976d2' : '#e0e0e0'
+                        }
+                      }}
+                    />
+                  ))}
+                  <Chip
+                    label="사용자 지정"
+                    onClick={() => {
+                      setUseCustomDateRange(true);
+                      if (selectedStudent) {
+                        analyzeStudentPattern(selectedStudent.id, analysisRange, individualStartDate, individualEndDate);
+                      }
+                    }}
+                    variant={useCustomDateRange ? 'filled' : 'outlined'}
+                    sx={{
+                      backgroundColor: useCustomDateRange ? '#9c27b0' : '#f5f5f5',
+                      color: useCustomDateRange ? 'white' : '#333',
+                      borderColor: useCustomDateRange ? '#9c27b0' : '#ddd',
+                      fontWeight: 500,
+                      cursor: 'pointer',
+                      '&:hover': {
+                        backgroundColor: useCustomDateRange ? '#7b1fa2' : '#e0e0e0'
+                      }
+                    }}
+                  />
+                </Box>
+                
+                {/* 사용자 지정 날짜 입력 */}
+                {useCustomDateRange && (
+                  <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', mb: 2 }}>
+                    <TextField
+                      label="시작일"
+                      type="date"
+                      value={individualStartDate}
+                      onChange={(e) => {
+                        setIndividualStartDate(e.target.value);
+                        if (selectedStudent && individualEndDate) {
+                          analyzeStudentPattern(selectedStudent.id, analysisRange, e.target.value, individualEndDate);
+                        }
+                      }}
+                      InputLabelProps={{ shrink: true }}
+                      size="small"
+                      sx={{ minWidth: 150 }}
+                    />
+                    <TextField
+                      label="종료일"
+                      type="date"
+                      value={individualEndDate}
+                      onChange={(e) => {
+                        setIndividualEndDate(e.target.value);
+                        if (selectedStudent && individualStartDate) {
+                          analyzeStudentPattern(selectedStudent.id, analysisRange, individualStartDate, e.target.value);
+                        }
+                      }}
+                      InputLabelProps={{ shrink: true }}
+                      size="small"
+                      sx={{ minWidth: 150 }}
+                    />
+                  </Box>
+                )}
+              </Box>
+              
+              {/* 학생 선택 */}
+              <Typography variant="body2" sx={{ mb: 1, fontWeight: 500 }}>학생 선택:</Typography>
+              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                {students && students.map((student) => (
+                  <Chip
+                    key={student.id}
+                    label={student.name}
+                    onClick={() => {
+                      setSelectedStudent(student);
+                      if (useCustomDateRange) {
+                        analyzeStudentPattern(student.id, analysisRange, individualStartDate, individualEndDate);
+                      } else {
+                        analyzeStudentPattern(student.id, analysisRange);
+                      }
+                    }}
+                    variant={selectedStudent?.id === student.id ? 'filled' : 'outlined'}
+                    sx={{
+                      backgroundColor: selectedStudent?.id === student.id ? '#9c27b0' : '#f5f5f5',
+                      color: selectedStudent?.id === student.id ? 'white' : '#333',
+                      borderColor: selectedStudent?.id === student.id ? '#9c27b0' : '#ddd',
+                      fontWeight: 500,
+                      cursor: 'pointer',
+                      '&:hover': {
+                        backgroundColor: selectedStudent?.id === student.id ? '#7b1fa2' : '#e0e0e0'
+                      }
+                    }}
+                  />
+                ))}
+              </Box>
+            </Box>
+
+            {/* 선택된 학생의 감정 패턴 차트 */}
+            {selectedStudent && studentEmotionPattern.length > 0 && (
+              <Box sx={{ mb: 4 }}>
+                <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>
+                  📊 {selectedStudent.name}님의 감정 패턴 
+                  {useCustomDateRange 
+                    ? `(${individualStartDate} ~ ${individualEndDate})`
+                    : `(지난 ${analysisRange}일)`}
+                </Typography>
+                <Box sx={{ height: 400 }}>
+                  <Line
+                    data={{
+                      labels: studentEmotionPattern.map(p => {
+                        const date = new Date(p.date);
+                        return `${date.getMonth() + 1}/${date.getDate()}`;
+                      }),
+                      datasets: [
+                        // 선택된 학생의 패턴 (굵은 선)
+                        {
+                          label: `${selectedStudent.name} (선택된 학생)`,
+                          data: studentEmotionPattern.map(p => p.score),
+                          borderColor: '#9c27b0',
+                          backgroundColor: 'rgba(156, 39, 176, 0.1)',
+                          borderWidth: 5, // 더 굵게
+                          fill: true,
+                          tension: 0.4,
+                          pointRadius: 8,
+                          pointHoverRadius: 10,
+                          pointBorderWidth: 3,
+                          pointBorderColor: '#ffffff',
+                          order: 0 // 가장 위에 표시
+                        },
+                        // 비슷한 패턴의 학생들
+                        ...similarStudents.map((similar, index) => {
+                          const colors = ['#4caf50', '#ff9800', '#2196f3', '#e91e63'];
+                          const color = colors[index % colors.length];
+                          return {
+                            label: `${similar.student.name} (${Math.round(similar.similarity * 100)}% 유사)`,
+                            data: similar.patternData.map(p => p.score || null),
+                            borderColor: color,
+                            backgroundColor: `${color}20`,
+                            borderWidth: 2,
+                            fill: false,
+                            tension: 0.4,
+                            pointRadius: 4,
+                            pointHoverRadius: 6,
+                            borderDash: [5, 5], // 점선으로 구분
+                            order: index + 1
+                          };
+                        })
+                      ]
+                    }}
+                    options={{
+                      responsive: true,
+                      maintainAspectRatio: false,
+                      interaction: {
+                        intersect: false,
+                        mode: 'index'
+                      },
+                      scales: {
+                        y: {
+                          beginAtZero: false,
+                          min: 0.5,
+                          max: 5.5,
+                          ticks: {
+                            stepSize: 1,
+                            callback: function(value) {
+                              const labels = { 
+                                1: '매우부정적',
+                                2: '부정적', 
+                                3: '중립', 
+                                4: '긍정적',
+                                5: '매우긍정적'
+                              };
+                              return labels[value] || '';
+                            }
+                          },
+                          grid: {
+                            color: 'rgba(0,0,0,0.1)'
+                          }
+                        },
+                        x: {
+                          grid: {
+                            color: 'rgba(0,0,0,0.05)'
+                          }
+                        }
+                      },
+                      plugins: {
+                        legend: {
+                          display: true,
+                          position: 'bottom',
+                          labels: {
+                            padding: 20,
+                            usePointStyle: true,
+                            font: {
+                              size: 12
+                            }
+                          }
+                        },
+                        tooltip: {
+                          callbacks: {
+                            title: function(context) {
+                              const date = studentEmotionPattern[context[0].dataIndex]?.date;
+                              if (date) {
+                                const dateObj = new Date(date);
+                                return `${dateObj.getMonth() + 1}월 ${dateObj.getDate()}일`;
+                              }
+                              return '';
+                            },
+                            label: function(context) {
+                              const datasetLabel = context.dataset.label;
+                              const value = context.parsed.y;
+                              
+                              // 점수에 따른 감정 강도 레이블
+                              const getScoreLabel = (score) => {
+                                if (score >= 4.5) return '매우긍정적';
+                                if (score >= 3.5) return '긍정적';
+                                if (score >= 2.5) return '중립';
+                                if (score >= 1.5) return '부정적';
+                                return '매우부정적';
+                              };
+                              
+                              if (context.datasetIndex === 0) {
+                                // 선택된 학생의 상세 정보
+                                const dataPoint = studentEmotionPattern[context.dataIndex];
+                                return `${datasetLabel}: ${getScoreLabel(value)} - ${dataPoint.emotion} (강도: ${dataPoint.intensity}/5, 점수: ${value.toFixed(1)})`;
+                              } else {
+                                // 비슷한 학생들의 기본 정보
+                                const similarStudent = similarStudents[context.datasetIndex - 1];
+                                const dataPoint = similarStudent.patternData[context.dataIndex];
+                                if (dataPoint) {
+                                  return `${datasetLabel}: ${getScoreLabel(value)} - ${dataPoint.emotion} (강도: ${dataPoint.intensity || 3}/5, 점수: ${value.toFixed(1)})`;
+                                }
+                              }
+                              return '';
+                            },
+                            afterLabel: function(context) {
+                              if (context.datasetIndex === 0) {
+                                const dataPoint = studentEmotionPattern[context.dataIndex];
+                                return dataPoint.cause ? `원인: ${dataPoint.cause}` : '';
+                              }
+                              return '';
+                            }
+                          }
+                        }
+                      }
+                    }}
+                  />
+                </Box>
+              </Box>
+            )}
+
+            {/* 비슷한 패턴의 학생들 */}
+            {selectedStudent && similarStudents.length > 0 && (
+              <Box>
+                <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>
+                  👥 {selectedStudent.name}님과 비슷한 감정 패턴을 보이는 학생들 (차트에 함께 표시됨)
+                </Typography>
+                <Grid container spacing={2}>
+                  {similarStudents.map((similar, index) => (
+                    <Grid item xs={12} sm={6} md={4} key={similar.student.id}>
+                      <Card sx={{
+                        p: 2,
+                        backgroundColor: '#f3e5f5',
+                        border: '1px solid #ce93d8',
+                        borderRadius: 2
+                      }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
+                          <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
+                            {similar.student.name}
+                          </Typography>
+                          <Chip
+                            label={`${Math.round(similar.similarity * 100)}% 유사`}
+                            size="small"
+                            sx={{
+                              backgroundColor: '#9c27b0',
+                              color: 'white',
+                              fontWeight: 500,
+                              fontSize: '0.75rem'
+                            }}
+                          />
+                        </Box>
+                        <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                          데이터 있는 날: {similar.matchingDays}일 / {analysisRange}일
+                        </Typography>
+                        
+                        {/* AI 분석 결과 표시 */}
+                        {similar.aiAnalysis && (
+                          <Box sx={{ mb: 2 }}>
+                            <Typography variant="body2" sx={{ fontWeight: 600, mb: 0.5, color: '#1976d2' }}>
+                              🤖 AI 분석 결과
+                            </Typography>
+                            
+                            <Typography variant="caption" display="block" sx={{ mb: 0.5, color: '#4caf50' }}>
+                              <strong>유사한 점:</strong> {similar.aiAnalysis.similarities}
+                            </Typography>
+                            
+                            <Typography variant="caption" display="block" sx={{ mb: 0.5, color: '#ff9800' }}>
+                              <strong>다른 점:</strong> {similar.aiAnalysis.differences}
+                            </Typography>
+                            
+                            <Typography variant="caption" display="block" sx={{ mb: 1, color: '#9c27b0', fontWeight: 500 }}>
+                              <strong>💡 교육적 시사점:</strong> {similar.aiAnalysis.educationalInsight}
+                            </Typography>
+                          </Box>
+                        )}
+                        
+                        <Typography variant="caption" color="text.secondary" sx={{ mb: 1, display: 'block' }}>
+                          최근 7일 감정 패턴:
+                        </Typography>
+                        <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
+                          {similar.patternData.slice(-7).map((day, dayIndex) => {
+                            // 감정에 따른 색상 결정
+                            const getEmotionColor = (emotion, score) => {
+                              const positiveEmotions = ['기쁨', '평온함', '기대감', 'happy', 'calm', 'excited', 'joy', 'pleasant', 'good', '좋음', '행복', '즐거움'];
+                              const negativeEmotions = ['슬픔', '화남', '불안', 'sad', 'angry', 'anxious', 'upset', 'worried', 'stressed', '스트레스', '걱정', '짜증'];
+                              
+                              if (positiveEmotions.includes(emotion)) {
+                                return score >= 4 ? '#4caf50' : '#81c784'; // 진한 초록 / 연한 초록
+                              } else if (negativeEmotions.includes(emotion)) {
+                                return score <= 2 ? '#f44336' : '#e57373'; // 진한 빨강 / 연한 빨강
+                              } else {
+                                return '#ff9800'; // 주황 (중립)
+                              }
+                            };
+                            
+                            return (
+                              <Box
+                                key={dayIndex}
+                                sx={{
+                                  width: 28,
+                                  height: 28,
+                                  borderRadius: '50%',
+                                  backgroundColor: getEmotionColor(day.emotion, day.score),
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  fontSize: '0.65rem',
+                                  fontWeight: 600,
+                                  color: 'white',
+                                  border: '2px solid rgba(255,255,255,0.3)'
+                                }}
+                                title={`${day.date}: ${day.emotion} (${Math.round(day.score * 10) / 10}점)`}
+                              >
+                                {Math.round(day.score * 10) / 10}
+                              </Box>
+                            );
+                          })}
+                        </Box>
+                      </Card>
+                    </Grid>
+                  ))}
+                </Grid>
+              </Box>
+            )}
+
+            {/* 분석 중 표시 */}
+            {patternAnalyzing && (
+              <Box sx={{ textAlign: 'center', py: 4 }}>
+                <Typography variant="body1" sx={{ mb: 1 }}>
+                  🔄 감정 패턴을 분석하고 있습니다...
+                </Typography>
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                  🤖 AI가 정교하게 분석 중입니다
+                </Typography>
+                <Box sx={{ display: 'flex', justifyContent: 'center' }}>
+                  <Box
+                    sx={{
+                      width: 40,
+                      height: 40,
+                      border: '4px solid #e0e0e0',
+                      borderTop: '4px solid #9c27b0',
+                      borderRadius: '50%',
+                      animation: 'spin 1s linear infinite',
+                      '@keyframes spin': {
+                        '0%': { transform: 'rotate(0deg)' },
+                        '100%': { transform: 'rotate(360deg)' }
+                      }
+                    }}
+                  />
+                </Box>
+              </Box>
+            )}
+
+            {/* 유사한 학생이 없는 경우 */}
+            {selectedStudent && !patternAnalyzing && studentEmotionPattern.length > 0 && similarStudents.length === 0 && (
+              <Box sx={{ textAlign: 'center', py: 3, backgroundColor: '#f8f9fa', borderRadius: 2, mt: 2 }}>
+                <Typography variant="body1" sx={{ mb: 1, fontWeight: 500 }}>
+                  🤔 {selectedStudent.name}님과 유의미한 감정 패턴 유사성을 보이는 학생이 없습니다
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  AI 분석 결과 40% 이상의 유사도를 보이는 학생이 발견되지 않았습니다.<br/>
+                  이는 해당 학생이 독특한 감정 패턴을 가지고 있음을 의미할 수 있습니다.
+                </Typography>
+              </Box>
+            )}
+
+            {/* 선택된 학생이 있지만 데이터가 없는 경우 */}
+            {selectedStudent && !patternAnalyzing && studentEmotionPattern.length === 0 && (
+              <Box sx={{ textAlign: 'center', py: 3 }}>
+                <Typography variant="body1" color="text.secondary">
+                  😔 {selectedStudent.name}님의 최근 {analysisRange}일간 감정출석 데이터가 충분하지 않습니다.
+                </Typography>
+              </Box>
+            )}
+          </CardContent>
+        </Card>
+            </>
+          )}
+
+          {/* 감정 클러스터링 탭 */}
+          {activeTab === 2 && (
+            <>
+              <Card sx={{ mb: 3, boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }}>
+                <CardContent>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 3 }}>
+                    <AssessmentIcon sx={{ color: '#9c27b0' }} />
+                    <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                      🎯 감정 클러스터링 분석
+                    </Typography>
+                  </Box>
+                  
+                  <Box sx={{ mb: 3 }}>
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                      특정 날짜의 학생들을 감정 상태에 따라 클러스터링하여 비슷한 감정을 가진 학생 그룹을 찾아보세요.
+                    </Typography>
+                    
+                    {/* 날짜 선택 */}
+                    <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', mb: 3 }}>
+                      <TextField
+                        label="분석 날짜"
+                        type="date"
+                        value={clusteringDate}
+                        onChange={(e) => {
+                          setClusteringDate(e.target.value);
+                          if (e.target.value) {
+                            performEmotionClustering(e.target.value);
+                          }
+                        }}
+                        InputLabelProps={{ shrink: true }}
+                        size="medium"
+                        sx={{ minWidth: 200 }}
+                      />
+                      <Button
+                        variant="contained"
+                        onClick={() => performEmotionClustering(clusteringDate)}
+                        disabled={clusteringLoading || !clusteringDate}
+                        sx={{
+                          backgroundColor: '#9c27b0',
+                          '&:hover': { backgroundColor: '#7b1fa2' },
+                          textTransform: 'none',
+                          fontWeight: 600
+                        }}
+                      >
+                        {clusteringLoading ? '분석 중...' : '클러스터링 분석'}
+                      </Button>
+                    </Box>
+                  </Box>
+
+                  {/* 로딩 상태 */}
+                  {clusteringLoading && (
+                    <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
+                      <Typography color="text.secondary" variant="h6">
+                        감정 클러스터링 분석 중...
+                      </Typography>
+                    </Box>
+                  )}
+
+                  {/* 클러스터링 결과 */}
+                  {!clusteringLoading && clusteringData.length > 0 && (
+                    <Box>
+                      {/* 감정 그룹 클러스터 */}
+                      <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>
+                        👥 감정 그룹 클러스터링 ({clusteringDate})
+                      </Typography>
+                      
+                      <Box sx={{ 
+                        display: 'grid', 
+                        gridTemplateColumns: {
+                          xs: '1fr',
+                          sm: '1fr 1fr',
+                          md: '1fr 1fr 1fr'
+                        },
+                        gap: 2, 
+                        mb: 4,
+                        width: '100%'
+                      }}>
+                        {clusteringData.map((cluster) => (
+                          <Box key={cluster.id}>
+                            <Card sx={{ 
+                              height: '100%',
+                              borderLeft: `6px solid ${cluster.color}`,
+                              position: 'relative',
+                              overflow: 'visible'
+                            }}>
+                              <CardContent>
+                                {/* 클러스터 제목 */}
+                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+                                  <Box
+                                    sx={{
+                                      width: 20,
+                                      height: 20,
+                                      backgroundColor: cluster.color,
+                                      borderRadius: '50%',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'center',
+                                      fontSize: '12px',
+                                      color: 'white',
+                                      fontWeight: 'bold'
+                                    }}
+                                  >
+                                    {cluster.students.length}
+                                  </Box>
+                                  <Typography variant="h6" sx={{ 
+                                    fontWeight: 600,
+                                    color: cluster.color
+                                  }}>
+                                    {cluster.label}
+                                  </Typography>
+                                </Box>
+
+                                {/* 학생 목록 */}
+                                <Box sx={{ mb: 2 }}>
+                                  <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                                    참여 학생 ({cluster.students.length}명):
+                                  </Typography>
+                                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                                    {cluster.students.map((student) => (
+                                      <Chip
+                                        key={student.id}
+                                        label={student.name}
+                                        size="small"
+                                        sx={{
+                                          backgroundColor: `${cluster.color}15`,
+                                          color: cluster.color,
+                                          border: `1px solid ${cluster.color}40`,
+                                          fontWeight: 500,
+                                          cursor: 'pointer',
+                                          '&:hover': {
+                                            backgroundColor: `${cluster.color}25`,
+                                            transform: 'translateY(-1px)',
+                                            boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+                                          },
+                                          transition: 'all 0.2s ease-in-out'
+                                        }}
+                                        onMouseEnter={(e) => {
+                                          setHoveredStudent(student);
+                                          const rect = e.currentTarget.getBoundingClientRect();
+                                          setTooltipPosition({
+                                            x: rect.left + rect.width / 2,
+                                            y: rect.top - 10
+                                          });
+                                        }}
+                                        onMouseLeave={() => {
+                                          setHoveredStudent(null);
+                                        }}
+                                      />
+                                    ))}
+                                  </Box>
+                                </Box>
+
+                                {/* 그룹 통계 */}
+                                {cluster.students.length > 0 && (
+                                  <Box sx={{ 
+                                    backgroundColor: `${cluster.color}08`,
+                                    borderRadius: 2,
+                                    p: 2,
+                                    border: `1px solid ${cluster.color}20`
+                                  }}>
+                                    <Typography variant="body2" sx={{ fontWeight: 600, mb: 1 }}>
+                                      📊 그룹 특성
+                                    </Typography>
+                                    <Typography variant="body2" sx={{ mb: 0.5 }}>
+                                      평균 감정 점수: {(cluster.students.reduce((sum, s) => sum + s.score, 0) / cluster.students.length).toFixed(1)}/5.0
+                                    </Typography>
+                                    <Typography variant="body2" sx={{ mb: 0.5 }}>
+                                      평균 감정 강도: {(cluster.students.reduce((sum, s) => sum + s.intensity, 0) / cluster.students.length).toFixed(1)}/5
+                                    </Typography>
+                                    <Typography variant="body2">
+                                      주요 감정: {(() => {
+                                        const emotionCount = cluster.students.reduce((acc, s) => {
+                                          if (s.emotion) {
+                                            acc[s.emotion] = (acc[s.emotion] || 0) + 1;
+                                          }
+                                          return acc;
+                                        }, {});
+                                        
+                                        return Object.entries(emotionCount)
+                                          .sort(([,a], [,b]) => b - a)
+                                          .slice(0, 3)
+                                          .map(([emotion, count]) => `${emotion}(${count})`)
+                                          .join(', ') || '데이터 없음';
+                                      })()}
+                                    </Typography>
+                                  </Box>
+                                )}
+                              </CardContent>
+                            </Card>
+                          </Box>
+                        ))}
+                      </Box>
+
+                      {/* 호버 툴팁 */}
+                      {hoveredStudent && (
+                        <Box
+                          sx={{
+                            position: 'fixed',
+                            left: tooltipPosition.x,
+                            top: tooltipPosition.y,
+                            transform: 'translateX(-50%) translateY(-100%)',
+                            backgroundColor: 'rgba(0, 0, 0, 0.9)',
+                            color: 'white',
+                            padding: '12px 16px',
+                            borderRadius: 2,
+                            fontSize: '14px',
+                            fontWeight: 500,
+                            zIndex: 1000,
+                            pointerEvents: 'none',
+                            whiteSpace: 'nowrap',
+                            boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+                            '&::after': {
+                              content: '""',
+                              position: 'absolute',
+                              top: '100%',
+                              left: '50%',
+                              transform: 'translateX(-50%)',
+                              border: '6px solid transparent',
+                              borderTopColor: 'rgba(0, 0, 0, 0.9)'
+                            }
+                          }}
+                        >
+                          <Box>
+                            <Typography variant="body2" sx={{ fontWeight: 600, mb: 0.5 }}>
+                              👤 {hoveredStudent.name}
+                            </Typography>
+                            <Typography variant="body2" sx={{ mb: 0.5 }}>
+                              😊 {hoveredStudent.emotion}
+                            </Typography>
+                            <Typography variant="body2" sx={{ mb: 0.5 }}>
+                              📊 점수: {hoveredStudent.score.toFixed(1)}/5.0
+                            </Typography>
+                            <Typography variant="body2" sx={{ mb: 0.5 }}>
+                              💪 강도: {hoveredStudent.intensity}/5
+                            </Typography>
+                            {hoveredStudent.cause && (
+                              <Typography variant="body2">
+                                💭 원인: {hoveredStudent.cause}
+                              </Typography>
+                            )}
+                          </Box>
+                        </Box>
+                      )}
+
+                      {/* AI 분석 결과 */}
+                      {clusteringAnalysis && !clusteringAnalysis.error && (
+                        <Box>
+                          <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>
+                            🤖 AI 클러스터링 분석 결과
+                          </Typography>
+                          
+                          {/* 전체 요약 */}
+                          <Card sx={{ mb: 3, backgroundColor: '#f8f9fa' }}>
+                            <CardContent>
+                              <Typography variant="h6" sx={{ mb: 1, color: '#1976d2' }}>
+                                📋 전체 분석 요약
+                              </Typography>
+                              <Typography variant="body1">
+                                {clusteringAnalysis.overallSummary}
+                              </Typography>
+                            </CardContent>
+                          </Card>
+
+                          {/* 클러스터별 분석 */}
+                          <Box sx={{ 
+                            display: 'grid', 
+                            gridTemplateColumns: {
+                              xs: '1fr',
+                              sm: '1fr 1fr',
+                              md: '1fr 1fr 1fr'
+                            },
+                            gap: 2, 
+                            mb: 3,
+                            width: '100%'
+                          }}>
+                            {clusteringAnalysis.clusterAnalysis && clusteringAnalysis.clusterAnalysis.map((analysis, index) => {
+                              const cluster = clusteringData.find(c => c.label === analysis.clusterLabel);
+                              return (
+                                <Box key={index}>
+                                  <Card sx={{ 
+                                    height: '100%',
+                                    borderLeft: `4px solid ${cluster?.color || '#ccc'}`
+                                  }}>
+                                    <CardContent>
+                                      <Typography variant="h6" sx={{ 
+                                        mb: 1, 
+                                        color: cluster?.color || '#666',
+                                        fontWeight: 600
+                                      }}>
+                                        {analysis.clusterLabel}
+                                      </Typography>
+                                      <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                                        학생 수: {analysis.studentCount}명
+                                      </Typography>
+                                      <Typography variant="body2" sx={{ mb: 1 }}>
+                                        <strong>특성:</strong> {analysis.characteristics}
+                                      </Typography>
+                                      <Typography variant="body2" sx={{ mb: 1 }}>
+                                        <strong>공통 요인:</strong> {analysis.commonFactors}
+                                      </Typography>
+                                      <Typography variant="body2" sx={{ mb: 1 }}>
+                                        <strong>지도 방안:</strong> {analysis.teachingStrategy}
+                                      </Typography>
+                                      <Chip
+                                        label={`관심도: ${analysis.attentionLevel}`}
+                                        size="small"
+                                        color={
+                                          analysis.attentionLevel === '높음' ? 'error' : 
+                                          analysis.attentionLevel === '보통' ? 'warning' : 'success'
+                                        }
+                                        sx={{ mt: 1 }}
+                                      />
+                                    </CardContent>
+                                  </Card>
+                                </Box>
+                              );
+                            })}
+                          </Box>
+
+                          {/* 전체 권장사항 */}
+                          <Card sx={{ backgroundColor: '#e8f5e8' }}>
+                            <CardContent>
+                              <Typography variant="h6" sx={{ mb: 1, color: '#2e7d32' }}>
+                                💡 교사 권장사항
+                              </Typography>
+                              <Typography variant="body1" sx={{ mb: 2 }}>
+                                {clusteringAnalysis.recommendations}
+                              </Typography>
+                              <Typography variant="body2" sx={{ fontStyle: 'italic', color: '#666' }}>
+                                <strong>교실 분위기:</strong> {clusteringAnalysis.classroomMood}
+                              </Typography>
+                            </CardContent>
+                          </Card>
+                        </Box>
+                      )}
+                    </Box>
+                  )}
+
+                  {/* 에러 상태 */}
+                  {!clusteringLoading && clusteringAnalysis?.error && (
+                    <Box sx={{ textAlign: 'center', p: 4 }}>
+                      <Typography color="text.secondary" variant="h6">
+                        {clusteringAnalysis.error}
+                      </Typography>
+                    </Box>
+                  )}
+
+                  {/* 데이터 없음 */}
+                  {!clusteringLoading && clusteringData.length === 0 && clusteringDate && !clusteringAnalysis?.error && (
+                    <Box sx={{ textAlign: 'center', p: 4 }}>
+                      <Typography color="text.secondary" variant="h6">
+                        😔 선택한 날짜({clusteringDate})에 충분한 감정 데이터가 없습니다.
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                        다른 날짜를 선택해주세요.
+                      </Typography>
+                    </Box>
+                  )}
+                </CardContent>
+              </Card>
+            </>
+          )}
+        </Box>
       </DialogContent>
 
       <DialogActions sx={{ p: 3, borderTop: '1px solid #e0e0e0', justifyContent: 'space-between' }}>
@@ -1215,7 +2785,8 @@ const EmotionDashboardModal = ({ isOpen, onClose, students }) => {
           완료
         </Button>
       </DialogActions>
-    </Dialog>
+      </Dialog>
+    </Portal>
   );
 };
 

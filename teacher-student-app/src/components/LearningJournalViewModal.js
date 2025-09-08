@@ -514,7 +514,7 @@ const LearningJournalViewModal = ({ isOpen, onClose, selectedDate, refreshData }
                                 fontWeight: '600',
                                 color: '#333',
                                 borderBottom: '2px solid #e8eaed',
-                                minWidth: '120px'
+                                minWidth: '80px'
                               }}>
                                 👤 학생명
                               </th>
@@ -525,8 +525,8 @@ const LearningJournalViewModal = ({ isOpen, onClose, selectedDate, refreshData }
                                   fontWeight: '600',
                                   color: '#333',
                                   borderBottom: '2px solid #e8eaed',
-                                  minWidth: '200px',
-                                  width: '200px'
+                                  minWidth: '250px',
+                                  width: '250px'
                                 }}>
                                   🕐 {period}
                                 </th>
@@ -560,8 +560,8 @@ const LearningJournalViewModal = ({ isOpen, onClose, selectedDate, refreshData }
                                         backgroundColor: dragOverCell === `${studentName}-${period}` ? '#e3f2fd' : 'white',
                                         cursor: entry ? 'grab' : 'default',
                                         minHeight: '120px',
-                                        minWidth: '200px',
-                                        width: '200px',
+                                        minWidth: '250px',
+                                        width: '250px',
                                         position: 'relative',
                                         verticalAlign: 'top'
                                       }}
@@ -650,7 +650,7 @@ const LearningJournalViewModal = ({ isOpen, onClose, selectedDate, refreshData }
                                                       fontSize: '11px',
                                                       color: '#666',
                                                       lineHeight: '1.3',
-                                                      fontWeight: '400',
+                                                      fontWeight: '300',
                                                       wordWrap: 'break-word',
                                                       overflowWrap: 'break-word'
                                                     }}>
