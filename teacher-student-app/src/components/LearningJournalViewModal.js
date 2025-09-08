@@ -470,15 +470,20 @@ const LearningJournalViewModal = ({ isOpen, onClose, selectedDate, refreshData }
                       const studentNames = allStudents;
 
                       return (
-                        <table style={{
-                          width: '100%',
-                          borderCollapse: 'collapse',
-                          fontSize: '14px',
-                          backgroundColor: 'white',
+                        <div style={{
+                          overflowX: 'auto',
+                          overflowY: 'visible',
                           borderRadius: '8px',
-                          overflow: 'hidden',
-                          boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+                          boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+                          backgroundColor: 'white'
                         }}>
+                          <table style={{
+                            minWidth: '1400px',
+                            width: '100%',
+                            borderCollapse: 'collapse',
+                            fontSize: '14px',
+                            backgroundColor: 'white'
+                          }}>
                           <thead>
                             <tr style={{ backgroundColor: '#f5f5f5' }}>
                               <th style={{
@@ -498,7 +503,8 @@ const LearningJournalViewModal = ({ isOpen, onClose, selectedDate, refreshData }
                                   fontWeight: '600',
                                   color: '#333',
                                   borderBottom: '2px solid #e8eaed',
-                                  minWidth: '150px'
+                                  minWidth: '200px',
+                                  width: '200px'
                                 }}>
                                   🕐 {period}
                                 </th>
@@ -526,13 +532,16 @@ const LearningJournalViewModal = ({ isOpen, onClose, selectedDate, refreshData }
                                     <td
                                       key={period}
                                       style={{
-                                        padding: '12px',
+                                        padding: '8px',
                                         textAlign: 'center',
                                         borderRight: '1px solid #f0f0f0',
                                         backgroundColor: dragOverCell === `${studentName}-${period}` ? '#e3f2fd' : 'white',
                                         cursor: entry ? 'grab' : 'default',
-                                        minHeight: '80px',
-                                        position: 'relative'
+                                        minHeight: '120px',
+                                        minWidth: '200px',
+                                        width: '200px',
+                                        position: 'relative',
+                                        verticalAlign: 'top'
                                       }}
                                       onDragOver={handleDragOver}
                                       onDragEnter={(e) => handleDragEnter(e, period, studentName)}
@@ -575,7 +584,9 @@ const LearningJournalViewModal = ({ isOpen, onClose, selectedDate, refreshData }
                                             borderRadius: '6px',
                                             padding: '8px 10px',
                                             marginBottom: '8px',
-                                            minHeight: '45px'
+                                            minHeight: '65px',
+                                            maxHeight: 'none',
+                                            overflow: 'visible'
                                           }}>
                                             {(() => {
                                               if (!entry.content || entry.content === '내용 없음') {
@@ -604,9 +615,11 @@ const LearningJournalViewModal = ({ isOpen, onClose, selectedDate, refreshData }
                                                     fontWeight: '800',
                                                     color: '#e65100',
                                                     marginBottom: details ? '4px' : '0px',
-                                                    lineHeight: '1.2'
+                                                    lineHeight: '1.2',
+                                                    wordWrap: 'break-word',
+                                                    overflowWrap: 'break-word'
                                                   }}>
-                                                    {keyword.length > 25 ? `${keyword.substring(0, 25)}...` : keyword}
+                                                    {keyword}
                                                   </div>
                                                   
                                                   {/* 상세 학습내용 */}
@@ -615,9 +628,11 @@ const LearningJournalViewModal = ({ isOpen, onClose, selectedDate, refreshData }
                                                       fontSize: '11px',
                                                       color: '#666',
                                                       lineHeight: '1.3',
-                                                      fontWeight: '400'
+                                                      fontWeight: '400',
+                                                      wordWrap: 'break-word',
+                                                      overflowWrap: 'break-word'
                                                     }}>
-                                                      {details.length > 35 ? `${details.substring(0, 35)}...` : details}
+                                                      {details}
                                                     </div>
                                                   )}
                                                 </div>
@@ -686,6 +701,7 @@ const LearningJournalViewModal = ({ isOpen, onClose, selectedDate, refreshData }
                             ))}
                           </tbody>
                         </table>
+                        </div>
                       );
                     })()}
                   </div>
