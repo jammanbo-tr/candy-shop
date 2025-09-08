@@ -123,6 +123,19 @@ const LearningJournalViewModal = ({ isOpen, onClose, selectedDate, refreshData }
     }
   }, [selectedDateFilter, isOpen, fetchData]);
 
+  // 선택된 교시 수에 따른 동적 열 너비 계산
+  const getColumnWidth = () => {
+    const selectedPeriodCount = PERIODS.filter(period => visiblePeriods[period]).length;
+    if (selectedPeriodCount === 0) return '300px';
+    
+    // 총 테이블 너비에서 학생명 열(200px)를 제외하고 교시 열들로 균등분배
+    const availableWidth = 100; // percentage 기준
+    const studentNameColumnWidth = 15; // percentage
+    const periodColumnWidth = (availableWidth - studentNameColumnWidth) / selectedPeriodCount;
+    
+    return `${periodColumnWidth}%`;
+  };
+
   // 교시 필터 체크박스 핸들러
   const handlePeriodCheckboxChange = (period) => {
     if (period === '전체') {
@@ -575,11 +588,11 @@ const LearningJournalViewModal = ({ isOpen, onClose, selectedDate, refreshData }
                           backgroundColor: 'white'
                         }}>
                           <table style={{
-                            minWidth: '1400px',
                             width: '100%',
                             borderCollapse: 'collapse',
                             fontSize: '14px',
-                            backgroundColor: 'white'
+                            backgroundColor: 'white',
+                            tableLayout: 'fixed'
                           }}>
                           <thead>
                             <tr style={{ backgroundColor: '#f5f5f5' }}>
@@ -589,7 +602,8 @@ const LearningJournalViewModal = ({ isOpen, onClose, selectedDate, refreshData }
                                 fontWeight: '600',
                                 color: '#333',
                                 borderBottom: '2px solid #e8eaed',
-                                minWidth: '80px'
+                                width: '15%',
+                                minWidth: '120px'
                               }}>
                                 👤 학생명
                               </th>
@@ -600,8 +614,8 @@ const LearningJournalViewModal = ({ isOpen, onClose, selectedDate, refreshData }
                                   fontWeight: '600',
                                   color: '#333',
                                   borderBottom: '2px solid #e8eaed',
-                                  minWidth: '250px',
-                                  width: '250px'
+                                  width: getColumnWidth(),
+                                  minWidth: '200px'
                                 }}>
                                   🕐 {period}
                                 </th>
@@ -619,7 +633,9 @@ const LearningJournalViewModal = ({ isOpen, onClose, selectedDate, refreshData }
                                   fontWeight: '600',
                                   color: '#333',
                                   backgroundColor: '#fafafa',
-                                  borderRight: '1px solid #e8eaed'
+                                  borderRight: '1px solid #e8eaed',
+                                  width: '15%',
+                                  minWidth: '120px'
                                 }}>
                                   {studentName}
                                 </td>
@@ -633,10 +649,10 @@ const LearningJournalViewModal = ({ isOpen, onClose, selectedDate, refreshData }
                                         textAlign: 'center',
                                         borderRight: '1px solid #f0f0f0',
                                         backgroundColor: dragOverCell === `${studentName}-${period}` ? '#e3f2fd' : 'white',
+                                        width: getColumnWidth(),
+                                        minWidth: '200px',
                                         cursor: entry ? 'grab' : 'default',
                                         minHeight: '120px',
-                                        minWidth: '250px',
-                                        width: '250px',
                                         position: 'relative',
                                         verticalAlign: 'top'
                                       }}
