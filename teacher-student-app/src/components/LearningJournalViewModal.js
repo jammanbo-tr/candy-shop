@@ -7,7 +7,9 @@ const PERIODS = ['1교시', '2교시', '3교시', '4교시', '5교시', '6교시
 const LearningJournalViewModal = ({ isOpen, onClose, selectedDate, refreshData }) => {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [selectedDateFilter, setSelectedDateFilter] = useState(null);
+  const [selectedDateFilter, setSelectedDateFilter] = useState(
+    selectedDate ? selectedDate.toISOString().split('T')[0] : new Date().toISOString().split('T')[0]
+  );
   const [selectedPeriodFilter, setSelectedPeriodFilter] = useState('전체');
   const [showTableView, setShowTableView] = useState(true);
   const [draggedEntry, setDraggedEntry] = useState(null);
@@ -37,42 +39,21 @@ const LearningJournalViewModal = ({ isOpen, onClose, selectedDate, refreshData }
     try {
       const journals = [];
       
-      if (selectedDate) {
-        const dateStr = selectedDate.toISOString().split('T')[0];
-        try {
-          const dayRef = collection(db, `journals/${dateStr}/entries`);
-          const querySnapshot = await getDocs(dayRef);
-          querySnapshot.forEach((doc) => {
-            journals.push({
-              id: doc.id,
-              date: dateStr,
-              ...doc.data()
-            });
+      // selectedDateFilter가 있으면 해당 날짜, 없으면 오늘 날짜
+      const targetDateStr = selectedDateFilter || new Date().toISOString().split('T')[0];
+      
+      try {
+        const dayRef = collection(db, `journals/${targetDateStr}/entries`);
+        const querySnapshot = await getDocs(dayRef);
+        querySnapshot.forEach((doc) => {
+          journals.push({
+            id: doc.id,
+            date: targetDateStr,
+            ...doc.data()
           });
-        } catch (error) {
-          console.log(`${dateStr} 데이터 없음`);
-        }
-      } else {
-        const today = new Date();
-        for (let i = 0; i < 30; i++) {
-          const date = new Date(today);
-          date.setDate(date.getDate() - i);
-          const dateStr = date.toISOString().split('T')[0];
-          
-          try {
-            const dayRef = collection(db, `journals/${dateStr}/entries`);
-            const querySnapshot = await getDocs(dayRef);
-            querySnapshot.forEach((doc) => {
-              journals.push({
-                id: doc.id,
-                date: dateStr,
-                ...doc.data()
-              });
-            });
-          } catch (error) {
-            // 조용히 무시
-          }
-        }
+        });
+      } catch (error) {
+        console.log(`${targetDateStr} 데이터 없음`);
       }
 
       journals.sort((a, b) => {
@@ -86,13 +67,20 @@ const LearningJournalViewModal = ({ isOpen, onClose, selectedDate, refreshData }
       console.error('데이터 가져오기 오류:', error);
     }
     setLoading(false);
-  }, [selectedDate]);
+  }, [selectedDateFilter]);
 
   useEffect(() => {
     if (isOpen) {
       fetchData();
     }
-  }, [isOpen, selectedDate, fetchData]);
+  }, [isOpen, fetchData]);
+  
+  // selectedDateFilter가 변경될 때마다 데이터를 다시 가져오기
+  useEffect(() => {
+    if (isOpen && selectedDateFilter) {
+      fetchData();
+    }
+  }, [selectedDateFilter, isOpen, fetchData]);
 
   const handleMoveEntry = async (entry, newPeriod) => {
     try {
@@ -264,19 +252,22 @@ const LearningJournalViewModal = ({ isOpen, onClose, selectedDate, refreshData }
                   }}
                 />
                 <button
-                  onClick={() => setSelectedDateFilter(null)}
+                  onClick={() => {
+                    const today = new Date().toISOString().split('T')[0];
+                    setSelectedDateFilter(today);
+                  }}
                   style={{
                     padding: '8px 12px',
                     borderRadius: '8px',
-                    border: '1px solid #e1e5e9',
-                    backgroundColor: 'white',
+                    border: '1px solid #1976d2',
+                    backgroundColor: '#e3f2fd',
                     fontSize: '12px',
                     fontWeight: '600',
-                    color: '#666',
+                    color: '#1976d2',
                     cursor: 'pointer'
                   }}
                 >
-                  📊 전체 보기
+                  📅 오늘로 이동
                 </button>
               </div>
             </div>
@@ -567,56 +558,111 @@ const LearningJournalViewModal = ({ isOpen, onClose, selectedDate, refreshData }
                                           onDragStart={(e) => handleDragStart(e, entry)}
                                           onDragEnd={handleDragEnd}
                                           style={{
-                                            padding: '8px',
-                                            borderRadius: '6px',
-                                            backgroundColor: '#f8f9fa',
-                                            border: '1px solid #e8eaed',
-                                            cursor: 'grab'
+                                            padding: '10px',
+                                            borderRadius: '8px',
+                                            backgroundColor: 'white',
+                                            border: '2px solid #e8eaed',
+                                            cursor: 'grab',
+                                            boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+                                            transition: 'all 0.2s ease'
                                           }}
                                         >
-                                          <div style={{ marginBottom: '6px', fontSize: '12px', color: '#666' }}>
+                                          {/* 날짜 헤더 */}
+                                          <div style={{ 
+                                            marginBottom: '8px', 
+                                            fontSize: '11px', 
+                                            color: '#1976d2',
+                                            fontWeight: '600',
+                                            textAlign: 'center',
+                                            backgroundColor: '#e3f2fd',
+                                            padding: '2px 6px',
+                                            borderRadius: '4px'
+                                          }}>
                                             📅 {new Date(entry.date).toLocaleDateString('ko-KR')}
                                           </div>
-                                          <div style={{ marginBottom: '8px', fontSize: '13px', color: '#333', lineHeight: '1.4' }}>
-                                            {entry.content ? 
-                                              (entry.content.length > 50 ? `${entry.content.substring(0, 50)}...` : entry.content)
-                                              : '내용 없음'
-                                            }
-                                          </div>
-                                          <div style={{ display: 'flex', gap: '4px', justifyContent: 'center' }}>
-                                            <span style={{
-                                              padding: '2px 6px',
-                                              borderRadius: '3px',
-                                              fontSize: '11px',
-                                              backgroundColor: getScoreColor(entry.understanding, 'understanding'),
-                                              color: 'white'
+                                          
+                                          {/* 키워드/핵심 내용 영역 */}
+                                          <div style={{
+                                            backgroundColor: '#fff3e0',
+                                            border: '1px solid #ffb74d',
+                                            borderRadius: '6px',
+                                            padding: '6px 8px',
+                                            marginBottom: '8px',
+                                            minHeight: '20px'
+                                          }}>
+                                            <div style={{
+                                              fontSize: '10px',
+                                              color: '#e65100',
+                                              fontWeight: '600',
+                                              marginBottom: '2px'
                                             }}>
-                                              이해 {entry.understanding || 0}
+                                              🎯 핵심내용
+                                            </div>
+                                            <div style={{ 
+                                              fontSize: '12px', 
+                                              color: '#333', 
+                                              lineHeight: '1.3',
+                                              fontWeight: '500'
+                                            }}>
+                                              {entry.content ? 
+                                                (entry.content.length > 30 ? `${entry.content.substring(0, 30)}...` : entry.content)
+                                                : '내용 없음'
+                                              }
+                                            </div>
+                                          </div>
+                                          
+                                          {/* 점수 영역 */}
+                                          <div style={{ display: 'flex', gap: '3px', justifyContent: 'center' }}>
+                                            <span style={{
+                                              padding: '3px 6px',
+                                              borderRadius: '4px',
+                                              fontSize: '10px',
+                                              backgroundColor: getScoreColor(entry.understanding, 'understanding'),
+                                              color: 'white',
+                                              fontWeight: '600',
+                                              boxShadow: '0 1px 2px rgba(0,0,0,0.2)'
+                                            }}>
+                                              이해도 {entry.understanding || 0}
                                             </span>
                                             <span style={{
-                                              padding: '2px 6px',
-                                              borderRadius: '3px',
-                                              fontSize: '11px',
+                                              padding: '3px 6px',
+                                              borderRadius: '4px',
+                                              fontSize: '10px',
                                               backgroundColor: getScoreColor(entry.satisfaction, 'satisfaction'),
-                                              color: 'white'
+                                              color: 'white',
+                                              fontWeight: '600',
+                                              boxShadow: '0 1px 2px rgba(0,0,0,0.2)'
                                             }}>
-                                              만족 {entry.satisfaction || 0}
+                                              만족도 {entry.satisfaction || 0}
                                             </span>
                                           </div>
                                         </div>
                                       ) : (
                                         <div style={{
                                           padding: '20px',
-                                          color: '#ccc',
+                                          color: '#999',
                                           fontSize: '12px',
                                           border: '2px dashed #e0e0e0',
-                                          borderRadius: '6px',
-                                          minHeight: '60px',
+                                          borderRadius: '8px',
+                                          minHeight: '80px',
                                           display: 'flex',
+                                          flexDirection: 'column',
                                           alignItems: 'center',
-                                          justifyContent: 'center'
+                                          justifyContent: 'center',
+                                          backgroundColor: '#fafafa'
                                         }}>
-                                          📝 비어있음
+                                          <div style={{ 
+                                            fontSize: '20px', 
+                                            marginBottom: '4px',
+                                            opacity: 0.5 
+                                          }}>📝</div>
+                                          <div style={{ 
+                                            fontSize: '11px', 
+                                            color: '#bbb',
+                                            fontWeight: '500'
+                                          }}>
+                                            학습일지 없음
+                                          </div>
                                         </div>
                                       )}
                                     </td>
