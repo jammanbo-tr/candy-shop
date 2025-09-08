@@ -10,6 +10,7 @@ const DEFAULT_STUDENTS = ['김규민', '김범준', '김성준'];
 const LearningJournalViewModal = ({ isOpen, onClose, selectedDate, refreshData }) => {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [students, setStudents] = useState([]);
   const [selectedDateFilter, setSelectedDateFilter] = useState(
     selectedDate ? selectedDate.toISOString().split('T')[0] : new Date().toISOString().split('T')[0]
   );
@@ -36,6 +37,26 @@ const LearningJournalViewModal = ({ isOpen, onClose, selectedDate, refreshData }
       return '#ff8a65';
     }
   };
+
+  // 학생 목록 가져오기
+  const fetchStudents = useCallback(async () => {
+    try {
+      const studentsRef = collection(db, 'students');
+      const querySnapshot = await getDocs(studentsRef);
+      const studentNames = [];
+      querySnapshot.forEach((doc) => {
+        const studentData = doc.data();
+        if (studentData.name) {
+          studentNames.push(studentData.name);
+        }
+      });
+      setStudents(studentNames.sort());
+    } catch (error) {
+      console.error('학생 목록 가져오기 오류:', error);
+      // 오류 시 기본 학생 목록 사용
+      setStudents(DEFAULT_STUDENTS);
+    }
+  }, []);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -74,9 +95,10 @@ const LearningJournalViewModal = ({ isOpen, onClose, selectedDate, refreshData }
 
   useEffect(() => {
     if (isOpen) {
+      fetchStudents();
       fetchData();
     }
-  }, [isOpen, fetchData]);
+  }, [isOpen, fetchStudents, fetchData]);
   
   // selectedDateFilter가 변경될 때마다 데이터를 다시 가져오기
   useEffect(() => {
@@ -452,8 +474,8 @@ const LearningJournalViewModal = ({ isOpen, onClose, selectedDate, refreshData }
                       // 데이터에서 발견된 학생들
                       const studentsFromData = [...new Set(filteredData.map(entry => entry.studentName))];
                       
-                      // 기본 학생 목록과 데이터에서 발견된 학생들을 합치기
-                      const allStudents = [...new Set([...DEFAULT_STUDENTS, ...studentsFromData])].sort();
+                      // 실제 학생 목록과 데이터에서 발견된 학생들을 합치기
+                      const allStudents = [...new Set([...students, ...studentsFromData])].sort();
                       
                       // 모든 학생에 대해 빈 구조 초기화
                       allStudents.forEach(studentName => {
@@ -728,8 +750,8 @@ const LearningJournalViewModal = ({ isOpen, onClose, selectedDate, refreshData }
 
                       // 데이터가 없어도 항상 리스트 표시
                       if (filteredData.length === 0) {
-                        // 빈 상태 표시 (기본 학생들에 대한 빈 항목들)
-                        return DEFAULT_STUDENTS.map((studentName, index) => (
+                        // 빈 상태 표시 (등록된 학생들에 대한 빈 항목들)
+                        return students.map((studentName, index) => (
                           <div
                             key={`empty-${studentName}-${index}`}
                             style={{
