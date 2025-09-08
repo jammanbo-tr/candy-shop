@@ -214,8 +214,9 @@ const LearningJournalViewModal = ({ isOpen, onClose, selectedDate, refreshData }
           backgroundColor: 'white',
           borderRadius: '12px',
           maxWidth: '98vw',
-          maxHeight: '95vh',
+          maxHeight: '98vh',
           width: '1932px',
+          height: '90vh',
           overflow: 'hidden',
           boxShadow: '0 20px 40px rgba(0, 0, 0, 0.3)'
         }}>
@@ -335,7 +336,7 @@ const LearningJournalViewModal = ({ isOpen, onClose, selectedDate, refreshData }
           </div>
 
           {/* 컨텐츠 영역 */}
-          <div style={{ maxHeight: '60vh', overflowY: 'auto', padding: '24px' }}>
+          <div style={{ maxHeight: '75vh', overflowY: 'auto', padding: '24px' }}>
             {loading ? (
               <div style={{ textAlign: 'center', padding: '40px', color: '#666' }}>
                 데이터를 불러오는 중...
@@ -572,29 +573,56 @@ const LearningJournalViewModal = ({ isOpen, onClose, selectedDate, refreshData }
                                             backgroundColor: '#fff3e0',
                                             border: '1px solid #ffb74d',
                                             borderRadius: '6px',
-                                            padding: '6px 8px',
+                                            padding: '8px 10px',
                                             marginBottom: '8px',
-                                            minHeight: '20px'
+                                            minHeight: '45px'
                                           }}>
-                                            <div style={{
-                                              fontSize: '10px',
-                                              color: '#e65100',
-                                              fontWeight: '600',
-                                              marginBottom: '2px'
-                                            }}>
-                                              🎯 핵심내용
-                                            </div>
-                                            <div style={{ 
-                                              fontSize: '12px', 
-                                              color: '#333', 
-                                              lineHeight: '1.3',
-                                              fontWeight: '500'
-                                            }}>
-                                              {entry.content ? 
-                                                (entry.content.length > 30 ? `${entry.content.substring(0, 30)}...` : entry.content)
-                                                : '내용 없음'
+                                            {(() => {
+                                              if (!entry.content || entry.content === '내용 없음') {
+                                                return (
+                                                  <div style={{ 
+                                                    fontSize: '12px', 
+                                                    color: '#999', 
+                                                    fontStyle: 'italic',
+                                                    textAlign: 'center'
+                                                  }}>
+                                                    내용 없음
+                                                  </div>
+                                                );
                                               }
-                                            </div>
+
+                                              // 키워드와 내용 분리 (첫 번째 줄을 키워드로 간주)
+                                              const lines = entry.content.split('\n').filter(line => line.trim());
+                                              const keyword = lines[0] || '';
+                                              const details = lines.slice(1).join(' ') || '';
+
+                                              return (
+                                                <div>
+                                                  {/* 핵심 키워드 */}
+                                                  <div style={{
+                                                    fontSize: '13px',
+                                                    fontWeight: '800',
+                                                    color: '#e65100',
+                                                    marginBottom: details ? '4px' : '0px',
+                                                    lineHeight: '1.2'
+                                                  }}>
+                                                    {keyword.length > 25 ? `${keyword.substring(0, 25)}...` : keyword}
+                                                  </div>
+                                                  
+                                                  {/* 상세 학습내용 */}
+                                                  {details && (
+                                                    <div style={{
+                                                      fontSize: '11px',
+                                                      color: '#666',
+                                                      lineHeight: '1.3',
+                                                      fontWeight: '400'
+                                                    }}>
+                                                      {details.length > 35 ? `${details.substring(0, 35)}...` : details}
+                                                    </div>
+                                                  )}
+                                                </div>
+                                              );
+                                            })()}
                                           </div>
                                           
                                           {/* 점수 영역 */}
