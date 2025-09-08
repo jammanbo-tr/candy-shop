@@ -340,19 +340,6 @@ const LearningJournalViewModal = ({ isOpen, onClose, selectedDate, refreshData }
               <div style={{ textAlign: 'center', padding: '40px', color: '#666' }}>
                 데이터를 불러오는 중...
               </div>
-            ) : data.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '40px', color: '#666' }}>
-                <div style={{ marginBottom: '16px' }}><img src="/lv2.png" alt="journal" style={{ width: '48px', height: '48px' }} /></div>
-                <h3 style={{ color: '#333', marginBottom: '8px' }}>
-                  학습일지가 없습니다
-                </h3>
-                <p style={{ color: '#666', fontSize: '14px' }}>
-                  {selectedDate 
-                    ? `${selectedDate.toLocaleDateString('ko-KR')}에 작성된 학습일지가 없습니다.`
-                    : '작성된 학습일지가 없습니다.'
-                  }
-                </p>
-              </div>
             ) : (
               <div>
                 <div style={{
@@ -695,20 +682,56 @@ const LearningJournalViewModal = ({ isOpen, onClose, selectedDate, refreshData }
                         }
                       }
 
+                      // 데이터가 없어도 항상 리스트 표시
                       if (filteredData.length === 0) {
-                        return (
-                          <div style={{ textAlign: 'center', padding: '40px', color: '#666' }}>
-                            <div style={{ marginBottom: '16px' }}>
-                              <img src="/lv2.png" alt="journal" style={{ width: '48px', height: '48px' }} />
+                        // 빈 상태 표시 (기본 학생들에 대한 빈 항목들)
+                        return DEFAULT_STUDENTS.map((studentName, index) => (
+                          <div
+                            key={`empty-${studentName}-${index}`}
+                            style={{
+                              padding: '16px',
+                              marginBottom: '12px',
+                              backgroundColor: '#f8f9fa',
+                              borderRadius: '8px',
+                              border: '1px solid #e8eaed',
+                              opacity: 0.6
+                            }}
+                          >
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                              <div>
+                                <h4 style={{ margin: '0 0 8px 0', color: '#333' }}>
+                                  👤 {studentName}
+                                </h4>
+                                <p style={{ margin: '0 0 8px 0', fontSize: '14px', color: '#999' }}>
+                                  📅 날짜: {selectedDateFilter ? new Date(selectedDateFilter).toLocaleDateString('ko-KR') : '오늘'}
+                                </p>
+                                <p style={{ margin: '0', fontSize: '14px', lineHeight: '1.5', color: '#999', fontStyle: 'italic' }}>
+                                  📝 학습일지가 작성되지 않았습니다
+                                </p>
+                              </div>
+                              <div style={{ display: 'flex', gap: '8px' }}>
+                                <span style={{
+                                  padding: '4px 8px',
+                                  borderRadius: '4px',
+                                  fontSize: '12px',
+                                  backgroundColor: '#e0e0e0',
+                                  color: '#999'
+                                }}>
+                                  이해도: -
+                                </span>
+                                <span style={{
+                                  padding: '4px 8px',
+                                  borderRadius: '4px',
+                                  fontSize: '12px',
+                                  backgroundColor: '#e0e0e0',
+                                  color: '#999'
+                                }}>
+                                  만족도: -
+                                </span>
+                              </div>
                             </div>
-                            <h3 style={{ color: '#333', marginBottom: '8px' }}>
-                              조건에 맞는 학습일지가 없습니다
-                            </h3>
-                            <p style={{ color: '#666', fontSize: '14px' }}>
-                              필터 조건을 변경해보세요.
-                            </p>
                           </div>
-                        );
+                        ));
                       }
 
                       return filteredData.map((entry, index) => (
