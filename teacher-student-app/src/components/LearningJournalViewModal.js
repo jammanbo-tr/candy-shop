@@ -4,6 +4,9 @@ import { db } from '../firebase';
 
 const PERIODS = ['1교시', '2교시', '3교시', '4교시', '5교시', '6교시'];
 
+// 기본 학생 목록 (실제 환경에서는 다른 소스에서 가져와야 할 수도 있음)
+const DEFAULT_STUDENTS = ['김규민', '김범준', '김성준'];
+
 const LearningJournalViewModal = ({ isOpen, onClose, selectedDate, refreshData }) => {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -457,30 +460,26 @@ const LearningJournalViewModal = ({ isOpen, onClose, selectedDate, refreshData }
 
                       // 학생별로 데이터 그룹화
                       const studentData = {};
+                      
+                      // 데이터에서 발견된 학생들
+                      const studentsFromData = [...new Set(filteredData.map(entry => entry.studentName))];
+                      
+                      // 기본 학생 목록과 데이터에서 발견된 학생들을 합치기
+                      const allStudents = [...new Set([...DEFAULT_STUDENTS, ...studentsFromData])].sort();
+                      
+                      // 모든 학생에 대해 빈 구조 초기화
+                      allStudents.forEach(studentName => {
+                        studentData[studentName] = {};
+                      });
+                      
+                      // 실제 데이터 채우기
                       filteredData.forEach(entry => {
-                        if (!studentData[entry.studentName]) {
-                          studentData[entry.studentName] = {};
+                        if (studentData[entry.studentName]) {
+                          studentData[entry.studentName][entry.period] = entry;
                         }
-                        studentData[entry.studentName][entry.period] = entry;
                       });
 
-                      const studentNames = Object.keys(studentData).sort();
-
-                      if (studentNames.length === 0) {
-                        return (
-                          <div style={{ textAlign: 'center', padding: '40px', color: '#666' }}>
-                            <div style={{ marginBottom: '16px' }}>
-                              <img src="/lv2.png" alt="journal" style={{ width: '48px', height: '48px' }} />
-                            </div>
-                            <h3 style={{ color: '#333', marginBottom: '8px' }}>
-                              조건에 맞는 학습일지가 없습니다
-                            </h3>
-                            <p style={{ color: '#666', fontSize: '14px' }}>
-                              필터 조건을 변경해보세요.
-                            </p>
-                          </div>
-                        );
-                      }
+                      const studentNames = allStudents;
 
                       return (
                         <table style={{
@@ -763,7 +762,7 @@ const LearningJournalViewModal = ({ isOpen, onClose, selectedDate, refreshData }
                 )}
 
                 {/* 교시별 평균 분석 섹션 */}
-                {data.length > 0 && (
+                {(
                   <div style={{ marginTop: '32px' }}>
                     <h3 style={{
                       fontSize: '18px',
@@ -936,7 +935,7 @@ const LearningJournalViewModal = ({ isOpen, onClose, selectedDate, refreshData }
                 )}
 
                 {/* 통계 요약 섹션 */}
-                {data.length > 0 && (
+                {(
                   <div style={{ marginTop: '32px' }}>
                     <h3 style={{
                       fontSize: '18px',
