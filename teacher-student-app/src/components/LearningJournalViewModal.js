@@ -374,6 +374,19 @@ const LearningJournalViewModal = ({ isOpen, onClose, selectedDate, refreshData }
 
   return (
     <>
+      <style>{`
+        @keyframes learningJournalBorder {
+          0% { border-color: #ff4444; }
+          25% { border-color: #ff8844; }
+          50% { border-color: #ffdd44; }
+          75% { border-color: #ff6b9d; }
+          100% { border-color: #ff4444; }
+        }
+        .learning-journal-modal {
+          animation: learningJournalBorder 3s infinite;
+          border: 3px solid #ff4444;
+        }
+      `}</style>
       <div style={{
         position: 'fixed',
         top: 0,
@@ -386,7 +399,7 @@ const LearningJournalViewModal = ({ isOpen, onClose, selectedDate, refreshData }
         justifyContent: 'center',
         zIndex: 10000
       }}>
-        <div style={{
+        <div className="learning-journal-modal" style={{
           backgroundColor: 'white',
           borderRadius: '12px',
           maxWidth: '98vw',

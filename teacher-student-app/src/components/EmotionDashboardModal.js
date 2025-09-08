@@ -102,6 +102,27 @@ const EmotionDashboardModal = ({ isOpen, onClose, students }) => {
   const [hoveredStudent, setHoveredStudent] = useState(null);
   const [tooltipPosition, setTooltipPosition] = useState({ x: 0, y: 0 });
 
+  // 무지개 테두리 애니메이션을 위한 글로벌 스타일
+  useEffect(() => {
+    if (!document.head.querySelector('[data-emotion-dashboard-styles]')) {
+      const rainbowBorderStyle = document.createElement('style');
+      rainbowBorderStyle.textContent = `
+        @keyframes rainbowBorder {
+          0% { border-color: #ff0000; }
+          14% { border-color: #ff8000; }
+          28% { border-color: #ffff00; }
+          42% { border-color: #80ff00; }
+          57% { border-color: #00ff00; }
+          71% { border-color: #00ff80; }
+          85% { border-color: #0080ff; }
+          100% { border-color: #ff0000; }
+        }
+      `;
+      rainbowBorderStyle.setAttribute('data-emotion-dashboard-styles', '');
+      document.head.appendChild(rainbowBorderStyle);
+    }
+  }, []);
+
   useEffect(() => {
     if (isOpen) {
       // 한국 시간 기준으로 날짜 계산 (EmotionAttendanceModal과 동일하게)
@@ -1366,7 +1387,9 @@ ${clusterInfo}
           overflow: 'visible',
           pointerEvents: 'auto',
           zIndex: 10000,
-          position: 'relative'
+          position: 'relative',
+          border: '3px solid #ff0000',
+          animation: 'rainbowBorder 4s infinite'
         },
         '& .MuiBackdrop-root': {
           zIndex: 9998,
