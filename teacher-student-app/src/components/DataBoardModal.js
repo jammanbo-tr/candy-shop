@@ -92,20 +92,22 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시' }) => {
     const studentData = studentsData[journal.studentName];
     const studentLevel = studentData?.level || 1;
     
+    console.log(`Student: ${journal.studentName}, Level: ${studentLevel}, Data:`, studentData);
+    
     return (
       <div style={{
         background: 'white',
-        borderRadius: '20px',
-        padding: '24px',
-        margin: '15px',
-        minWidth: '350px',
-        maxWidth: '400px',
-        boxShadow: '0 8px 24px rgba(0, 0, 0, 0.12)',
+        borderRadius: '17px',
+        padding: '17px',
+        margin: '0',
+        width: '100%',
+        boxShadow: '0 7px 20px rgba(0, 0, 0, 0.12)',
         border: '2px solid #e8eaed',
         transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
         cursor: 'pointer',
         position: 'relative',
-        overflow: 'hidden'
+        overflow: 'hidden',
+        fontSize: '14px'
       }}
       onMouseOver={(e) => {
         e.currentTarget.style.transform = 'translateY(-8px) scale(1.05)';
@@ -134,18 +136,18 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시' }) => {
         <div style={{
           display: 'flex',
           alignItems: 'center',
-          marginBottom: '20px',
+          marginBottom: '17px',
           position: 'relative',
           zIndex: 1
         }}>
           {/* 레벨 이미지 */}
           <div style={{
-            width: '50px',
-            height: '50px',
-            marginRight: '16px',
-            borderRadius: '12px',
+            width: '42px',
+            height: '42px',
+            marginRight: '14px',
+            borderRadius: '10px',
             overflow: 'hidden',
-            boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+            boxShadow: '0 3px 10px rgba(0,0,0,0.15)',
             border: '2px solid #fff'
           }}>
             <img 
@@ -166,30 +168,30 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시' }) => {
           <div style={{ flex: 1 }}>
             <h3 style={{
               margin: 0,
-              fontSize: '20px',
+              fontSize: '17px',
               fontWeight: 'bold',
               color: '#2c3e50',
-              marginBottom: '4px'
+              marginBottom: '3px'
             }}>
               {journal.studentName}
             </h3>
             <div style={{
               display: 'flex',
               alignItems: 'center',
-              gap: '8px'
+              gap: '7px'
             }}>
               <span style={{
-                fontSize: '12px',
+                fontSize: '10px',
                 color: '#666',
                 fontWeight: '500',
                 background: '#f5f5f5',
-                padding: '2px 8px',
-                borderRadius: '10px'
+                padding: '2px 7px',
+                borderRadius: '8px'
               }}>
                 Lv.{studentLevel}
               </span>
               <span style={{
-                fontSize: '12px',
+                fontSize: '10px',
                 color: '#666',
                 fontWeight: '500'
               }}>
@@ -207,32 +209,32 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시' }) => {
           {/* 핵심 키워드 */}
           {journal.keyword && (
             <div style={{
-              marginBottom: '16px',
-              padding: '14px 16px',
+              marginBottom: '14px',
+              padding: '12px 14px',
               backgroundColor: 'rgba(255, 152, 0, 0.08)',
-              borderRadius: '12px',
-              borderLeft: '4px solid #ff9800',
-              boxShadow: '0 2px 8px rgba(255, 152, 0, 0.1)'
+              borderRadius: '10px',
+              borderLeft: '3px solid #ff9800',
+              boxShadow: '0 2px 7px rgba(255, 152, 0, 0.1)'
             }}>
               <h4 style={{
-                margin: '0 0 8px 0',
-                fontSize: '13px',
+                margin: '0 0 7px 0',
+                fontSize: '11px',
                 color: '#f57c00',
                 fontWeight: 'bold',
                 textTransform: 'uppercase',
-                letterSpacing: '0.5px',
+                letterSpacing: '0.4px',
                 display: 'flex',
                 alignItems: 'center',
-                gap: '6px'
+                gap: '5px'
               }}>
                 🔑 핵심 키워드
               </h4>
               <p style={{
                 margin: 0,
-                fontSize: '16px',
+                fontSize: '14px',
                 fontWeight: 'bold',
                 color: '#e65100',
-                lineHeight: '1.4'
+                lineHeight: '1.3'
               }}>
                 {journal.keyword}
               </p>
@@ -242,31 +244,31 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시' }) => {
           {/* 학습 내용 */}
           {journal.content && (
             <div style={{
-              marginBottom: '16px',
-              padding: '14px 16px',
+              marginBottom: '14px',
+              padding: '12px 14px',
               backgroundColor: 'rgba(33, 150, 243, 0.08)',
-              borderRadius: '12px',
-              borderLeft: '4px solid #2196f3',
-              boxShadow: '0 2px 8px rgba(33, 150, 243, 0.1)'
+              borderRadius: '10px',
+              borderLeft: '3px solid #2196f3',
+              boxShadow: '0 2px 7px rgba(33, 150, 243, 0.1)'
             }}>
               <h4 style={{
-                margin: '0 0 8px 0',
-                fontSize: '13px',
+                margin: '0 0 7px 0',
+                fontSize: '11px',
                 color: '#1976d2',
                 fontWeight: 'bold',
                 textTransform: 'uppercase',
-                letterSpacing: '0.5px',
+                letterSpacing: '0.4px',
                 display: 'flex',
                 alignItems: 'center',
-                gap: '6px'
+                gap: '5px'
               }}>
                 📚 학습 내용
               </h4>
               <p style={{
                 margin: 0,
-                fontSize: '15px',
+                fontSize: '13px',
                 color: '#37474f',
-                lineHeight: '1.5',
+                lineHeight: '1.4',
                 wordBreak: 'keep-all'
               }}>
                 {journal.content}
@@ -279,6 +281,8 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시' }) => {
   };
 
   console.log('DataBoardModal isOpen:', isOpen, 'defaultPeriod:', defaultPeriod);
+  console.log('Current studentsData:', studentsData);
+  console.log('Current journalData:', journalData);
   
   if (!isOpen) return null;
 
@@ -314,8 +318,8 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시' }) => {
           borderRadius: '12px',
           maxWidth: '98vw',
           maxHeight: '95vh',
-          width: '1400px',
-          height: '85vh',
+          width: '1680px',
+          height: '102vh',
           overflow: 'hidden',
           boxShadow: '0 20px 40px rgba(0, 0, 0, 0.3)'
         }}>
@@ -325,9 +329,10 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시' }) => {
             borderBottom: '1px solid #e8eaed',
             display: 'flex',
             justifyContent: 'space-between',
-            alignItems: 'center'
+            alignItems: 'center',
+            position: 'relative'
           }}>
-            <div>
+            <div style={{ flex: 1, textAlign: 'center' }}>
               <h1 style={{
                 margin: 0,
                 fontSize: '28px',
@@ -335,7 +340,7 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시' }) => {
                 color: '#333',
                 marginBottom: '8px'
               }}>
-                📊 데이터 전광판
+                데이터 전광판
               </h1>
               <p style={{
                 margin: 0,
@@ -346,8 +351,15 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시' }) => {
               </p>
             </div>
 
-            {/* 교시 선택 드롭다운 */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+            {/* 교시 선택 드롭다운과 닫기 버튼 */}
+            <div style={{ 
+              position: 'absolute', 
+              right: '24px', 
+              top: '24px',
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: '16px' 
+            }}>
               <select
                 value={selectedPeriod}
                 onChange={(e) => setSelectedPeriod(e.target.value)}
@@ -390,7 +402,7 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시' }) => {
           {/* 컨텐츠 영역 */}
           <div style={{
             padding: '24px',
-            height: 'calc(85vh - 120px)',
+            height: 'calc(102vh - 120px)',
             overflow: 'auto'
           }}>
             {loading ? (
@@ -423,10 +435,10 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시' }) => {
               </div>
             ) : (
               <div style={{
-                display: 'flex',
-                flexWrap: 'wrap',
-                justifyContent: 'flex-start',
-                gap: '0px'
+                display: 'grid',
+                gridTemplateColumns: 'repeat(3, 1fr)',
+                gap: '24px',
+                padding: '0 12px'
               }}>
                 {journalData.map(journal => (
                   <JournalCard key={journal.id} journal={journal} />
