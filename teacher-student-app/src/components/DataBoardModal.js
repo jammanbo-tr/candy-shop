@@ -37,14 +37,14 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시' }) => {
     return koreaNow.toISOString().split('T')[0];
   };
 
-  // 카드 초기 위치 설정 (이전 크기로 복원)
+  // 카드 초기 위치 설정 (간격 늘림)
   const getInitialPosition = (index) => {
     const cardsPerRow = 3;
-    const cardWidth = 360; // 414에서 360으로 복원
-    const cardHeight = 360; // 414에서 360으로 복원
-    const gap = 20;
-    const startX = 40;
-    const startY = 40;
+    const cardWidth = 360;
+    const cardHeight = 360;
+    const gap = 50; // 20에서 50으로 증가 - 카드 간격 늘림
+    const startX = 60; // 40에서 60으로 증가
+    const startY = 60; // 40에서 60으로 증가
     
     const row = Math.floor(index / cardsPerRow);
     const col = index % cardsPerRow;
@@ -73,7 +73,7 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시' }) => {
     return null;
   };
 
-  // 추천 데이터 로딩
+  // 추천 데이터 로딩 (실시간 업데이트 보장)
   const loadRecommendations = async () => {
     if (!isOpen) return;
     
@@ -81,11 +81,14 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시' }) => {
       const today = getKoreaDate();
       const recommendationsRef = doc(db, `recommendations/${today}`);
       const unsubscribe = onSnapshot(recommendationsRef, (docSnap) => {
+        console.log('Recommendations updated:', docSnap.data());
         if (docSnap.exists()) {
           setRecommendations(docSnap.data() || {});
         } else {
           setRecommendations({});
         }
+      }, (error) => {
+        console.error('Error in recommendations listener:', error);
       });
       
       return unsubscribe;
@@ -95,7 +98,7 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시' }) => {
     }
   };
 
-  // 추천하기 함수
+  // 추천하기 함수 (중복 추천 방지 및 오류 수정)
   const handleRecommend = async (journalId, studentName) => {
     const currentUser = '선생님'; // 실제로는 현재 로그인된 사용자 정보를 사용
     
@@ -106,19 +109,41 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시' }) => {
       const currentRecs = recommendations[journalId] || [];
       const hasRecommended = currentRecs.includes(currentUser);
       
+      console.log('Before recommendation:', {
+        journalId,
+        currentRecs,
+        hasRecommended,
+        currentUser
+      });
+      
       if (hasRecommended) {
         // 추천 취소
         await updateDoc(recommendationsRef, {
           [journalId]: arrayRemove(currentUser)
         });
+        console.log('Recommendation removed');
       } else {
-        // 추천 추가
+        // 추천 추가 - 문서가 존재하지 않을 수 있으므로 setDoc 사용
         await setDoc(recommendationsRef, {
           [journalId]: arrayUnion(currentUser)
         }, { merge: true });
+        console.log('Recommendation added');
       }
     } catch (error) {
       console.error('Error updating recommendation:', error);
+      // Firebase 문서가 존재하지 않는 경우 새로 생성
+      if (error.code === 'not-found') {
+        try {
+          const today = getKoreaDate();
+          const recommendationsRef = doc(db, `recommendations/${today}`);
+          await setDoc(recommendationsRef, {
+            [journalId]: [currentUser]
+          });
+          console.log('New recommendation document created');
+        } catch (createError) {
+          console.error('Error creating recommendation document:', createError);
+        }
+      }
     }
   };
 
