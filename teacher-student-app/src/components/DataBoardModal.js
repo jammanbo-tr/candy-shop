@@ -97,11 +97,11 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시' }) => {
     return (
       <div style={{
         background: 'white',
-        borderRadius: '10px',
-        padding: '10px',
-        margin: '0',
-        width: '70%',
-        maxWidth: '260px',
+        borderRadius: '12px',
+        padding: '16px',
+        margin: '0 auto',
+        width: '300px',
+        height: '300px',
         boxShadow: '0 4px 12px rgba(0, 0, 0, 0.12)',
         border: '2px solid #e8eaed',
         transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
@@ -109,7 +109,8 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시' }) => {
         position: 'relative',
         overflow: 'hidden',
         fontSize: '16px',
-        minHeight: '150px'
+        display: 'flex',
+        flexDirection: 'column'
       }}
       onMouseOver={(e) => {
         e.currentTarget.style.transform = 'translateY(-8px) scale(1.05)';
@@ -206,7 +207,11 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시' }) => {
         {/* 학습일지 내용 */}
         <div style={{
           position: 'relative',
-          zIndex: 1
+          zIndex: 1,
+          flex: 1,
+          overflow: 'hidden',
+          display: 'flex',
+          flexDirection: 'column'
         }}>
           {/* 핵심 키워드 */}
           {journal.keyword && (
@@ -251,7 +256,9 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시' }) => {
               backgroundColor: 'rgba(33, 150, 243, 0.08)',
               borderRadius: '8px',
               borderLeft: '3px solid #2196f3',
-              boxShadow: '0 2px 6px rgba(33, 150, 243, 0.1)'
+              boxShadow: '0 2px 6px rgba(33, 150, 243, 0.1)',
+              flex: 1,
+              overflow: 'hidden'
             }}>
               <h4 style={{
                 margin: '0 0 6px 0',
@@ -268,10 +275,12 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시' }) => {
               </h4>
               <p style={{
                 margin: 0,
-                fontSize: '16px',
+                fontSize: '14px',
                 color: '#37474f',
                 lineHeight: '1.3',
-                wordBreak: 'keep-all'
+                wordBreak: 'keep-all',
+                overflow: 'auto',
+                maxHeight: '120px'
               }}>
                 {journal.content}
               </p>
@@ -439,8 +448,9 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시' }) => {
               <div style={{
                 display: 'grid',
                 gridTemplateColumns: 'repeat(3, 1fr)',
-                gap: '12px',
-                padding: '0 6px'
+                gap: '20px',
+                padding: '0 20px',
+                justifyItems: 'center'
               }}>
                 {journalData.map(journal => (
                   <JournalCard key={journal.id} journal={journal} />
