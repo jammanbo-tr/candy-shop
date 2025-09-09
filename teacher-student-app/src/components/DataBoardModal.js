@@ -97,17 +97,19 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시' }) => {
     return (
       <div style={{
         background: 'white',
-        borderRadius: '17px',
-        padding: '17px',
+        borderRadius: '12px',
+        padding: '12px',
         margin: '0',
-        width: '100%',
-        boxShadow: '0 7px 20px rgba(0, 0, 0, 0.12)',
+        width: '85%',
+        maxWidth: '320px',
+        boxShadow: '0 5px 14px rgba(0, 0, 0, 0.12)',
         border: '2px solid #e8eaed',
         transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
         cursor: 'pointer',
         position: 'relative',
         overflow: 'hidden',
-        fontSize: '14px'
+        fontSize: '14px',
+        minHeight: '180px'
       }}
       onMouseOver={(e) => {
         e.currentTarget.style.transform = 'translateY(-8px) scale(1.05)';
@@ -123,10 +125,10 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시' }) => {
         {/* 배경 장식 */}
         <div style={{
           position: 'absolute',
-          top: '-30px',
-          right: '-30px',
-          width: '100px',
-          height: '100px',
+          top: '-25px',
+          right: '-25px',
+          width: '80px',
+          height: '80px',
           background: `linear-gradient(135deg, ${studentLevel <= 3 ? '#4caf50' : studentLevel <= 6 ? '#ff9800' : studentLevel <= 9 ? '#e91e63' : '#9c27b0'}, ${studentLevel <= 3 ? '#8bc34a' : studentLevel <= 6 ? '#ffc107' : studentLevel <= 9 ? '#f06292' : '#ba68c8'})`,
           borderRadius: '50%',
           opacity: 0.1
@@ -136,7 +138,7 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시' }) => {
         <div style={{
           display: 'flex',
           alignItems: 'center',
-          marginBottom: '17px',
+          marginBottom: '14px',
           position: 'relative',
           zIndex: 1
         }}>
@@ -145,9 +147,9 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시' }) => {
             width: '42px',
             height: '42px',
             marginRight: '14px',
-            borderRadius: '10px',
+            borderRadius: '8px',
             overflow: 'hidden',
-            boxShadow: '0 3px 10px rgba(0,0,0,0.15)',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
             border: '2px solid #fff'
           }}>
             <img 
@@ -168,30 +170,30 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시' }) => {
           <div style={{ flex: 1 }}>
             <h3 style={{
               margin: 0,
-              fontSize: '17px',
+              fontSize: '16px',
               fontWeight: 'bold',
               color: '#2c3e50',
-              marginBottom: '3px'
+              marginBottom: '2px'
             }}>
               {journal.studentName}
             </h3>
             <div style={{
               display: 'flex',
               alignItems: 'center',
-              gap: '7px'
+              gap: '6px'
             }}>
               <span style={{
-                fontSize: '10px',
+                fontSize: '11px',
                 color: '#666',
                 fontWeight: '500',
                 background: '#f5f5f5',
-                padding: '2px 7px',
-                borderRadius: '8px'
+                padding: '2px 8px',
+                borderRadius: '6px'
               }}>
                 Lv.{studentLevel}
               </span>
               <span style={{
-                fontSize: '10px',
+                fontSize: '11px',
                 color: '#666',
                 fontWeight: '500'
               }}>
@@ -209,23 +211,23 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시' }) => {
           {/* 핵심 키워드 */}
           {journal.keyword && (
             <div style={{
-              marginBottom: '14px',
-              padding: '12px 14px',
+              marginBottom: '12px',
+              padding: '10px 12px',
               backgroundColor: 'rgba(255, 152, 0, 0.08)',
-              borderRadius: '10px',
+              borderRadius: '8px',
               borderLeft: '3px solid #ff9800',
-              boxShadow: '0 2px 7px rgba(255, 152, 0, 0.1)'
+              boxShadow: '0 2px 6px rgba(255, 152, 0, 0.1)'
             }}>
               <h4 style={{
-                margin: '0 0 7px 0',
+                margin: '0 0 6px 0',
                 fontSize: '11px',
                 color: '#f57c00',
                 fontWeight: 'bold',
                 textTransform: 'uppercase',
-                letterSpacing: '0.4px',
+                letterSpacing: '0.3px',
                 display: 'flex',
                 alignItems: 'center',
-                gap: '5px'
+                gap: '4px'
               }}>
                 🔑 핵심 키워드
               </h4>
@@ -234,7 +236,7 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시' }) => {
                 fontSize: '14px',
                 fontWeight: 'bold',
                 color: '#e65100',
-                lineHeight: '1.3'
+                lineHeight: '1.2'
               }}>
                 {journal.keyword}
               </p>
@@ -244,23 +246,23 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시' }) => {
           {/* 학습 내용 */}
           {journal.content && (
             <div style={{
-              marginBottom: '14px',
-              padding: '12px 14px',
+              marginBottom: '12px',
+              padding: '10px 12px',
               backgroundColor: 'rgba(33, 150, 243, 0.08)',
-              borderRadius: '10px',
+              borderRadius: '8px',
               borderLeft: '3px solid #2196f3',
-              boxShadow: '0 2px 7px rgba(33, 150, 243, 0.1)'
+              boxShadow: '0 2px 6px rgba(33, 150, 243, 0.1)'
             }}>
               <h4 style={{
-                margin: '0 0 7px 0',
+                margin: '0 0 6px 0',
                 fontSize: '11px',
                 color: '#1976d2',
                 fontWeight: 'bold',
                 textTransform: 'uppercase',
-                letterSpacing: '0.4px',
+                letterSpacing: '0.3px',
                 display: 'flex',
                 alignItems: 'center',
-                gap: '5px'
+                gap: '4px'
               }}>
                 📚 학습 내용
               </h4>
@@ -268,7 +270,7 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시' }) => {
                 margin: 0,
                 fontSize: '13px',
                 color: '#37474f',
-                lineHeight: '1.4',
+                lineHeight: '1.3',
                 wordBreak: 'keep-all'
               }}>
                 {journal.content}
@@ -437,8 +439,8 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시' }) => {
               <div style={{
                 display: 'grid',
                 gridTemplateColumns: 'repeat(3, 1fr)',
-                gap: '24px',
-                padding: '0 12px'
+                gap: '16px',
+                padding: '0 8px'
               }}>
                 {journalData.map(journal => (
                   <JournalCard key={journal.id} journal={journal} />
