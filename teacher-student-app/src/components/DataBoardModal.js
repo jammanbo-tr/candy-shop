@@ -210,9 +210,7 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시' }) => {
     
     console.log(`Student: ${journal.studentName}, Level: ${studentLevel}, Data:`, studentData);
     
-    // 드래그 지연 시작을 위한 변수들
-    let dragTimeout = null;
-    let isDragActive = false;
+    // 드래그 기능
     
     const handleMouseDown = (e) => {
       // 추천 버튼 클릭이면 드래그 방지
@@ -224,65 +222,36 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시' }) => {
       const offsetX = e.clientX - rect.left;
       const offsetY = e.clientY - rect.top;
       
-      // 500ms 뒤에 드래그 활성화 (길게 눌러야 드래그)
-      dragTimeout = setTimeout(() => {
-        isDragActive = true;
-        setDraggedCard({ id: journal.id, offsetX, offsetY });
-        
-        // 드래그 시각적 피드백
-        e.currentTarget.style.transform = 'scale(1.05)';
-        e.currentTarget.style.zIndex = '1000';
-        e.currentTarget.style.boxShadow = '0 12px 24px rgba(0, 0, 0, 0.3)';
-        
-        const handleMouseMove = (e) => {
-          if (!isDragActive) return;
-          
-          const containerRect = document.querySelector('.data-board-container').getBoundingClientRect();
-          const cardWidth = 360;
-          const cardHeight = 360;
-          const newX = e.clientX - containerRect.left - offsetX;
-          const newY = e.clientY - containerRect.top - offsetY;
-          
-          // 컨테이너 경계 내에서만 이동 가능하도록 제한
-          const maxX = containerRect.width - cardWidth;
-          const maxY = containerRect.height - cardHeight;
-          
-          setCardPositions(prev => ({
-            ...prev,
-            [journal.id]: { 
-              x: Math.max(0, Math.min(newX, maxX)), 
-              y: Math.max(0, Math.min(newY, maxY)) 
-            }
-          }));
-        };
-        
-        const handleMouseUp = () => {
-          isDragActive = false;
-          setDraggedCard(null);
-          
-          // 드래그 종료 시 스타일 초기화
-          e.currentTarget.style.transform = 'scale(1)';
-          e.currentTarget.style.zIndex = '1';
-          e.currentTarget.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.12)';
-          
-          document.removeEventListener('mousemove', handleMouseMove);
-          document.removeEventListener('mouseup', handleMouseUp);
-        };
-        
-        document.addEventListener('mousemove', handleMouseMove);
-        document.addEventListener('mouseup', handleMouseUp);
-      }, 500); // 500ms 지연
+      setDraggedCard({ id: journal.id, offsetX, offsetY });
       
-      // 마우스를 떼면 드래그 취소
-      const handleMouseUpEarly = () => {
-        if (dragTimeout) {
-          clearTimeout(dragTimeout);
-          dragTimeout = null;
-        }
-        document.removeEventListener('mouseup', handleMouseUpEarly);
+      const handleMouseMove = (e) => {
+        const containerRect = document.querySelector('.data-board-container').getBoundingClientRect();
+        const cardWidth = 360;
+        const cardHeight = 360;
+        const newX = e.clientX - containerRect.left - offsetX;
+        const newY = e.clientY - containerRect.top - offsetY;
+        
+        // 컨테이너 경계 내에서만 이동 가능하도록 제한 (고정 크기 사용)
+        const maxX = 1400 - cardWidth;
+        const maxY = 1000 - cardHeight;
+        
+        setCardPositions(prev => ({
+          ...prev,
+          [journal.id]: { 
+            x: Math.max(0, Math.min(newX, maxX)), 
+            y: Math.max(0, Math.min(newY, maxY)) 
+          }
+        }));
       };
       
-      document.addEventListener('mouseup', handleMouseUpEarly);
+      const handleMouseUp = () => {
+        setDraggedCard(null);
+        document.removeEventListener('mousemove', handleMouseMove);
+        document.removeEventListener('mouseup', handleMouseUp);
+      };
+      
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
     };
     
     return (
@@ -296,9 +265,13 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시' }) => {
           boxShadow: '0 4px 12px rgba(0, 0, 0, 0.12)',
           border: (() => {
             const recCount = recommendations[journal.id]?.length || 0;
-            if (recCount >= 3) return '3px solid #ff6b35'; // 주황색 - 많은 추천
-            if (recCount >= 2) return '3px solid #4ecdc4'; // 청록색 - 보통 추천  
-            if (recCount >= 1) return '3px solid #95e1d3'; // 연한 청록색 - 적은 추천
+            // 추천 수에 따라 테두리 두께 조절
+            const borderWidth = Math.min(2 + recCount * 1, 8); // 최대 8px까지
+            if (recCount >= 5) return `${borderWidth}px solid #ff3d00`; // 빨간색 - 매우 많은 추천
+            if (recCount >= 4) return `${borderWidth}px solid #ff6b35`; // 주황색 - 많은 추천
+            if (recCount >= 3) return `${borderWidth}px solid #ff9800`; // 노랑색
+            if (recCount >= 2) return `${borderWidth}px solid #4ecdc4`; // 청록색
+            if (recCount >= 1) return `${borderWidth}px solid #95e1d3`; // 연한 청록색
             return '2px solid #e8eaed'; // 기본색
           })(),
           transition: draggedCard?.id === journal.id ? 'none' : 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
@@ -429,6 +402,7 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시' }) => {
             }}
             onClick={(e) => {
               e.stopPropagation();
+              e.preventDefault();
               handleRecommend(journal.id, journal.studentName);
             }}
             style={{
@@ -663,7 +637,9 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시' }) => {
           <div style={{
             padding: '24px',
             height: 'calc(102vh - 120px)',
-            overflow: 'auto'
+            overflow: 'auto', // 스크롤바 복구
+            overflowX: 'auto',
+            overflowY: 'auto'
           }}>
             {loading ? (
               <div style={{
@@ -698,9 +674,10 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시' }) => {
                 className="data-board-container"
                 style={{
                   position: 'relative',
-                  width: '100%',
-                  height: 'calc(102vh - 200px)',
-                  overflow: 'hidden'
+                  width: '1400px', // 고정 너비로 스크롤 가능
+                  height: '1000px', // 고정 높이로 스크롤 가능
+                  minWidth: '1400px',
+                  minHeight: '1000px'
                 }}
               >
                 {journalData.map((journal, index) => (
