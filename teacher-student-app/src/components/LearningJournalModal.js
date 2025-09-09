@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../firebase';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import DataBoardModal from './DataBoardModal';
 
 const STUDENTS = [
   '김규민', '김범준', '김성준', '김수겸', '김주원', '문기훈', '박동하', '백주원',
@@ -14,6 +15,7 @@ const LearningJournalModal = ({ isOpen, onClose, studentName = '' }) => {
   const [currentStep, setCurrentStep] = useState(0);
   const [loading, setLoading] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
+  const [showDataBoard, setShowDataBoard] = useState(false);
   const [formData, setFormData] = useState({
     studentName: studentName || '',
     period: '',
@@ -86,6 +88,7 @@ const LearningJournalModal = ({ isOpen, onClose, studentName = '' }) => {
     setCurrentStep(0);
     setLoading(false);
     setShowSuccess(false);
+    setShowDataBoard(false);
     setFormData({
       studentName: studentName || '',
       period: '',
@@ -98,6 +101,7 @@ const LearningJournalModal = ({ isOpen, onClose, studentName = '' }) => {
 
   const handleClose = () => {
     resetModal();
+    setShowDataBoard(false);
     onClose();
   };
 
@@ -138,9 +142,7 @@ const LearningJournalModal = ({ isOpen, onClose, studentName = '' }) => {
       });
 
       setShowSuccess(true);
-      setTimeout(() => {
-        handleClose();
-      }, 2000);
+      // 자동 닫기 제거하여 사용자가 데이터 전광판을 볼 수 있도록 함
     } catch (error) {
       console.error('Error submitting entry:', error);
       alert('제출 중 오류가 발생했습니다: ' + error.message);
@@ -171,7 +173,7 @@ const LearningJournalModal = ({ isOpen, onClose, studentName = '' }) => {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        zIndex: 1000,
+        zIndex: 99997,
         padding: '20px'
       }}>
         <div style={{
@@ -213,29 +215,57 @@ const LearningJournalModal = ({ isOpen, onClose, studentName = '' }) => {
           }}>
             학습일지가 성공적으로 제출되었어요!
           </p>
-          <button
-            onClick={() => {
-              // 데이터 전광판 페이지로 이동 (선택된 교시와 함께)
-              const selectedPeriod = formData.period;
-              window.open(`/data-board?period=${selectedPeriod}`, '_blank');
-            }}
-            style={{
-              backgroundColor: '#ff6b35',
-              color: 'white',
-              border: 'none',
-              borderRadius: '12px',
-              padding: '12px 24px',
-              fontSize: '16px',
-              fontWeight: 'bold',
-              cursor: 'pointer',
-              boxShadow: '0 4px 12px rgba(255, 107, 53, 0.3)',
-              transition: 'transform 0.2s ease',
-            }}
-            onMouseOver={(e) => e.target.style.transform = 'translateY(-2px)'}
-            onMouseOut={(e) => e.target.style.transform = 'translateY(0)'}
-          >
-            📊 데이터 전광판 입장하기
-          </button>
+          <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
+            <button
+              onClick={() => handleClose()}
+              style={{ 
+                background: '#f5f5f5', 
+                border: 'none', 
+                borderRadius: 999, 
+                padding: '12px 24px', 
+                boxShadow: '0 2px 8px rgba(0,0,0,0.1)', 
+                cursor: 'pointer', 
+                display: 'flex', 
+                alignItems: 'center', 
+                gap: 8,
+                fontSize: '16px',
+                transition: 'all 0.2s ease'
+              }}
+            >
+              <span style={{ fontWeight: 700, color: '#666', fontSize: 16 }}>닫기</span>
+            </button>
+            <button
+              onClick={() => {
+                console.log('데이터 전광판 버튼 클릭됨');
+                setShowDataBoard(true);
+                console.log('showDataBoard 상태:', true);
+              }}
+              style={{ 
+                background: '#fffde7', 
+                border: 'none', 
+                borderRadius: 999, 
+                padding: '12px 24px', 
+                boxShadow: '0 2px 8px #b2ebf240', 
+                cursor: 'pointer', 
+                display: 'flex', 
+                alignItems: 'center', 
+                gap: 8,
+                fontSize: '16px',
+                transition: 'all 0.2s ease'
+              }}
+              onMouseOver={(e) => {
+                e.target.style.transform = 'translateY(-2px)';
+                e.target.style.boxShadow = '0 4px 16px #b2ebf260';
+              }}
+              onMouseOut={(e) => {
+                e.target.style.transform = 'translateY(0)';
+                e.target.style.boxShadow = '0 2px 8px #b2ebf240';
+              }}
+            >
+              <span style={{ fontWeight: 700, color: '#1976d2', fontSize: 20, lineHeight: '1', display: 'flex', alignItems: 'center' }}>📊</span>
+              <span style={{ fontWeight: 700, color: '#1976d2', fontSize: 16 }}>데이터 전광판</span>
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -400,7 +430,7 @@ const LearningJournalModal = ({ isOpen, onClose, studentName = '' }) => {
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
-      zIndex: 9999,
+      zIndex: 99998,
       padding: '20px'
     }}>
       {/* 로딩 오버레이 */}
@@ -604,6 +634,12 @@ const LearningJournalModal = ({ isOpen, onClose, studentName = '' }) => {
           </div>
         </div>
       </div>
+
+      <DataBoardModal 
+        isOpen={showDataBoard} 
+        onClose={() => setShowDataBoard(false)}
+        defaultPeriod={formData.period}
+      />
 
       <style>
         {`
