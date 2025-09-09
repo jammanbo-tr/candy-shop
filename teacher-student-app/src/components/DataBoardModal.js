@@ -37,14 +37,14 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시' }) => {
     return koreaNow.toISOString().split('T')[0];
   };
 
-  // 카드 초기 위치 설정 (간격 늘림)
+  // 카드 초기 위치 설정 (간격 20% 추가 늘림)
   const getInitialPosition = (index) => {
     const cardsPerRow = 3;
     const cardWidth = 360;
     const cardHeight = 360;
-    const gap = 50; // 20에서 50으로 증가 - 카드 간격 늘림
-    const startX = 60; // 40에서 60으로 증가
-    const startY = 60; // 40에서 60으로 증가
+    const gap = 60; // 50에서 60으로 증가 (20% 추가)
+    const startX = 70; // 60에서 70으로 증가
+    const startY = 70; // 60에서 70으로 증가
     
     const row = Math.floor(index / cardsPerRow);
     const col = index % cardsPerRow;
@@ -210,41 +210,79 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시' }) => {
     
     console.log(`Student: ${journal.studentName}, Level: ${studentLevel}, Data:`, studentData);
     
+    // 드래그 지연 시작을 위한 변수들
+    let dragTimeout = null;
+    let isDragActive = false;
+    
     const handleMouseDown = (e) => {
+      // 추천 버튼 클릭이면 드래그 방지
+      if (e.target.closest('button')) {
+        return;
+      }
+      
       const rect = e.currentTarget.getBoundingClientRect();
       const offsetX = e.clientX - rect.left;
       const offsetY = e.clientY - rect.top;
       
-      setDraggedCard({ id: journal.id, offsetX, offsetY });
+      // 500ms 뒤에 드래그 활성화 (길게 눌러야 드래그)
+      dragTimeout = setTimeout(() => {
+        isDragActive = true;
+        setDraggedCard({ id: journal.id, offsetX, offsetY });
+        
+        // 드래그 시각적 피드백
+        e.currentTarget.style.transform = 'scale(1.05)';
+        e.currentTarget.style.zIndex = '1000';
+        e.currentTarget.style.boxShadow = '0 12px 24px rgba(0, 0, 0, 0.3)';
+        
+        const handleMouseMove = (e) => {
+          if (!isDragActive) return;
+          
+          const containerRect = document.querySelector('.data-board-container').getBoundingClientRect();
+          const cardWidth = 360;
+          const cardHeight = 360;
+          const newX = e.clientX - containerRect.left - offsetX;
+          const newY = e.clientY - containerRect.top - offsetY;
+          
+          // 컨테이너 경계 내에서만 이동 가능하도록 제한
+          const maxX = containerRect.width - cardWidth;
+          const maxY = containerRect.height - cardHeight;
+          
+          setCardPositions(prev => ({
+            ...prev,
+            [journal.id]: { 
+              x: Math.max(0, Math.min(newX, maxX)), 
+              y: Math.max(0, Math.min(newY, maxY)) 
+            }
+          }));
+        };
+        
+        const handleMouseUp = () => {
+          isDragActive = false;
+          setDraggedCard(null);
+          
+          // 드래그 종료 시 스타일 초기화
+          e.currentTarget.style.transform = 'scale(1)';
+          e.currentTarget.style.zIndex = '1';
+          e.currentTarget.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.12)';
+          
+          document.removeEventListener('mousemove', handleMouseMove);
+          document.removeEventListener('mouseup', handleMouseUp);
+        };
+        
+        document.addEventListener('mousemove', handleMouseMove);
+        document.addEventListener('mouseup', handleMouseUp);
+      }, 500); // 500ms 지연
       
-      const handleMouseMove = (e) => {
-        const containerRect = document.querySelector('.data-board-container').getBoundingClientRect();
-        const cardWidth = 360;
-        const cardHeight = 360;
-        const newX = e.clientX - containerRect.left - offsetX;
-        const newY = e.clientY - containerRect.top - offsetY;
-        
-        // 컨테이너 경계 내에서만 이동 가능하도록 제한
-        const maxX = containerRect.width - cardWidth;
-        const maxY = containerRect.height - cardHeight;
-        
-        setCardPositions(prev => ({
-          ...prev,
-          [journal.id]: { 
-            x: Math.max(0, Math.min(newX, maxX)), 
-            y: Math.max(0, Math.min(newY, maxY)) 
-          }
-        }));
+      // 마우스를 떼면 드래그 취소
+      const handleMouseUpEarly = () => {
+        if (dragTimeout) {
+          clearTimeout(dragTimeout);
+          dragTimeout = null;
+        }
+        document.removeEventListener('mouseup', handleMouseUpEarly);
       };
       
-      const handleMouseUp = () => {
-        setDraggedCard(null);
-        document.removeEventListener('mousemove', handleMouseMove);
-        document.removeEventListener('mouseup', handleMouseUp);
-      };
-      
-      document.addEventListener('mousemove', handleMouseMove);
-      document.addEventListener('mouseup', handleMouseUp);
+      document.addEventListener('mouseup', handleMouseUpEarly);
     };
     
     return (
@@ -386,6 +424,9 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시' }) => {
             {recommendations[journal.id]?.length || 0}
           </span>
           <button
+            onMouseDown={(e) => {
+              e.stopPropagation(); // 드래그 이벤트 방지
+            }}
             onClick={(e) => {
               e.stopPropagation();
               handleRecommend(journal.id, journal.studentName);
