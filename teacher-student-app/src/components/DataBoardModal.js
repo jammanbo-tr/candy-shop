@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../firebase';
-import { collection, query, where, onSnapshot } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, doc, getDoc } from 'firebase/firestore';
 
 const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시' }) => {
   const [selectedPeriod, setSelectedPeriod] = useState(defaultPeriod);
   const [journalData, setJournalData] = useState([]);
+  const [studentsData, setStudentsData] = useState({});
   const [loading, setLoading] = useState(true);
 
   const PERIODS = ['1교시', '2교시', '3교시', '4교시', '5교시', '6교시'];
@@ -33,6 +34,24 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시' }) => {
     return koreaNow.toISOString().split('T')[0];
   };
 
+  // 학생 데이터 로딩
+  const loadStudentData = async (studentName) => {
+    if (studentsData[studentName]) return studentsData[studentName];
+    
+    try {
+      const studentRef = doc(db, 'students', studentName);
+      const studentDoc = await getDoc(studentRef);
+      if (studentDoc.exists()) {
+        const data = studentDoc.data();
+        setStudentsData(prev => ({ ...prev, [studentName]: data }));
+        return data;
+      }
+    } catch (error) {
+      console.error('Error loading student data:', error);
+    }
+    return null;
+  };
+
   // 학습일지 데이터 실시간 로딩
   useEffect(() => {
     if (!isOpen) return;
@@ -41,11 +60,18 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시' }) => {
     const journalsRef = collection(db, `journals/${today}/entries`);
     const q = query(journalsRef, where('period', '==', selectedPeriod));
 
-    const unsubscribe = onSnapshot(q, (querySnapshot) => {
+    const unsubscribe = onSnapshot(q, async (querySnapshot) => {
       const data = [];
+      const promises = [];
+      
       querySnapshot.forEach((doc) => {
-        data.push({ id: doc.id, ...doc.data() });
+        const journalData = { id: doc.id, ...doc.data() };
+        data.push(journalData);
+        // 각 학생의 데이터도 미리 로드
+        promises.push(loadStudentData(journalData.studentName));
       });
+      
+      await Promise.all(promises);
       setJournalData(data);
       setLoading(false);
     });
@@ -63,87 +89,150 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시' }) => {
   // 학습일지 카드 컴포넌트
   const JournalCard = ({ journal }) => {
     const studentIcon = getStudentIcon(journal.studentName);
+    const studentData = studentsData[journal.studentName];
+    const studentLevel = studentData?.level || 1;
     
     return (
       <div style={{
         background: 'white',
-        borderRadius: '16px',
-        padding: '20px',
-        margin: '12px',
-        minWidth: '280px',
-        maxWidth: '320px',
+        borderRadius: '20px',
+        padding: '24px',
+        margin: '15px',
+        minWidth: '350px',
+        maxWidth: '400px',
         boxShadow: '0 8px 24px rgba(0, 0, 0, 0.12)',
-        border: '1px solid #e8eaed',
-        transition: 'all 0.2s ease',
+        border: '2px solid #e8eaed',
+        transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
         cursor: 'pointer',
+        position: 'relative',
+        overflow: 'hidden'
       }}
       onMouseOver={(e) => {
-        e.currentTarget.style.transform = 'translateY(-4px)';
-        e.currentTarget.style.boxShadow = '0 12px 32px rgba(0, 0, 0, 0.16)';
+        e.currentTarget.style.transform = 'translateY(-8px) scale(1.05)';
+        e.currentTarget.style.boxShadow = '0 20px 40px rgba(0, 0, 0, 0.2)';
+        e.currentTarget.style.borderColor = '#4285f4';
       }}
       onMouseOut={(e) => {
-        e.currentTarget.style.transform = 'translateY(0)';
+        e.currentTarget.style.transform = 'translateY(0) scale(1)';
         e.currentTarget.style.boxShadow = '0 8px 24px rgba(0, 0, 0, 0.12)';
+        e.currentTarget.style.borderColor = '#e8eaed';
       }}
       >
+        {/* 배경 장식 */}
+        <div style={{
+          position: 'absolute',
+          top: '-30px',
+          right: '-30px',
+          width: '100px',
+          height: '100px',
+          background: `linear-gradient(135deg, ${studentLevel <= 3 ? '#4caf50' : studentLevel <= 6 ? '#ff9800' : studentLevel <= 9 ? '#e91e63' : '#9c27b0'}, ${studentLevel <= 3 ? '#8bc34a' : studentLevel <= 6 ? '#ffc107' : studentLevel <= 9 ? '#f06292' : '#ba68c8'})`,
+          borderRadius: '50%',
+          opacity: 0.1
+        }} />
+        
         {/* 헤더 */}
         <div style={{
           display: 'flex',
           alignItems: 'center',
-          marginBottom: '16px',
+          marginBottom: '20px',
+          position: 'relative',
+          zIndex: 1
         }}>
+          {/* 레벨 이미지 */}
           <div style={{
-            fontSize: '28px',
-            marginRight: '10px',
+            width: '50px',
+            height: '50px',
+            marginRight: '16px',
+            borderRadius: '12px',
+            overflow: 'hidden',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+            border: '2px solid #fff'
           }}>
-            {studentIcon}
+            <img 
+              src={`/lv${studentLevel}.png`} 
+              alt={`Level ${studentLevel}`}
+              style={{
+                width: '100%',
+                height: '100%',
+                objectFit: 'cover'
+              }}
+              onError={(e) => {
+                // 이미지 로드 실패시 기본 아이콘 표시
+                e.target.style.display = 'none';
+                e.target.parentNode.innerHTML = `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:#f0f0f0;font-size:20px;">${studentIcon}</div>`;
+              }}
+            />
           </div>
-          <div>
+          <div style={{ flex: 1 }}>
             <h3 style={{
               margin: 0,
-              fontSize: '18px',
+              fontSize: '20px',
               fontWeight: 'bold',
-              color: '#333',
+              color: '#2c3e50',
+              marginBottom: '4px'
             }}>
               {journal.studentName}
             </h3>
-            <p style={{
-              margin: 0,
-              fontSize: '12px',
-              color: '#666',
-              fontWeight: '500'
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px'
             }}>
-              {journal.period} • {new Date(journal.createdAt?.seconds * 1000).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}
-            </p>
+              <span style={{
+                fontSize: '12px',
+                color: '#666',
+                fontWeight: '500',
+                background: '#f5f5f5',
+                padding: '2px 8px',
+                borderRadius: '10px'
+              }}>
+                Lv.{studentLevel}
+              </span>
+              <span style={{
+                fontSize: '12px',
+                color: '#666',
+                fontWeight: '500'
+              }}>
+                {journal.period} • {new Date(journal.createdAt?.seconds * 1000).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}
+              </span>
+            </div>
           </div>
         </div>
 
         {/* 학습일지 내용 */}
-        <div>
+        <div style={{
+          position: 'relative',
+          zIndex: 1
+        }}>
           {/* 핵심 키워드 */}
           {journal.keyword && (
             <div style={{
-              marginBottom: '12px',
-              padding: '10px 12px',
-              backgroundColor: '#fff3e0',
-              borderRadius: '8px',
-              borderLeft: '3px solid #ff9800'
+              marginBottom: '16px',
+              padding: '14px 16px',
+              backgroundColor: 'rgba(255, 152, 0, 0.08)',
+              borderRadius: '12px',
+              borderLeft: '4px solid #ff9800',
+              boxShadow: '0 2px 8px rgba(255, 152, 0, 0.1)'
             }}>
               <h4 style={{
-                margin: '0 0 6px 0',
-                fontSize: '12px',
-                color: '#ff9800',
+                margin: '0 0 8px 0',
+                fontSize: '13px',
+                color: '#f57c00',
                 fontWeight: 'bold',
                 textTransform: 'uppercase',
+                letterSpacing: '0.5px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px'
               }}>
                 🔑 핵심 키워드
               </h4>
               <p style={{
                 margin: 0,
-                fontSize: '14px',
+                fontSize: '16px',
                 fontWeight: 'bold',
                 color: '#e65100',
-                lineHeight: '1.3'
+                lineHeight: '1.4'
               }}>
                 {journal.keyword}
               </p>
@@ -153,73 +242,37 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시' }) => {
           {/* 학습 내용 */}
           {journal.content && (
             <div style={{
-              marginBottom: '12px',
-              padding: '10px 12px',
-              backgroundColor: '#e3f2fd',
-              borderRadius: '8px',
-              borderLeft: '3px solid #2196f3'
+              marginBottom: '16px',
+              padding: '14px 16px',
+              backgroundColor: 'rgba(33, 150, 243, 0.08)',
+              borderRadius: '12px',
+              borderLeft: '4px solid #2196f3',
+              boxShadow: '0 2px 8px rgba(33, 150, 243, 0.1)'
             }}>
               <h4 style={{
-                margin: '0 0 6px 0',
-                fontSize: '12px',
-                color: '#2196f3',
+                margin: '0 0 8px 0',
+                fontSize: '13px',
+                color: '#1976d2',
                 fontWeight: 'bold',
                 textTransform: 'uppercase',
+                letterSpacing: '0.5px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px'
               }}>
                 📚 학습 내용
               </h4>
               <p style={{
                 margin: 0,
-                fontSize: '13px',
-                color: '#333',
-                lineHeight: '1.4'
+                fontSize: '15px',
+                color: '#37474f',
+                lineHeight: '1.5',
+                wordBreak: 'keep-all'
               }}>
                 {journal.content}
               </p>
             </div>
           )}
-
-          {/* 이해도 & 난이도 */}
-          <div style={{
-            display: 'flex',
-            gap: '8px',
-            marginTop: '12px'
-          }}>
-            {journal.understanding && (
-              <div style={{
-                flex: 1,
-                padding: '8px 10px',
-                backgroundColor: '#e8f5e8',
-                borderRadius: '8px',
-                textAlign: 'center',
-                border: '1px solid #c8e6c9'
-              }}>
-                <div style={{ fontSize: '10px', color: '#4caf50', fontWeight: 'bold', marginBottom: '2px' }}>
-                  이해도
-                </div>
-                <div style={{ fontSize: '14px' }}>
-                  {'😊'.repeat(parseInt(journal.understanding) || 0)}
-                </div>
-              </div>
-            )}
-            {journal.difficulty && (
-              <div style={{
-                flex: 1,
-                padding: '8px 10px',
-                backgroundColor: '#ffebee',
-                borderRadius: '8px',
-                textAlign: 'center',
-                border: '1px solid #ffcdd2'
-              }}>
-                <div style={{ fontSize: '10px', color: '#f44336', fontWeight: 'bold', marginBottom: '2px' }}>
-                  난이도
-                </div>
-                <div style={{ fontSize: '14px' }}>
-                  {'❤️'.repeat(parseInt(journal.difficulty) || 0)}
-                </div>
-              </div>
-            )}
-          </div>
         </div>
       </div>
     );

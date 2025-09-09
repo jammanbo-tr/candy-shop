@@ -19,6 +19,7 @@ import { signInWithPopup, signOut } from 'firebase/auth';
 import { useAuthState } from 'react-firebase-hooks/auth';
 import EmotionAttendanceModal from '../components/EmotionAttendanceModal';
 import LearningJournalModal from '../components/LearningJournalModal';
+import DataBoardModal from '../components/DataBoardModal';
 
 // CSS 애니메이션 정의 (피버타임용)
 const feverAnimationCSS = `
@@ -2262,8 +2263,8 @@ _무중임_태_중_황태- 황무황---중태
   const [linkCategory, setLinkCategory] = useState('all');
   const [showLinkHistoryModal, setShowLinkHistoryModal] = useState(false);
   const [showTransactionModal, setShowTransactionModal] = useState(false);
-  // 업데이트 정보 모달 상태
-  const [showUpdateInfoModal, setShowUpdateInfoModal] = useState(false);
+  // 데이터 전광판 모달 상태
+  const [showDataBoardModal, setShowDataBoardModal] = useState(false);
 
   // 링크 방문 추적 함수
   const handleLinkVisit = async (link) => {
@@ -3500,7 +3501,7 @@ _무중임_태_중_황태- 황무황---중태
           <span style={{ fontWeight: 700, fontSize: 17, color: '#1976d2' }}>캔디 링크</span>
         </button>
         <button
-          onClick={() => setShowUpdateInfoModal(true)}
+          onClick={() => setShowDataBoardModal(true)}
           style={{
             border: '2.5px solid #1976d2',
             background: '#fff',
@@ -3520,8 +3521,8 @@ _무중임_태_중_황태- 황무황---중태
           onMouseOver={e => e.currentTarget.style.background = '#e3f2fd'}
           onMouseOut={e => e.currentTarget.style.background = '#fff'}
         >
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#1976d2" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
-          <span style={{ fontWeight: 700, fontSize: 17, color: '#1976d2' }}>업데이트 정보</span>
+          <span style={{ fontWeight: 700, color: '#1976d2', fontSize: 20, lineHeight: '1', display: 'flex', alignItems: 'center' }}>📊</span>
+          <span style={{ fontWeight: 700, fontSize: 17, color: '#1976d2' }}>데이터 전광판</span>
         </button>
       </div>
       {/* 캔디 링크(구 링크 히스토리) 모달 */}
@@ -3597,27 +3598,12 @@ _무중임_태_중_황태- 황무황---중태
           </div>
         </div>
       )}
-      {/* 업데이트 정보 모달 */}
-      {showUpdateInfoModal && (
-        <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(0,0,0,0.32)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9000 }}>
-          <div style={{ background: '#fff', borderRadius: 28, padding: 36, minWidth: 340, maxWidth: 420, boxShadow: '0 12px 64px #1976d220', textAlign: 'center', border: '4px solid #1976d2', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-            <div style={{ fontSize: 24, color: '#1976d2', marginBottom: 18, fontWeight: 900, letterSpacing: '-1px', display: 'flex', alignItems: 'center', gap: 10 }}>
-              <span role="img" aria-label="info">ℹ️</span> 업데이트 정보
-            </div>
-            <div style={{ color: '#1976d2', fontWeight: 700, fontSize: 16, marginBottom: 10 }}>JAMMANBO CANDY SHOP</div>
-            <div style={{ color: '#888', fontSize: 15, marginBottom: 18 }}>
-              버전: 2024.06<br/>
-              최근 주요 변경사항:<br/>
-              - 학생 알림함/모달/쿠폰함/캔디숍 UI 완전 복구<br/>
-              - 칭찬 알림, 경험치, 퀘스트 등 실시간 연동<br/>
-              - 상단/하단 주요 버튼 및 기능 복원<br/>
-              - Firestore 권한/에러 처리 개선<br/>
-              - 기타 UI/UX 개선<br/>
-            </div>
-            <button onClick={() => setShowUpdateInfoModal(false)} style={{ fontWeight: 700, borderRadius: 999, background: '#e0f7fa', color: '#1976d2', border: 'none', padding: '10px 32px', fontSize: 17, boxShadow: '0 2px 8px #b2ebf240', cursor: 'pointer', marginTop: 8 }}>닫기</button>
-          </div>
-        </div>
-      )}
+      {/* 데이터 전광판 모달 */}
+      <DataBoardModal 
+        isOpen={showDataBoardModal} 
+        onClose={() => setShowDataBoardModal(false)}
+        defaultPeriod="1교시"
+      />
       {/* 예약 알람 모달 */}
       {activeAlarm && showAlarmModal && (
         <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(0,0,0,0.48)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 }}>
