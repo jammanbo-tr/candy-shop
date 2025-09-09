@@ -97,19 +97,19 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시' }) => {
     return (
       <div style={{
         background: 'white',
-        borderRadius: '12px',
-        padding: '12px',
+        borderRadius: '10px',
+        padding: '10px',
         margin: '0',
-        width: '85%',
-        maxWidth: '320px',
-        boxShadow: '0 5px 14px rgba(0, 0, 0, 0.12)',
+        width: '70%',
+        maxWidth: '260px',
+        boxShadow: '0 4px 12px rgba(0, 0, 0, 0.12)',
         border: '2px solid #e8eaed',
         transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
         cursor: 'pointer',
         position: 'relative',
         overflow: 'hidden',
-        fontSize: '14px',
-        minHeight: '180px'
+        fontSize: '16px',
+        minHeight: '150px'
       }}
       onMouseOver={(e) => {
         e.currentTarget.style.transform = 'translateY(-8px) scale(1.05)';
@@ -144,9 +144,9 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시' }) => {
         }}>
           {/* 레벨 이미지 */}
           <div style={{
-            width: '42px',
-            height: '42px',
-            marginRight: '14px',
+            width: '50px',
+            height: '50px',
+            marginRight: '16px',
             borderRadius: '8px',
             overflow: 'hidden',
             boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
@@ -170,7 +170,7 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시' }) => {
           <div style={{ flex: 1 }}>
             <h3 style={{
               margin: 0,
-              fontSize: '16px',
+              fontSize: '19px',
               fontWeight: 'bold',
               color: '#2c3e50',
               marginBottom: '2px'
@@ -183,17 +183,17 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시' }) => {
               gap: '6px'
             }}>
               <span style={{
-                fontSize: '11px',
+                fontSize: '13px',
                 color: '#666',
                 fontWeight: '500',
                 background: '#f5f5f5',
-                padding: '2px 8px',
+                padding: '3px 10px',
                 borderRadius: '6px'
               }}>
                 Lv.{studentLevel}
               </span>
               <span style={{
-                fontSize: '11px',
+                fontSize: '13px',
                 color: '#666',
                 fontWeight: '500'
               }}>
@@ -220,7 +220,7 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시' }) => {
             }}>
               <h4 style={{
                 margin: '0 0 6px 0',
-                fontSize: '11px',
+                fontSize: '13px',
                 color: '#f57c00',
                 fontWeight: 'bold',
                 textTransform: 'uppercase',
@@ -233,7 +233,7 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시' }) => {
               </h4>
               <p style={{
                 margin: 0,
-                fontSize: '14px',
+                fontSize: '17px',
                 fontWeight: 'bold',
                 color: '#e65100',
                 lineHeight: '1.2'
@@ -255,7 +255,7 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시' }) => {
             }}>
               <h4 style={{
                 margin: '0 0 6px 0',
-                fontSize: '11px',
+                fontSize: '13px',
                 color: '#1976d2',
                 fontWeight: 'bold',
                 textTransform: 'uppercase',
@@ -268,7 +268,7 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시' }) => {
               </h4>
               <p style={{
                 margin: 0,
-                fontSize: '13px',
+                fontSize: '16px',
                 color: '#37474f',
                 lineHeight: '1.3',
                 wordBreak: 'keep-all'
@@ -439,8 +439,8 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시' }) => {
               <div style={{
                 display: 'grid',
                 gridTemplateColumns: 'repeat(3, 1fr)',
-                gap: '16px',
-                padding: '0 8px'
+                gap: '12px',
+                padding: '0 6px'
               }}>
                 {journalData.map(journal => (
                   <JournalCard key={journal.id} journal={journal} />
