@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../firebase';
-import { collection, query, where, onSnapshot, doc, getDoc } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, doc, getDoc, setDoc, updateDoc, arrayUnion, arrayRemove } from 'firebase/firestore';
 
 const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시' }) => {
   const [selectedPeriod, setSelectedPeriod] = useState(defaultPeriod);
@@ -9,6 +9,7 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시' }) => {
   const [loading, setLoading] = useState(true);
   const [cardPositions, setCardPositions] = useState({});
   const [draggedCard, setDraggedCard] = useState(null);
+  const [recommendations, setRecommendations] = useState({});
 
   const PERIODS = ['1교시', '2교시', '3교시', '4교시', '5교시', '6교시'];
 
@@ -36,11 +37,11 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시' }) => {
     return koreaNow.toISOString().split('T')[0];
   };
 
-  // 카드 초기 위치 설정
+  // 카드 초기 위치 설정 (이전 크기로 복원)
   const getInitialPosition = (index) => {
     const cardsPerRow = 3;
-    const cardWidth = 414;
-    const cardHeight = 414;
+    const cardWidth = 360; // 414에서 360으로 복원
+    const cardHeight = 360; // 414에서 360으로 복원
     const gap = 20;
     const startX = 40;
     const startY = 40;
@@ -72,6 +73,55 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시' }) => {
     return null;
   };
 
+  // 추천 데이터 로딩
+  const loadRecommendations = async () => {
+    if (!isOpen) return;
+    
+    try {
+      const today = getKoreaDate();
+      const recommendationsRef = doc(db, `recommendations/${today}`);
+      const unsubscribe = onSnapshot(recommendationsRef, (docSnap) => {
+        if (docSnap.exists()) {
+          setRecommendations(docSnap.data() || {});
+        } else {
+          setRecommendations({});
+        }
+      });
+      
+      return unsubscribe;
+    } catch (error) {
+      console.error('Error loading recommendations:', error);
+      return () => {};
+    }
+  };
+
+  // 추천하기 함수
+  const handleRecommend = async (journalId, studentName) => {
+    const currentUser = '선생님'; // 실제로는 현재 로그인된 사용자 정보를 사용
+    
+    try {
+      const today = getKoreaDate();
+      const recommendationsRef = doc(db, `recommendations/${today}`);
+      
+      const currentRecs = recommendations[journalId] || [];
+      const hasRecommended = currentRecs.includes(currentUser);
+      
+      if (hasRecommended) {
+        // 추천 취소
+        await updateDoc(recommendationsRef, {
+          [journalId]: arrayRemove(currentUser)
+        });
+      } else {
+        // 추천 추가
+        await setDoc(recommendationsRef, {
+          [journalId]: arrayUnion(currentUser)
+        }, { merge: true });
+      }
+    } catch (error) {
+      console.error('Error updating recommendation:', error);
+    }
+  };
+
   // 학습일지 데이터 실시간 로딩
   useEffect(() => {
     if (!isOpen) return;
@@ -80,7 +130,7 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시' }) => {
     const journalsRef = collection(db, `journals/${today}/entries`);
     const q = query(journalsRef, where('period', '==', selectedPeriod));
 
-    const unsubscribe = onSnapshot(q, async (querySnapshot) => {
+    const unsubscribeJournals = onSnapshot(q, async (querySnapshot) => {
       const data = [];
       const promises = [];
       
@@ -107,8 +157,16 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시' }) => {
       
       setLoading(false);
     });
+    
+    // 추천 데이터도 로딩
+    const unsubscribeRecommendations = loadRecommendations();
 
-    return () => unsubscribe();
+    return () => {
+      unsubscribeJournals();
+      if (typeof unsubscribeRecommendations === 'function') {
+        unsubscribeRecommendations();
+      }
+    };
   }, [selectedPeriod, isOpen]);
 
   // 모달이 열릴 때 defaultPeriod로 설정
@@ -135,13 +193,22 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시' }) => {
       setDraggedCard({ id: journal.id, offsetX, offsetY });
       
       const handleMouseMove = (e) => {
-        const containerRect = e.currentTarget.closest('.data-board-container').getBoundingClientRect();
+        const containerRect = document.querySelector('.data-board-container').getBoundingClientRect();
+        const cardWidth = 360;
+        const cardHeight = 360;
         const newX = e.clientX - containerRect.left - offsetX;
         const newY = e.clientY - containerRect.top - offsetY;
         
+        // 컨테이너 경계 내에서만 이동 가능하도록 제한
+        const maxX = containerRect.width - cardWidth;
+        const maxY = containerRect.height - cardHeight;
+        
         setCardPositions(prev => ({
           ...prev,
-          [journal.id]: { x: Math.max(0, newX), y: Math.max(0, newY) }
+          [journal.id]: { 
+            x: Math.max(0, Math.min(newX, maxX)), 
+            y: Math.max(0, Math.min(newY, maxY)) 
+          }
         }));
       };
       
@@ -161,10 +228,16 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시' }) => {
           background: 'white',
           borderRadius: '12px',
           padding: '20px',
-          width: '414px',
-          height: '414px',
+          width: '360px', // 414에서 360으로 복원
+          height: '360px', // 414에서 360으로 복원
           boxShadow: '0 4px 12px rgba(0, 0, 0, 0.12)',
-          border: '2px solid #e8eaed',
+          border: (() => {
+            const recCount = recommendations[journal.id]?.length || 0;
+            if (recCount >= 3) return '3px solid #ff6b35'; // 주황색 - 많은 추천
+            if (recCount >= 2) return '3px solid #4ecdc4'; // 청록색 - 보통 추천  
+            if (recCount >= 1) return '3px solid #95e1d3'; // 연한 청록색 - 적은 추천
+            return '2px solid #e8eaed'; // 기본색
+          })(),
           transition: draggedCard?.id === journal.id ? 'none' : 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
           cursor: 'move',
           position: 'absolute',
@@ -268,6 +341,50 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시' }) => {
               </span>
             </div>
           </div>
+        </div>
+
+        {/* 추천 버튼 */}
+        <div style={{
+          position: 'absolute',
+          top: '12px',
+          right: '12px',
+          zIndex: 10,
+          display: 'flex',
+          alignItems: 'center',
+          gap: '4px'
+        }}>
+          <span style={{
+            fontSize: '12px',
+            color: '#666',
+            fontWeight: 'bold'
+          }}>
+            {recommendations[journal.id]?.length || 0}
+          </span>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              handleRecommend(journal.id, journal.studentName);
+            }}
+            style={{
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+              fontSize: '18px',
+              padding: '4px',
+              borderRadius: '50%',
+              transition: 'transform 0.2s',
+              filter: recommendations[journal.id]?.includes('선생님') ? 'none' : 'grayscale(100%)',
+              transform: 'scale(1)'
+            }}
+            onMouseOver={(e) => {
+              e.currentTarget.style.transform = 'scale(1.2)';
+            }}
+            onMouseOut={(e) => {
+              e.currentTarget.style.transform = 'scale(1)';
+            }}
+          >
+            👍
+          </button>
         </div>
 
         {/* 학습일지 내용 */}
