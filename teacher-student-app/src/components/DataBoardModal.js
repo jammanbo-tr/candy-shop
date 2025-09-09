@@ -95,23 +95,34 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시' }) => {
     console.log(`Student: ${journal.studentName}, Level: ${studentLevel}, Data:`, studentData);
     
     return (
-      <div style={{
-        background: 'white',
-        borderRadius: '12px',
-        padding: '16px',
-        margin: '0 auto',
-        width: '300px',
-        height: '300px',
-        boxShadow: '0 4px 12px rgba(0, 0, 0, 0.12)',
-        border: '2px solid #e8eaed',
-        transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-        cursor: 'pointer',
-        position: 'relative',
-        overflow: 'hidden',
-        fontSize: '16px',
-        display: 'flex',
-        flexDirection: 'column'
-      }}
+      <div 
+        draggable="true"
+        style={{
+          background: 'white',
+          borderRadius: '12px',
+          padding: '20px',
+          margin: '0 auto',
+          width: '360px',
+          height: '360px',
+          boxShadow: '0 4px 12px rgba(0, 0, 0, 0.12)',
+          border: '2px solid #e8eaed',
+          transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+          cursor: 'move',
+          position: 'relative',
+          overflow: 'hidden',
+          fontSize: '16px',
+          display: 'flex',
+          flexDirection: 'column',
+          userSelect: 'none'
+        }}
+        onDragStart={(e) => {
+          e.currentTarget.style.opacity = '0.5';
+          e.currentTarget.style.transform = 'rotate(5deg)';
+        }}
+        onDragEnd={(e) => {
+          e.currentTarget.style.opacity = '1';
+          e.currentTarget.style.transform = 'rotate(0deg)';
+        }}
       onMouseOver={(e) => {
         e.currentTarget.style.transform = 'translateY(-8px) scale(1.05)';
         e.currentTarget.style.boxShadow = '0 20px 40px rgba(0, 0, 0, 0.2)';
