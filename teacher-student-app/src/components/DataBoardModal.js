@@ -7,6 +7,8 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시' }) => {
   const [journalData, setJournalData] = useState([]);
   const [studentsData, setStudentsData] = useState({});
   const [loading, setLoading] = useState(true);
+  const [cardPositions, setCardPositions] = useState({});
+  const [draggedCard, setDraggedCard] = useState(null);
 
   const PERIODS = ['1교시', '2교시', '3교시', '4교시', '5교시', '6교시'];
 
@@ -32,6 +34,24 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시' }) => {
     const now = new Date();
     const koreaNow = new Date(now.getTime() + (9 * 60 * 60 * 1000));
     return koreaNow.toISOString().split('T')[0];
+  };
+
+  // 카드 초기 위치 설정
+  const getInitialPosition = (index) => {
+    const cardsPerRow = 3;
+    const cardWidth = 414;
+    const cardHeight = 414;
+    const gap = 20;
+    const startX = 40;
+    const startY = 40;
+    
+    const row = Math.floor(index / cardsPerRow);
+    const col = index % cardsPerRow;
+    
+    return {
+      x: startX + col * (cardWidth + gap),
+      y: startY + row * (cardHeight + gap)
+    };
   };
 
   // 학생 데이터 로딩
@@ -73,6 +93,18 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시' }) => {
       
       await Promise.all(promises);
       setJournalData(data);
+      
+      // 카드 위치 초기화
+      const newPositions = {};
+      data.forEach((journal, index) => {
+        if (!cardPositions[journal.id]) {
+          newPositions[journal.id] = getInitialPosition(index);
+        }
+      });
+      if (Object.keys(newPositions).length > 0) {
+        setCardPositions(prev => ({ ...prev, ...newPositions }));
+      }
+      
       setLoading(false);
     });
 
@@ -87,42 +119,65 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시' }) => {
   }, [isOpen, defaultPeriod]);
 
   // 학습일지 카드 컴포넌트
-  const JournalCard = ({ journal }) => {
+  const JournalCard = ({ journal, index }) => {
     const studentIcon = getStudentIcon(journal.studentName);
     const studentData = studentsData[journal.studentName];
     const studentLevel = studentData?.level || 1;
+    const position = cardPositions[journal.id] || getInitialPosition(index);
     
     console.log(`Student: ${journal.studentName}, Level: ${studentLevel}, Data:`, studentData);
     
+    const handleMouseDown = (e) => {
+      const rect = e.currentTarget.getBoundingClientRect();
+      const offsetX = e.clientX - rect.left;
+      const offsetY = e.clientY - rect.top;
+      
+      setDraggedCard({ id: journal.id, offsetX, offsetY });
+      
+      const handleMouseMove = (e) => {
+        const containerRect = e.currentTarget.closest('.data-board-container').getBoundingClientRect();
+        const newX = e.clientX - containerRect.left - offsetX;
+        const newY = e.clientY - containerRect.top - offsetY;
+        
+        setCardPositions(prev => ({
+          ...prev,
+          [journal.id]: { x: Math.max(0, newX), y: Math.max(0, newY) }
+        }));
+      };
+      
+      const handleMouseUp = () => {
+        setDraggedCard(null);
+        document.removeEventListener('mousemove', handleMouseMove);
+        document.removeEventListener('mouseup', handleMouseUp);
+      };
+      
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+    };
+    
     return (
       <div 
-        draggable="true"
         style={{
           background: 'white',
           borderRadius: '12px',
           padding: '20px',
-          margin: '0 auto',
-          width: '360px',
-          height: '360px',
+          width: '414px',
+          height: '414px',
           boxShadow: '0 4px 12px rgba(0, 0, 0, 0.12)',
           border: '2px solid #e8eaed',
-          transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+          transition: draggedCard?.id === journal.id ? 'none' : 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
           cursor: 'move',
-          position: 'relative',
+          position: 'absolute',
+          left: `${position.x}px`,
+          top: `${position.y}px`,
           overflow: 'hidden',
           fontSize: '16px',
           display: 'flex',
           flexDirection: 'column',
-          userSelect: 'none'
+          userSelect: 'none',
+          zIndex: draggedCard?.id === journal.id ? 1000 : 1
         }}
-        onDragStart={(e) => {
-          e.currentTarget.style.opacity = '0.5';
-          e.currentTarget.style.transform = 'rotate(5deg)';
-        }}
-        onDragEnd={(e) => {
-          e.currentTarget.style.opacity = '1';
-          e.currentTarget.style.transform = 'rotate(0deg)';
-        }}
+        onMouseDown={handleMouseDown}
       onMouseOver={(e) => {
         e.currentTarget.style.transform = 'translateY(-8px) scale(1.05)';
         e.currentTarget.style.boxShadow = '0 20px 40px rgba(0, 0, 0, 0.2)';
@@ -456,15 +511,17 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시' }) => {
                 </div>
               </div>
             ) : (
-              <div style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(3, 1fr)',
-                gap: '20px',
-                padding: '0 20px',
-                justifyItems: 'center'
-              }}>
-                {journalData.map(journal => (
-                  <JournalCard key={journal.id} journal={journal} />
+              <div 
+                className="data-board-container"
+                style={{
+                  position: 'relative',
+                  width: '100%',
+                  height: 'calc(102vh - 200px)',
+                  overflow: 'hidden'
+                }}
+              >
+                {journalData.map((journal, index) => (
+                  <JournalCard key={journal.id} journal={journal} index={index} />
                 ))}
               </div>
             )}
