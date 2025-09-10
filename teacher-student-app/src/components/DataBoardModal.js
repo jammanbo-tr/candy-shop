@@ -25,21 +25,26 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시' }) => {
 
   const PERIODS = ['1교시', '2교시', '3교시', '4교시', '5교시', '6교시'];
 
-  // 학생별 레벨 아이콘 매핑
+  // Student 페이지와 동일한 레벨 이미지 시스템
+  const levelImages = [
+    '/lv1.png', // 알사탕
+    '/lv2.png', // 새콤한 사탕
+    '/lv3.png', // 막대사탕
+    '/lv4.png', // 롤리팝
+    '/lv5.png', // 수제 사탕
+    '/lv6.png', // 사탕 마스터
+    '/lv7.png', // 콜라맛, 딸기맛 막대사탕 세트
+    '/lv8.png', // 신 맛 막대사탕 세트
+    '/lv9.png', // SUPER 신 맛 막대사탕 세트
+    '/lv10.png', // 탱글탱글 지구젤리
+    '/lv11.png', // 반짝반짝 레인보우 세트
+    '/lv12.png', // 잠만보 캔디 세트
+  ];
+
+  // 학생별 레벨 아이콘 매핑 (레벨 + 1 규칙 적용)
   const getStudentIcon = (studentName) => {
-    const iconMap = {
-      '김규민': '🧪',
-      '김범준': '🍭',  
-      '김성준': '🎯',
-      '김수겸': '🎮',
-      '김주원': '👑',
-      '김주하': '🌟',
-      '이해원': '🎨',
-      '문기훈': '🚀',
-      '박동하': '🎵',
-      '백주원': '🏆',
-    };
-    return iconMap[studentName] || '🎭';
+    const studentLevel = studentsData[studentName]?.level || 1;
+    return levelImages[studentLevel] || levelImages[1]; // 레벨 6 → lv7.png (인덱스 6)
   };
 
   // 학생 레벨에 따른 이미지 경로 반환
@@ -73,6 +78,30 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시' }) => {
       setSelectedPeriod(currentPeriod);
     }, 100);
   };
+
+  // 학생 데이터 실시간 업데이트 (레벨 변경 감지)
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const studentsRef = collection(db, 'students');
+    const unsubscribe = onSnapshot(studentsRef, (querySnapshot) => {
+      const newStudentsData = {};
+      querySnapshot.forEach((doc) => {
+        const data = doc.data();
+        newStudentsData[data.name] = {
+          ...data,
+          level: data.level || 1
+        };
+      });
+      
+      setStudentsData(newStudentsData);
+      console.log('Students data updated:', newStudentsData);
+    }, (error) => {
+      console.error('Error listening to students data:', error);
+    });
+
+    return () => unsubscribe();
+  }, [isOpen]);
 
   // 자동 새로고침 (30초마다)
   useEffect(() => {
@@ -465,7 +494,7 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시' }) => {
             border: '2px solid #fff'
           }}>
             <img 
-              src={`/lv${studentLevel}.png`} 
+              src={levelImages[studentLevel] || levelImages[1]} 
               alt={`Level ${studentLevel}`}
               style={{
                 width: '100%',
@@ -990,7 +1019,20 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시' }) => {
                   justifyContent: 'center',
                   gap: '8px'
                 }}>
-                  <span style={{ fontSize: '24px' }}>🏆</span>
+                  <img 
+                    src="/chupa.png"
+                    alt="Recommendation Trophy"
+                    style={{
+                      width: '24px',
+                      height: '24px',
+                      objectFit: 'contain'
+                    }}
+                    onError={(e) => {
+                      e.target.style.display = 'none';
+                      e.target.nextSibling.style.display = 'inline';
+                    }}
+                  />
+                  <span style={{ display: 'none', fontSize: '24px' }}>🏆</span>
                   추천 순위
                 </h3>
                 <p style={{
@@ -1111,16 +1153,6 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시' }) => {
                           animation: isRainbow ? 'rainbow-glow 3s ease infinite' : 'none'
                         }}
                       >
-                        {/* 순위 */}
-                        <div style={{
-                          fontSize: '20px',
-                          minWidth: '24px',
-                          textAlign: 'center'
-                        }}>
-                          {getRankImage()}
-                          <span style={{ display: 'none' }}>🏅</span>
-                        </div>
-
                         {/* 학생 레벨 이미지 */}
                         <div style={{
                           minWidth: '32px',
@@ -1128,7 +1160,7 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시' }) => {
                           filter: 'drop-shadow(2px 2px 4px rgba(0,0,0,0.1))'
                         }}>
                           <img 
-                            src={`/lv${item.level}.png`}
+                            src={levelImages[item.level] || levelImages[1]}
                             alt={`Level ${item.level}`}
                             style={{
                               width: '32px',
@@ -1141,12 +1173,7 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시' }) => {
                               e.target.nextSibling.style.display = 'block';
                             }}
                           />
-                          <div style={{
-                            display: 'none',
-                            fontSize: '28px'
-                          }}>
-                            {item.icon}
-                          </div>
+                          <span style={{ display: 'none' }}>🎭</span>
                         </div>
 
                         {/* 학생 정보 */}
