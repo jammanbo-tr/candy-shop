@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../firebase';
-import { collection, query, where, onSnapshot, doc, getDoc, setDoc, updateDoc, arrayUnion, arrayRemove } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, doc, getDoc, setDoc, updateDoc, arrayUnion, arrayRemove, getDocs } from 'firebase/firestore';
 
 const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시' }) => {
   // 한국 시간으로 오늘 날짜 계산
@@ -21,6 +21,7 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시' }) => {
   const [cardPositions, setCardPositions] = useState({});
   const [draggedCard, setDraggedCard] = useState(null);
   const [recommendations, setRecommendations] = useState({});
+  const [cumulativeRecommendations, setCumulativeRecommendations] = useState({});
 
   const PERIODS = ['1교시', '2교시', '3교시', '4교시', '5교시', '6교시'];
 
@@ -39,6 +40,12 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시' }) => {
       '백주원': '🏆',
     };
     return iconMap[studentName] || '🎭';
+  };
+
+  // 학생 레벨에 따른 이미지 경로 반환
+  const getStudentLevelImage = (studentName) => {
+    const studentLevel = studentsData[studentName]?.level || 1;
+    return `/lv${studentLevel}.png`;
   };
 
   // 오늘 날짜 구하기 (한국 시간 기준) - 수정된 버전
@@ -137,6 +144,72 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시' }) => {
     } catch (error) {
       console.error('Error loading recommendations:', error);
       return () => {};
+    }
+  };
+
+  // 전체 누적 추천 데이터 로딩 (모든 날짜의 데이터를 통합)
+  const loadAllRecommendations = async () => {
+    if (!isOpen) return;
+    
+    try {
+      console.log('Loading all cumulative recommendations...');
+      const studentRecommendations = {};
+      
+      // 최근 30일간의 데이터 조회
+      const promises = [];
+      for (let i = 0; i < 30; i++) {
+        const date = new Date();
+        date.setDate(date.getDate() - i);
+        const dateStr = date.toISOString().split('T')[0];
+        
+        const recommendationPromise = getDoc(doc(db, `recommendations/${dateStr}`))
+          .then(docSnap => {
+            if (docSnap.exists()) {
+              return { date: dateStr, data: docSnap.data() };
+            }
+            return null;
+          })
+          .catch(() => null); // 에러 시 null 반환
+          
+        promises.push(recommendationPromise);
+      }
+      
+      const results = await Promise.all(promises);
+      
+      // 결과 통합
+      for (const result of results) {
+        if (result && result.data) {
+          // 해당 날짜의 모든 학습일지 조회하여 학생명과 매핑
+          const journalsRef = collection(db, `journals/${result.date}/entries`);
+          try {
+            const journalsSnap = await getDocs(journalsRef);
+            const journalMap = {};
+            journalsSnap.forEach(doc => {
+              const data = doc.data();
+              journalMap[doc.id] = data.studentName;
+            });
+            
+            // 추천 데이터를 학생별로 집계
+            Object.entries(result.data).forEach(([journalId, recs]) => {
+              if (Array.isArray(recs) && journalMap[journalId]) {
+                const studentName = journalMap[journalId];
+                if (!studentRecommendations[studentName]) {
+                  studentRecommendations[studentName] = 0;
+                }
+                studentRecommendations[studentName] += recs.length;
+              }
+            });
+          } catch (journalError) {
+            console.log(`No journals found for ${result.date}`);
+          }
+        }
+      }
+      
+      setCumulativeRecommendations(studentRecommendations);
+      console.log('All recommendations loaded:', studentRecommendations);
+      
+    } catch (error) {
+      console.error('Error loading all recommendations:', error);
     }
   };
 
@@ -241,6 +314,9 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시' }) => {
     
     // 추천 데이터도 로딩
     const unsubscribeRecommendations = loadRecommendations();
+    
+    // 전체 누적 추천 데이터 로딩
+    loadAllRecommendations();
 
     return () => {
       unsubscribeJournals();
@@ -673,7 +749,7 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시' }) => {
           borderRadius: '12px',
           maxWidth: '98vw',
           maxHeight: '95vh',
-          width: '1680px',
+          width: '2000px', // 1680px에서 2000px로 증가
           height: '102vh',
           overflow: 'hidden',
           boxShadow: '0 20px 40px rgba(0, 0, 0, 0.3)'
@@ -700,43 +776,10 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시' }) => {
               <p style={{
                 margin: 0,
                 fontSize: '16px',
-                color: '#666',
-                marginBottom: '12px'
+                color: '#666'
               }}>
                 우리 반 학습일지를 실시간으로 확인해보세요!
               </p>
-              
-              {/* 무지개 카운터 */}
-              <div style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '8px',
-                background: 'linear-gradient(45deg, #ff6b6b, #4ecdc4, #45b7d1, #96ceb4, #feca57)',
-                padding: '8px 16px',
-                borderRadius: '20px',
-                color: 'white',
-                fontSize: '14px',
-                fontWeight: 'bold',
-                boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
-              }}>
-                <span style={{ fontSize: '18px' }}>🌈</span>
-                <span>무지개 학생: {rainbowCount}명</span>
-                {rainbowCount % 10 === 0 && rainbowCount > 0 ? (
-                  <span style={{
-                    background: 'rgba(255,255,255,0.3)',
-                    padding: '4px 8px',
-                    borderRadius: '10px',
-                    fontSize: '12px',
-                    animation: 'pulse 1.5s infinite'
-                  }}>
-                    🎉 이벤트 타임!
-                  </span>
-                ) : (
-                  <span style={{ fontSize: '12px', opacity: 0.9 }}>
-                    (이벤트까지 {remainingForEvent}명)
-                  </span>
-                )}
-              </div>
             </div>
 
             {/* 교시 선택 드롭다운과 닫기 버튼 */}
@@ -843,56 +886,248 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시' }) => {
 
           {/* 컨텐츠 영역 */}
           <div style={{
-            padding: '24px',
+            display: 'flex',
             height: 'calc(102vh - 120px)',
-            overflow: 'auto', // 스크롤바 복구
-            overflowX: 'auto',
-            overflowY: 'auto'
           }}>
-            {loading ? (
+            {/* 좌측: 학습일지 카드들 */}
+            <div style={{
+              flex: '1',
+              padding: '24px',
+              paddingRight: '12px',
+              overflow: 'auto',
+              overflowX: 'auto',
+              overflowY: 'auto'
+            }}>
+              {loading ? (
+                <div style={{
+                  display: 'flex',
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                  height: '100%',
+                  fontSize: '18px',
+                  color: '#666'
+                }}>
+                  📚 학습일지를 불러오는 중...
+                </div>
+              ) : journalData.length === 0 ? (
+                <div style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                  height: '100%',
+                  color: '#666'
+                }}>
+                  <div style={{ fontSize: '48px', marginBottom: '16px' }}>📝</div>
+                  <div style={{ fontSize: '18px', fontWeight: '500' }}>
+                    {selectedPeriod}에 작성된 학습일지가 없습니다
+                  </div>
+                  <div style={{ fontSize: '14px', marginTop: '8px', opacity: 0.7 }}>
+                    학생들이 학습일지를 작성하면 실시간으로 여기에 표시됩니다
+                  </div>
+                </div>
+              ) : (
+                <div 
+                  className="data-board-container"
+                  style={{
+                    position: 'relative',
+                    width: '1500px', // 1200px에서 1500px로 증가
+                    height: '1000px',
+                    minWidth: '1500px',
+                    minHeight: '1000px'
+                  }}
+                >
+                  {journalData.map((journal, index) => (
+                    <JournalCard key={journal.id} journal={journal} index={index} />
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* 우측: 추천 순위 리스트 */}
+            <div style={{
+              width: '320px',
+              padding: '24px',
+              paddingLeft: '12px',
+              borderLeft: '2px solid #f0f0f0',
+              backgroundColor: '#fafafa',
+              overflow: 'auto'
+            }}>
               <div style={{
-                display: 'flex',
-                justifyContent: 'center',
-                alignItems: 'center',
-                height: '100%',
-                fontSize: '18px',
-                color: '#666'
+                marginBottom: '20px',
+                textAlign: 'center'
               }}>
-                📚 학습일지를 불러오는 중...
+                <h3 style={{
+                  margin: 0,
+                  fontSize: '20px',
+                  fontWeight: 'bold',
+                  color: '#2c3e50',
+                  marginBottom: '8px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px'
+                }}>
+                  <span style={{ fontSize: '24px' }}>🏆</span>
+                  추천 순위
+                </h3>
+                <p style={{
+                  margin: 0,
+                  fontSize: '14px',
+                  color: '#666',
+                  fontWeight: '500'
+                }}>
+                  {selectedDate} • {selectedPeriod}
+                </p>
               </div>
-            ) : journalData.length === 0 ? (
+
+              {/* 추천 순위 리스트 */}
               <div style={{
                 display: 'flex',
                 flexDirection: 'column',
-                justifyContent: 'center',
-                alignItems: 'center',
-                height: '100%',
-                color: '#666'
+                gap: '12px'
               }}>
-                <div style={{ fontSize: '48px', marginBottom: '16px' }}>📝</div>
-                <div style={{ fontSize: '18px', fontWeight: '500' }}>
-                  {selectedPeriod}에 작성된 학습일지가 없습니다
-                </div>
-                <div style={{ fontSize: '14px', marginTop: '8px', opacity: 0.7 }}>
-                  학생들이 학습일지를 작성하면 실시간으로 여기에 표시됩니다
-                </div>
+                {(() => {
+                  // 누적 추천 데이터를 기반으로 순위 계산
+                  const allStudentNames = Object.keys(studentsData);
+                  
+                  // 전체 학생 리스트를 기반으로 순위 생성
+                  const leaderboard = allStudentNames
+                    .map(studentName => ({
+                      studentName,
+                      recommendations: cumulativeRecommendations[studentName] || 0,
+                      icon: getStudentIcon(studentName),
+                      level: studentsData[studentName]?.level || 1
+                    }))
+                    .filter(item => item.recommendations > 0) // 추천이 있는 학생만 표시
+                    .sort((a, b) => b.recommendations - a.recommendations);
+                  
+                  console.log('Leaderboard calculated:', leaderboard);
+                  console.log('Cumulative recommendations:', cumulativeRecommendations);
+
+                  if (leaderboard.length === 0) {
+                    return (
+                      <div style={{
+                        textAlign: 'center',
+                        padding: '40px 20px',
+                        color: '#999'
+                      }}>
+                        <div style={{ fontSize: '32px', marginBottom: '12px' }}>🎯</div>
+                        <div style={{ fontSize: '16px', fontWeight: '500', marginBottom: '4px' }}>
+                          아직 추천이 없습니다
+                        </div>
+                        <div style={{ fontSize: '14px' }}>
+                          학습일지에 👍를 눌러보세요!
+                        </div>
+                      </div>
+                    );
+                  }
+
+                  return leaderboard.map((item, index) => {
+                    const isRainbow = item.recommendations >= 5;
+                    const rankEmoji = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : '🏅';
+                    
+                    return (
+                      <div
+                        key={item.studentName}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '12px',
+                          padding: '16px',
+                          backgroundColor: 'white',
+                          borderRadius: '12px',
+                          boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+                          border: isRainbow ? '2px solid transparent' : '2px solid #e0e0e0',
+                          backgroundImage: isRainbow ? 'linear-gradient(white, white), linear-gradient(-45deg, #ff0000, #ff7f00, #ffff00, #00ff00, #0000ff, #4b0082, #9400d3)' : 'none',
+                          backgroundOrigin: 'border-box',
+                          backgroundClip: isRainbow ? 'padding-box, border-box' : 'initial',
+                          position: 'relative',
+                          animation: isRainbow ? 'rainbow-glow 3s ease infinite' : 'none'
+                        }}
+                      >
+                        {/* 순위 */}
+                        <div style={{
+                          fontSize: '20px',
+                          minWidth: '24px',
+                          textAlign: 'center'
+                        }}>
+                          {rankEmoji}
+                        </div>
+
+                        {/* 학생 레벨 이미지 */}
+                        <div style={{
+                          minWidth: '32px',
+                          textAlign: 'center',
+                          filter: 'drop-shadow(2px 2px 4px rgba(0,0,0,0.1))'
+                        }}>
+                          <img 
+                            src={`/lv${item.level}.png`}
+                            alt={`Level ${item.level}`}
+                            style={{
+                              width: '32px',
+                              height: '32px',
+                              objectFit: 'contain'
+                            }}
+                            onError={(e) => {
+                              // 이미지 로드 실패 시 기본 이모지로 대체
+                              e.target.style.display = 'none';
+                              e.target.nextSibling.style.display = 'block';
+                            }}
+                          />
+                          <div style={{
+                            display: 'none',
+                            fontSize: '28px'
+                          }}>
+                            {item.icon}
+                          </div>
+                        </div>
+
+                        {/* 학생 정보 */}
+                        <div style={{ flex: 1 }}>
+                          <div style={{
+                            fontSize: '16px',
+                            fontWeight: 'bold',
+                            color: '#2c3e50',
+                            marginBottom: '2px'
+                          }}>
+                            {item.studentName}
+                          </div>
+                          <div style={{
+                            fontSize: '12px',
+                            color: '#666',
+                            background: '#f5f5f5',
+                            padding: '2px 8px',
+                            borderRadius: '6px',
+                            display: 'inline-block'
+                          }}>
+                            Lv.{item.level}
+                          </div>
+                        </div>
+
+                        {/* 추천 수 */}
+                        <div style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          background: isRainbow ? 'linear-gradient(45deg, #ff6b6b, #4ecdc4)' : '#f8f9fa',
+                          padding: '8px 12px',
+                          borderRadius: '20px',
+                          color: isRainbow ? 'white' : '#333',
+                          fontWeight: 'bold',
+                          fontSize: '14px',
+                          boxShadow: isRainbow ? '0 2px 8px rgba(0,0,0,0.2)' : 'none'
+                        }}>
+                          <span>👍</span>
+                          <span>{item.recommendations}</span>
+                          {isRainbow && <span style={{ fontSize: '12px' }}>🌈</span>}
+                        </div>
+                      </div>
+                    );
+                  });
+                })()}
               </div>
-            ) : (
-              <div 
-                className="data-board-container"
-                style={{
-                  position: 'relative',
-                  width: '1400px', // 고정 너비로 스크롤 가능
-                  height: '1000px', // 고정 높이로 스크롤 가능
-                  minWidth: '1400px',
-                  minHeight: '1000px'
-                }}
-              >
-                {journalData.map((journal, index) => (
-                  <JournalCard key={journal.id} journal={journal} index={index} />
-                ))}
-              </div>
-            )}
+            </div>
           </div>
         </div>
       </div>
