@@ -3,7 +3,18 @@ import { db } from '../firebase';
 import { collection, query, where, onSnapshot, doc, getDoc, setDoc, updateDoc, arrayUnion, arrayRemove } from 'firebase/firestore';
 
 const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시' }) => {
+  // 한국 시간으로 오늘 날짜 계산
+  const getTodayKorea = () => {
+    const now = new Date();
+    const koreaTime = new Date(now.toLocaleString("en-US", {timeZone: "Asia/Seoul"}));
+    const year = koreaTime.getFullYear();
+    const month = String(koreaTime.getMonth() + 1).padStart(2, '0');
+    const day = String(koreaTime.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
   const [selectedPeriod, setSelectedPeriod] = useState(defaultPeriod);
+  const [selectedDate, setSelectedDate] = useState(getTodayKorea()); // 한국 시간 기준 오늘 날짜
   const [journalData, setJournalData] = useState([]);
   const [studentsData, setStudentsData] = useState({});
   const [loading, setLoading] = useState(true);
@@ -30,12 +41,44 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시' }) => {
     return iconMap[studentName] || '🎭';
   };
 
-  // 오늘 날짜 구하기 (한국 시간 기준)
+  // 오늘 날짜 구하기 (한국 시간 기준) - 수정된 버전
   const getKoreaDate = () => {
     const now = new Date();
-    const koreaNow = new Date(now.getTime() + (9 * 60 * 60 * 1000));
-    return koreaNow.toISOString().split('T')[0];
+    // 한국 시간으로 변환 (UTC+9)
+    const koreaTime = new Date(now.toLocaleString("en-US", {timeZone: "Asia/Seoul"}));
+    const year = koreaTime.getFullYear();
+    const month = String(koreaTime.getMonth() + 1).padStart(2, '0');
+    const day = String(koreaTime.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
   };
+
+  // 새로고침 함수
+  const refreshData = () => {
+    setLoading(true);
+    setJournalData([]);
+    setCardPositions({});
+    setRecommendations({});
+    
+    // 데이터를 강제로 다시 로드하기 위해 selectedPeriod를 재설정
+    const currentPeriod = selectedPeriod;
+    setSelectedPeriod('');
+    setTimeout(() => {
+      setSelectedPeriod(currentPeriod);
+    }, 100);
+  };
+
+  // 자동 새로고침 (30초마다)
+  useEffect(() => {
+    if (!isOpen) return;
+    
+    const autoRefreshInterval = setInterval(() => {
+      console.log('Auto refresh triggered');
+      // 데이터 새로고침은 이미 실시간 리스너로 처리되므로 
+      // 여기서는 연결 상태만 확인
+    }, 30000); // 30초마다
+    
+    return () => clearInterval(autoRefreshInterval);
+  }, [isOpen]);
 
   // 카드 초기 위치 설정 (간격 20% 추가 늘림)
   const getInitialPosition = (index) => {
@@ -78,8 +121,7 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시' }) => {
     if (!isOpen) return;
     
     try {
-      const today = getKoreaDate();
-      const recommendationsRef = doc(db, `recommendations/${today}`);
+      const recommendationsRef = doc(db, `recommendations/${selectedDate}`);
       const unsubscribe = onSnapshot(recommendationsRef, (docSnap) => {
         console.log('Recommendations updated:', docSnap.data());
         if (docSnap.exists()) {
@@ -98,47 +140,62 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시' }) => {
     }
   };
 
-  // 추천하기 함수 (중복 추천 방지 및 오류 수정)
+  // 세션별 추천 기록 저장
+  const [userRecommendations, setUserRecommendations] = useState(new Set());
+
+  // 추천하기 함수 (강화된 중복 방지 시스템)
   const handleRecommend = async (journalId, studentName) => {
-    const currentUser = '선생님'; // 실제로는 현재 로그인된 사용자 정보를 사용
+    // 이미 추천했는지 세션 상태로 확인
+    if (userRecommendations.has(journalId)) {
+      alert('이미 이 학습일지에 추천하셨습니다!');
+      return;
+    }
+    
+    // 현재 추천 수 확인
+    const currentRecs = recommendations[journalId] || [];
+    
+    // 추천 제한 (최대 20개)
+    if (currentRecs.length >= 20) {
+      alert('이 학습일지는 이미 충분한 추천을 받았습니다! (최대 20개)');
+      return;
+    }
+    
+    // 브라우저별 고유 사용자 ID (세션 기반)
+    let currentUser = sessionStorage.getItem('userRecommendId');
+    if (!currentUser) {
+      currentUser = `user_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      sessionStorage.setItem('userRecommendId', currentUser);
+    }
     
     try {
-      const today = getKoreaDate();
-      const recommendationsRef = doc(db, `recommendations/${today}`);
+      const recommendationsRef = doc(db, `recommendations/${selectedDate}`);
       
-      const currentRecs = recommendations[journalId] || [];
-      const hasRecommended = currentRecs.includes(currentUser);
+      // 새로운 추천 추가
+      await setDoc(recommendationsRef, {
+        [journalId]: arrayUnion(currentUser)
+      }, { merge: true });
       
-      console.log('Before recommendation:', {
+      // 세션 상태에 추천 기록 추가
+      setUserRecommendations(prev => new Set([...prev, journalId]));
+      
+      console.log('Recommendation added:', {
         journalId,
-        currentRecs,
-        hasRecommended,
-        currentUser
+        currentUser,
+        studentName,
+        totalRecommendations: currentRecs.length + 1
       });
       
-      if (hasRecommended) {
-        // 추천 취소
-        await updateDoc(recommendationsRef, {
-          [journalId]: arrayRemove(currentUser)
-        });
-        console.log('Recommendation removed');
-      } else {
-        // 추천 추가 - 문서가 존재하지 않을 수 있으므로 setDoc 사용
-        await setDoc(recommendationsRef, {
-          [journalId]: arrayUnion(currentUser)
-        }, { merge: true });
-        console.log('Recommendation added');
-      }
     } catch (error) {
       console.error('Error updating recommendation:', error);
       // Firebase 문서가 존재하지 않는 경우 새로 생성
       if (error.code === 'not-found') {
         try {
-          const today = getKoreaDate();
-          const recommendationsRef = doc(db, `recommendations/${today}`);
+          const recommendationsRef = doc(db, `recommendations/${selectedDate}`);
           await setDoc(recommendationsRef, {
             [journalId]: [currentUser]
           });
+          // 세션 상태에 추천 기록 추가
+          setUserRecommendations(prev => new Set([...prev, journalId]));
           console.log('New recommendation document created');
         } catch (createError) {
           console.error('Error creating recommendation document:', createError);
@@ -151,8 +208,7 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시' }) => {
   useEffect(() => {
     if (!isOpen) return;
 
-    const today = getKoreaDate();
-    const journalsRef = collection(db, `journals/${today}/entries`);
+    const journalsRef = collection(db, `journals/${selectedDate}/entries`);
     const q = query(journalsRef, where('period', '==', selectedPeriod));
 
     const unsubscribeJournals = onSnapshot(q, async (querySnapshot) => {
@@ -192,7 +248,7 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시' }) => {
         unsubscribeRecommendations();
       }
     };
-  }, [selectedPeriod, isOpen]);
+  }, [selectedPeriod, selectedDate, isOpen]);
 
   // 모달이 열릴 때 defaultPeriod로 설정
   useEffect(() => {
@@ -254,49 +310,45 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시' }) => {
       document.addEventListener('mouseup', handleMouseUp);
     };
     
-    return (
+    const recCount = recommendations[journal.id]?.length || 0;
+    const isRainbow = recCount >= 5;
+    
+    const cardContent = (
       <div 
         style={{
           background: 'white',
-          borderRadius: '12px',
+          borderRadius: isRainbow ? '6px' : '12px',
           padding: '20px',
-          width: '360px', // 414에서 360으로 복원
-          height: '360px', // 414에서 360으로 복원
+          width: '360px',
+          height: '360px',
           boxShadow: '0 4px 12px rgba(0, 0, 0, 0.12)',
-          border: (() => {
-            const recCount = recommendations[journal.id]?.length || 0;
-            // 추천 수에 따라 테두리 두께 조절
-            const borderWidth = Math.min(2 + recCount * 1, 8); // 최대 8px까지
-            if (recCount >= 5) return `${borderWidth}px solid #ff3d00`; // 빨간색 - 매우 많은 추천
-            if (recCount >= 4) return `${borderWidth}px solid #ff6b35`; // 주황색 - 많은 추천
-            if (recCount >= 3) return `${borderWidth}px solid #ff9800`; // 노랑색
-            if (recCount >= 2) return `${borderWidth}px solid #4ecdc4`; // 청록색
-            if (recCount >= 1) return `${borderWidth}px solid #95e1d3`; // 연한 청록색
-            return '2px solid #e8eaed'; // 기본색
-          })(),
+          border: !isRainbow ? (() => {
+            const borderWidth = Math.min(2 + recCount * 1, 8);
+            if (recCount >= 4) return `${borderWidth}px solid #ff6b35`;
+            if (recCount >= 3) return `${borderWidth}px solid #ff9800`;
+            if (recCount >= 2) return `${borderWidth}px solid #4ecdc4`;
+            if (recCount >= 1) return `${borderWidth}px solid #95e1d3`;
+            return '2px solid #e8eaed';
+          })() : 'none',
           transition: draggedCard?.id === journal.id ? 'none' : 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
           cursor: 'move',
-          position: 'absolute',
-          left: `${position.x}px`,
-          top: `${position.y}px`,
           overflow: 'hidden',
           fontSize: '16px',
           display: 'flex',
           flexDirection: 'column',
-          userSelect: 'none',
-          zIndex: draggedCard?.id === journal.id ? 1000 : 1
+          userSelect: 'none'
         }}
         onMouseDown={handleMouseDown}
-      onMouseOver={(e) => {
-        e.currentTarget.style.transform = 'translateY(-8px) scale(1.05)';
-        e.currentTarget.style.boxShadow = '0 20px 40px rgba(0, 0, 0, 0.2)';
-        e.currentTarget.style.borderColor = '#4285f4';
-      }}
-      onMouseOut={(e) => {
-        e.currentTarget.style.transform = 'translateY(0) scale(1)';
-        e.currentTarget.style.boxShadow = '0 8px 24px rgba(0, 0, 0, 0.12)';
-        e.currentTarget.style.borderColor = '#e8eaed';
-      }}
+        onMouseOver={(e) => {
+          e.currentTarget.style.transform = 'translateY(-8px) scale(1.05)';
+          e.currentTarget.style.boxShadow = '0 20px 40px rgba(0, 0, 0, 0.2)';
+          if (!isRainbow) e.currentTarget.style.borderColor = '#4285f4';
+        }}
+        onMouseOut={(e) => {
+          e.currentTarget.style.transform = 'translateY(0) scale(1)';
+          e.currentTarget.style.boxShadow = '0 8px 24px rgba(0, 0, 0, 0.12)';
+          if (!isRainbow) e.currentTarget.style.borderColor = '#e8eaed';
+        }}
       >
         {/* 배경 장식 */}
         <div style={{
@@ -413,15 +465,19 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시' }) => {
               padding: '4px',
               borderRadius: '50%',
               transition: 'transform 0.2s',
-              filter: recommendations[journal.id]?.includes('선생님') ? 'none' : 'grayscale(100%)',
-              transform: 'scale(1)'
+              filter: userRecommendations.has(journal.id) ? 'none' : 'grayscale(50%)',
+              transform: 'scale(1)',
+              opacity: userRecommendations.has(journal.id) ? 1 : 0.6
             }}
             onMouseOver={(e) => {
               e.currentTarget.style.transform = 'scale(1.2)';
+              e.currentTarget.style.opacity = '1';
             }}
             onMouseOut={(e) => {
               e.currentTarget.style.transform = 'scale(1)';
+              e.currentTarget.style.opacity = userRecommendations.has(journal.id) ? '1' : '0.6';
             }}
+            title={userRecommendations.has(journal.id) ? '이미 추천하셨습니다' : '추천하기'}
           >
             👍
           </button>
@@ -512,11 +568,53 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시' }) => {
         </div>
       </div>
     );
+    
+    // 무지개 테두리가 필요한 경우 래퍼로 감싸기
+    if (isRainbow) {
+      return (
+        <div 
+          className="rainbow-border"
+          style={{
+            position: 'absolute',
+            left: `${position.x}px`,
+            top: `${position.y}px`,
+            zIndex: draggedCard?.id === journal.id ? 1000 : 1
+          }}
+        >
+          <div className="rainbow-content">
+            {cardContent}
+          </div>
+        </div>
+      );
+    }
+    
+    // 일반 테두리인 경우
+    return (
+      <div style={{
+        position: 'absolute',
+        left: `${position.x}px`,
+        top: `${position.y}px`,
+        zIndex: draggedCard?.id === journal.id ? 1000 : 1
+      }}>
+        {cardContent}
+      </div>
+    );
   };
 
+  // 무지개 테두리 학생 카운팅 (추천 5개 이상)
+  const rainbowStudents = journalData.filter(journal => {
+    const recCount = recommendations[journal.id]?.length || 0;
+    return recCount >= 5;
+  });
+  
+  const rainbowCount = rainbowStudents.length;
+  const nextEventAt = Math.ceil(rainbowCount / 10) * 10;
+  const remainingForEvent = nextEventAt - rainbowCount;
+  
   console.log('DataBoardModal isOpen:', isOpen, 'defaultPeriod:', defaultPeriod);
   console.log('Current studentsData:', studentsData);
   console.log('Current journalData:', journalData);
+  console.log('Rainbow students:', rainbowStudents, 'Count:', rainbowCount);
   
   if (!isOpen) return null;
 
@@ -530,9 +628,32 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시' }) => {
           75% { border-color: #e91e63; }
           100% { border-color: #00bcd4; }
         }
+        @keyframes pulse {
+          0% { transform: scale(1); opacity: 1; }
+          50% { transform: scale(1.05); opacity: 0.8; }
+          100% { transform: scale(1); opacity: 1; }
+        }
+        @keyframes rainbow {
+          0% { background-position: 0% 50%; }
+          50% { background-position: 100% 50%; }
+          100% { background-position: 0% 50%; }
+        }
         .data-board-modal {
           animation: dataBoardBorder 3s infinite;
           border: 3px solid #00bcd4;
+        }
+        .rainbow-border {
+          background: linear-gradient(-45deg, #ff0000, #ff7f00, #ffff00, #00ff00, #0000ff, #4b0082, #9400d3, #ff0000);
+          background-size: 400% 400%;
+          animation: rainbow 3s ease infinite;
+          padding: 6px;
+          border-radius: 12px;
+        }
+        .rainbow-content {
+          background: white;
+          border-radius: 6px;
+          height: 100%;
+          width: 100%;
         }
       `}</style>
       <div style={{
@@ -579,10 +700,43 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시' }) => {
               <p style={{
                 margin: 0,
                 fontSize: '16px',
-                color: '#666'
+                color: '#666',
+                marginBottom: '12px'
               }}>
                 우리 반 학습일지를 실시간으로 확인해보세요!
               </p>
+              
+              {/* 무지개 카운터 */}
+              <div style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '8px',
+                background: 'linear-gradient(45deg, #ff6b6b, #4ecdc4, #45b7d1, #96ceb4, #feca57)',
+                padding: '8px 16px',
+                borderRadius: '20px',
+                color: 'white',
+                fontSize: '14px',
+                fontWeight: 'bold',
+                boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+              }}>
+                <span style={{ fontSize: '18px' }}>🌈</span>
+                <span>무지개 학생: {rainbowCount}명</span>
+                {rainbowCount % 10 === 0 && rainbowCount > 0 ? (
+                  <span style={{
+                    background: 'rgba(255,255,255,0.3)',
+                    padding: '4px 8px',
+                    borderRadius: '10px',
+                    fontSize: '12px',
+                    animation: 'pulse 1.5s infinite'
+                  }}>
+                    🎉 이벤트 타임!
+                  </span>
+                ) : (
+                  <span style={{ fontSize: '12px', opacity: 0.9 }}>
+                    (이벤트까지 {remainingForEvent}명)
+                  </span>
+                )}
+              </div>
             </div>
 
             {/* 교시 선택 드롭다운과 닫기 버튼 */}
@@ -592,8 +746,28 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시' }) => {
               top: '24px',
               display: 'flex', 
               alignItems: 'center', 
-              gap: '16px' 
+              gap: '12px' 
             }}>
+              {/* 날짜 선택 */}
+              <input
+                type="date"
+                value={selectedDate}
+                onChange={(e) => setSelectedDate(e.target.value)}
+                style={{
+                  padding: '8px 12px',
+                  fontSize: '14px',
+                  fontWeight: 'bold',
+                  border: '2px solid #e0e0e0',
+                  borderRadius: '8px',
+                  backgroundColor: 'white',
+                  color: '#333',
+                  cursor: 'pointer',
+                  outline: 'none',
+                  minWidth: '140px'
+                }}
+              />
+              
+              {/* 교시 선택 */}
               <select
                 value={selectedPeriod}
                 onChange={(e) => setSelectedPeriod(e.target.value)}
@@ -616,6 +790,40 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시' }) => {
                   </option>
                 ))}
               </select>
+              
+              {/* 새로고침 버튼 */}
+              <button
+                onClick={refreshData}
+                style={{
+                  background: '#e8f5e8',
+                  border: 'none',
+                  borderRadius: 999,
+                  padding: '8px 18px',
+                  boxShadow: '0 2px 8px #b2ebf240',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  fontWeight: 700,
+                  color: '#2e7d32',
+                  fontSize: 16,
+                  transition: 'all 0.2s ease'
+                }}
+                title="데이터 새로고침"
+                onMouseOver={(e) => {
+                  e.currentTarget.style.transform = 'scale(1.05)';
+                  e.currentTarget.style.boxShadow = '0 4px 12px #b2ebf280';
+                }}
+                onMouseOut={(e) => {
+                  e.currentTarget.style.transform = 'scale(1)';
+                  e.currentTarget.style.boxShadow = '0 2px 8px #b2ebf240';
+                }}
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" style={{ color: '#2e7d32', fontSize: 20, width: 20, height: 20 }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                <span>새로고침</span>
+              </button>
 
               <button
                 onClick={onClose}

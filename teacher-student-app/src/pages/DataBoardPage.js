@@ -9,6 +9,19 @@ const DataBoardPage = () => {
   const [journalData, setJournalData] = useState([]);
   const [loading, setLoading] = useState(true);
 
+  // 새로고침 함수
+  const refreshData = () => {
+    setLoading(true);
+    setJournalData([]);
+    
+    // 데이터를 강제로 다시 로드하기 위해 selectedPeriod를 재설정
+    const currentPeriod = selectedPeriod;
+    setSelectedPeriod('');
+    setTimeout(() => {
+      setSelectedPeriod(currentPeriod);
+    }, 100);
+  };
+
   const PERIODS = ['1교시', '2교시', '3교시', '4교시', '5교시', '6교시'];
 
   // 학생별 레벨 아이콘 매핑 (실제 학생 데이터에서 가져와야 하지만 임시로 설정)
@@ -28,11 +41,15 @@ const DataBoardPage = () => {
     return iconMap[studentName] || '🎭';
   };
 
-  // 오늘 날짜 구하기 (한국 시간 기준)
+  // 오늘 날짜 구하기 (한국 시간 기준) - 수정된 버전
   const getKoreaDate = () => {
     const now = new Date();
-    const koreaNow = new Date(now.getTime() + (9 * 60 * 60 * 1000));
-    return koreaNow.toISOString().split('T')[0];
+    // 한국 시간으로 변환 (UTC+9)
+    const koreaTime = new Date(now.toLocaleString("en-US", {timeZone: "Asia/Seoul"}));
+    const year = koreaTime.getFullYear();
+    const month = String(koreaTime.getMonth() + 1).padStart(2, '0');
+    const day = String(koreaTime.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
   };
 
   // 학습일지 데이터 실시간 로딩
@@ -273,10 +290,12 @@ const DataBoardPage = () => {
         </p>
       </div>
 
-      {/* 교시 선택 드롭다운 */}
+      {/* 교시 선택 드롭다운과 새로고침 버튼 */}
       <div style={{
         display: 'flex',
         justifyContent: 'center',
+        alignItems: 'center',
+        gap: '16px',
         marginBottom: '30px'
       }}>
         <select
@@ -302,6 +321,40 @@ const DataBoardPage = () => {
             </option>
           ))}
         </select>
+        
+        {/* 새로고침 버튼 */}
+        <button
+          onClick={refreshData}
+          style={{
+            background: '#e8f5e8',
+            border: 'none',
+            borderRadius: 999,
+            padding: '8px 18px',
+            boxShadow: '0 2px 8px #b2ebf240',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            fontWeight: 700,
+            color: '#2e7d32',
+            fontSize: 16,
+            transition: 'all 0.2s ease'
+          }}
+          onMouseOver={(e) => {
+            e.currentTarget.style.transform = 'scale(1.05)';
+            e.currentTarget.style.boxShadow = '0 4px 12px #b2ebf280';
+          }}
+          onMouseOut={(e) => {
+            e.currentTarget.style.transform = 'scale(1)';
+            e.currentTarget.style.boxShadow = '0 2px 8px #b2ebf240';
+          }}
+          title="데이터 새로고침"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" style={{ color: '#2e7d32', fontSize: 20, width: 20, height: 20 }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          </svg>
+          <span>새로고침</span>
+        </button>
       </div>
 
       {/* 학습일지 카드들 */}
