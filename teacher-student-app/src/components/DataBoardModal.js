@@ -155,12 +155,20 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시' }) => {
       console.log('Loading all cumulative recommendations...');
       const studentRecommendations = {};
       
-      // 최근 30일간의 데이터 조회
+      // 9월 10일부터의 데이터만 조회 (9월 9일 제외)
       const promises = [];
       for (let i = 0; i < 30; i++) {
         const date = new Date();
         date.setDate(date.getDate() - i);
         const dateStr = date.toISOString().split('T')[0];
+        
+        // 9월 9일(2025-09-09) 데이터는 제외
+        if (dateStr === '2025-09-09') {
+          console.log('Skipping September 9th data:', dateStr);
+          continue;
+        }
+        
+        console.log('Including date for cumulative recommendations:', dateStr);
         
         const recommendationPromise = getDoc(doc(db, `recommendations/${dateStr}`))
           .then(docSnap => {
@@ -718,6 +726,20 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시' }) => {
           animation: dataBoardBorder 3s infinite;
           border: 3px solid #00bcd4;
         }
+        .custom-scrollbar::-webkit-scrollbar {
+          width: 8px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+          background: #f1f1f1;
+          border-radius: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+          background: #c1c1c1;
+          border-radius: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+          background: #a8a8a8;
+        }
         .rainbow-border {
           background: linear-gradient(-45deg, #ff0000, #ff7f00, #ffff00, #00ff00, #0000ff, #4b0082, #9400d3, #ff0000);
           background-size: 400% 400%;
@@ -982,28 +1004,55 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시' }) => {
               </div>
 
               {/* 추천 순위 리스트 */}
-              <div style={{
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '12px'
-              }}>
+              <div 
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '12px',
+                  maxHeight: '600px',
+                  overflowY: 'auto',
+                  paddingRight: '8px'
+                }}
+                className="custom-scrollbar"
+              >
                 {(() => {
                   // 누적 추천 데이터를 기반으로 순위 계산
                   const allStudentNames = Object.keys(studentsData);
                   
-                  // 전체 학생 리스트를 기반으로 순위 생성
-                  const leaderboard = allStudentNames
-                    .map(studentName => ({
+                  console.log('=== LEADERBOARD DEBUG ===');
+                  console.log('Students data keys:', allStudentNames);
+                  console.log('Cumulative recommendations keys:', Object.keys(cumulativeRecommendations));
+                  console.log('Cumulative recommendations:', cumulativeRecommendations);
+                  console.log('Cumulative recommendations type:', typeof cumulativeRecommendations);
+                  console.log('Is cumulativeRecommendations empty object?', Object.keys(cumulativeRecommendations).length === 0);
+                  
+                  // 누적 추천 데이터에서 직접 순위 생성 (studentsData와 무관하게)
+                  const entries = Object.entries(cumulativeRecommendations);
+                  console.log('Object.entries result:', entries);
+                  
+                  const mappedData = entries.map(([studentName, count]) => {
+                    console.log(`Mapping: ${studentName} -> ${count} (type: ${typeof count})`);
+                    return {
                       studentName,
-                      recommendations: cumulativeRecommendations[studentName] || 0,
+                      recommendations: count,
                       icon: getStudentIcon(studentName),
                       level: studentsData[studentName]?.level || 1
-                    }))
-                    .filter(item => item.recommendations > 0) // 추천이 있는 학생만 표시
-                    .sort((a, b) => b.recommendations - a.recommendations);
+                    };
+                  });
+                  console.log('Mapped data:', mappedData);
                   
-                  console.log('Leaderboard calculated:', leaderboard);
-                  console.log('Cumulative recommendations:', cumulativeRecommendations);
+                  const filteredData = mappedData.filter(item => {
+                    const hasRecommendations = item.recommendations > 0;
+                    console.log(`Filtering ${item.studentName}: ${item.recommendations} > 0 = ${hasRecommendations}`);
+                    return hasRecommendations;
+                  });
+                  console.log('Filtered data:', filteredData);
+                  
+                  const leaderboard = filteredData.sort((a, b) => b.recommendations - a.recommendations);
+                  
+                  console.log('Final leaderboard:', leaderboard);
+                  console.log('Leaderboard length:', leaderboard.length);
+                  console.log('=== END DEBUG ===');
 
                   if (leaderboard.length === 0) {
                     return (
@@ -1025,7 +1074,23 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시' }) => {
 
                   return leaderboard.map((item, index) => {
                     const isRainbow = item.recommendations >= 5;
-                    const rankEmoji = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : '🏅';
+                    // 순위 이미지 (chupa.png 사용)
+                    const getRankImage = () => (
+                      <img 
+                        src="/chupa.png"
+                        alt="Rank"
+                        style={{
+                          width: '20px',
+                          height: '20px',
+                          objectFit: 'contain'
+                        }}
+                        onError={(e) => {
+                          // 이미지 로드 실패 시 기본 이모지로 대체
+                          e.target.style.display = 'none';
+                          e.target.nextSibling.style.display = 'inline';
+                        }}
+                      />
+                    );
                     
                     return (
                       <div
@@ -1052,7 +1117,8 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시' }) => {
                           minWidth: '24px',
                           textAlign: 'center'
                         }}>
-                          {rankEmoji}
+                          {getRankImage()}
+                          <span style={{ display: 'none' }}>🏅</span>
                         </div>
 
                         {/* 학생 레벨 이미지 */}
