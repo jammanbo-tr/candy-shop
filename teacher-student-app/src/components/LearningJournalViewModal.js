@@ -2,6 +2,8 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { collection, getDocs, updateDoc, doc, setDoc, onSnapshot } from 'firebase/firestore';
 import { db } from '../firebase';
 import ImageViewerModal from './ImageViewerModal';
+import { analyzeDataWithGemini, getDemoAnalysisResult } from '../utils/aiAnalysis';
+import WordCloud from './WordCloud';
 
 const PERIODS = ['1교시', '2교시', '3교시', '4교시', '5교시', '6교시'];
 
@@ -30,6 +32,9 @@ const LearningJournalViewModal = ({ isOpen, onClose, selectedDate, refreshData }
     '6교시': true
   });
   const [showTableView, setShowTableView] = useState(true);
+  const [showAIAnalysis, setShowAIAnalysis] = useState(false);
+  const [aiAnalysisLoading, setAiAnalysisLoading] = useState(false);
+  const [aiAnalysisResult, setAiAnalysisResult] = useState(null);
   const [draggedEntry, setDraggedEntry] = useState(null);
   const [dragOverCell, setDragOverCell] = useState(null);
   const [showMoveConfirmation, setShowMoveConfirmation] = useState(false);
@@ -299,6 +304,69 @@ const LearningJournalViewModal = ({ isOpen, onClose, selectedDate, refreshData }
   const closeImageViewer = () => {
     setShowImageViewer(false);
     setSelectedImageData(null);
+  };
+
+  // AI 학습분석 실행 함수
+  const executeAIAnalysis = async () => {
+    setAiAnalysisLoading(true);
+    setAiAnalysisResult(null);
+
+    try {
+      // 선택된 날짜와 교시에 따라 데이터 필터링
+      let filteredData = data.filter(entry => {
+        // 날짜 필터
+        if (selectedDateFilter && entry.date !== selectedDateFilter) {
+          return false;
+        }
+        
+        // 교시 필터 (선택된 교시만)
+        const selectedPeriods = Object.keys(visiblePeriods).filter(period => 
+          visiblePeriods[period] && period !== '전체'
+        );
+        
+        if (selectedPeriods.length > 0 && !selectedPeriods.includes(entry.period)) {
+          return false;
+        }
+        
+        // 내용이 있는 데이터만
+        return entry.content && entry.content.trim().length > 0;
+      });
+
+      if (filteredData.length === 0) {
+        alert('선택된 조건에 해당하는 학습 데이터가 없습니다.');
+        return;
+      }
+
+      // AI 분석용 데이터 포맷팅
+      const analysisData = filteredData.map(entry => ({
+        name: entry.studentName || '이름없음',
+        content: entry.content
+      }));
+
+      console.log('AI 분석 시작:', analysisData);
+
+      // AI 분석 실행
+      const result = await analyzeDataWithGemini(analysisData);
+      
+      // 데모 모드인 경우 데모 결과 사용
+      if (result.demo || result.error) {
+        console.log('데모 모드 또는 오류로 인해 데모 결과 사용');
+        const demoResult = getDemoAnalysisResult();
+        setAiAnalysisResult(demoResult);
+      } else {
+        setAiAnalysisResult(result);
+      }
+
+    } catch (error) {
+      console.error('AI 분석 오류:', error);
+      alert(`AI 분석 중 오류가 발생했습니다: ${error.message}`);
+      
+      // 오류 시 데모 결과 표시
+      const demoResult = getDemoAnalysisResult();
+      setAiAnalysisResult(demoResult);
+    } finally {
+      setAiAnalysisLoading(false);
+    }
   };
 
   // 익명 모드 Firebase 동기화
@@ -710,13 +778,16 @@ const LearningJournalViewModal = ({ isOpen, onClose, selectedDate, refreshData }
                   marginBottom: '16px'
                 }}>
                   <button
-                    onClick={() => setShowTableView(false)}
+                    onClick={() => {
+                      setShowTableView(false);
+                      setShowAIAnalysis(false);
+                    }}
                     style={{
                       padding: '8px 16px',
                       borderRadius: '6px',
-                      border: showTableView ? '1px solid #e1e5e9' : 'none',
-                      backgroundColor: showTableView ? 'white' : '#1976d2',
-                      color: showTableView ? '#666' : 'white',
+                      border: (!showTableView && !showAIAnalysis) ? 'none' : '1px solid #e1e5e9',
+                      backgroundColor: (!showTableView && !showAIAnalysis) ? '#1976d2' : 'white',
+                      color: (!showTableView && !showAIAnalysis) ? 'white' : '#666',
                       fontSize: '14px',
                       fontWeight: '600',
                       cursor: 'pointer',
@@ -726,13 +797,16 @@ const LearningJournalViewModal = ({ isOpen, onClose, selectedDate, refreshData }
                     📋 목록 보기
                   </button>
                   <button
-                    onClick={() => setShowTableView(true)}
+                    onClick={() => {
+                      setShowTableView(true);
+                      setShowAIAnalysis(false);
+                    }}
                     style={{
                       padding: '8px 16px',
                       borderRadius: '6px',
-                      border: showTableView ? 'none' : '1px solid #e1e5e9',
-                      backgroundColor: showTableView ? '#1976d2' : 'white',
-                      color: showTableView ? 'white' : '#666',
+                      border: (showTableView && !showAIAnalysis) ? 'none' : '1px solid #e1e5e9',
+                      backgroundColor: (showTableView && !showAIAnalysis) ? '#1976d2' : 'white',
+                      color: (showTableView && !showAIAnalysis) ? 'white' : '#666',
                       fontSize: '14px',
                       fontWeight: '600',
                       cursor: 'pointer',
@@ -741,9 +815,315 @@ const LearningJournalViewModal = ({ isOpen, onClose, selectedDate, refreshData }
                   >
                     📊 표 보기
                   </button>
+                  <button
+                    onClick={() => setShowAIAnalysis(true)}
+                    style={{
+                      padding: '8px 16px',
+                      borderRadius: '6px',
+                      border: showAIAnalysis ? 'none' : '1px solid #e1e5e9',
+                      backgroundColor: showAIAnalysis ? '#1976d2' : 'white',
+                      color: showAIAnalysis ? 'white' : '#666',
+                      fontSize: '14px',
+                      fontWeight: '600',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s ease'
+                    }}
+                  >
+                    🤖 AI 학습분석
+                  </button>
                 </div>
 
-                {showTableView ? (
+                {showAIAnalysis ? (
+                  // AI 학습분석 - 워드클라우드 및 분석 결과
+                  <div style={{ 
+                    padding: '20px',
+                    backgroundColor: '#f8f9fa',
+                    borderRadius: '12px',
+                    border: '1px solid #e9ecef'
+                  }}>
+                    <h4 style={{
+                      fontSize: '16px',
+                      fontWeight: 'bold',
+                      color: '#1976d2',
+                      marginBottom: '16px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px'
+                    }}>
+                      🤖 AI 학습분석
+                    </h4>
+                    
+                    {/* 날짜와 교시 선택 UI */}
+                    <div style={{
+                      backgroundColor: 'white',
+                      padding: '16px',
+                      borderRadius: '8px',
+                      marginBottom: '20px',
+                      border: '1px solid #e1e5e9'
+                    }}>
+                      <h5 style={{
+                        fontSize: '14px',
+                        fontWeight: 'bold',
+                        color: '#333',
+                        marginBottom: '12px'
+                      }}>
+                        📅 분석할 날짜와 교시를 선택하세요
+                      </h5>
+                      
+                      {/* 날짜 선택 */}
+                      <div style={{ marginBottom: '12px' }}>
+                        <label style={{
+                          fontSize: '12px',
+                          color: '#666',
+                          marginBottom: '4px',
+                          display: 'block'
+                        }}>
+                          날짜 선택
+                        </label>
+                        <input
+                          type="date"
+                          value={selectedDateFilter}
+                          onChange={(e) => setSelectedDateFilter(e.target.value)}
+                          style={{
+                            padding: '8px 12px',
+                            borderRadius: '6px',
+                            border: '1px solid #e1e5e9',
+                            fontSize: '14px',
+                            outline: 'none'
+                          }}
+                        />
+                      </div>
+                      
+                      {/* 교시 선택 */}
+                      <div>
+                        <label style={{
+                          fontSize: '12px',
+                          color: '#666',
+                          marginBottom: '8px',
+                          display: 'block'
+                        }}>
+                          교시 선택 (복수 선택 가능)
+                        </label>
+                        <div style={{
+                          display: 'flex',
+                          flexWrap: 'wrap',
+                          gap: '8px'
+                        }}>
+                          {PERIODS.map(period => (
+                            <label key={period} style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              fontSize: '12px',
+                              cursor: 'pointer',
+                              padding: '4px 8px',
+                              borderRadius: '4px',
+                              backgroundColor: visiblePeriods[period] ? '#e3f2fd' : '#f5f5f5',
+                              border: '1px solid ' + (visiblePeriods[period] ? '#1976d2' : '#ddd')
+                            }}>
+                              <input
+                                type="checkbox"
+                                checked={visiblePeriods[period]}
+                                onChange={(e) => setVisiblePeriods(prev => ({
+                                  ...prev,
+                                  [period]: e.target.checked
+                                }))}
+                                style={{ margin: 0 }}
+                              />
+                              {period}
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                      
+                      {/* 분석 실행 버튼 */}
+                      <button
+                        onClick={executeAIAnalysis}
+                        disabled={aiAnalysisLoading}
+                        style={{
+                          marginTop: '16px',
+                          padding: '10px 20px',
+                          backgroundColor: aiAnalysisLoading ? '#ccc' : '#1976d2',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '6px',
+                          fontSize: '14px',
+                          fontWeight: '600',
+                          cursor: aiAnalysisLoading ? 'not-allowed' : 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          transition: 'all 0.2s ease'
+                        }}
+                      >
+                        {aiAnalysisLoading ? '🔄 분석 중...' : '🔍 AI 분석 실행'}
+                      </button>
+                    </div>
+                    
+                    {/* 분석 결과 영역 */}
+                    {aiAnalysisResult ? (
+                      <div style={{
+                        backgroundColor: 'white',
+                        padding: '20px',
+                        borderRadius: '8px',
+                        border: '1px solid #e1e5e9'
+                      }}>
+                        {/* 워드클라우드 */}
+                        {aiAnalysisResult.keywords && aiAnalysisResult.keywords.length > 0 && (
+                          <div style={{ marginBottom: '32px' }}>
+                            <h5 style={{
+                              fontSize: '16px',
+                              fontWeight: 'bold',
+                              color: '#1976d2',
+                              marginBottom: '16px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '8px'
+                            }}>
+                              ☁️ 핵심 단어 워드클라우드
+                            </h5>
+                            <WordCloud words={aiAnalysisResult.keywords} width={500} height={300} />
+                          </div>
+                        )}
+
+                        {/* 메타인지 우수 학생 추천 */}
+                        {aiAnalysisResult.recommendations && aiAnalysisResult.recommendations.length > 0 && (
+                          <div style={{ marginBottom: '32px' }}>
+                            <h5 style={{
+                              fontSize: '16px',
+                              fontWeight: 'bold',
+                              color: '#4caf50',
+                              marginBottom: '16px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '8px'
+                            }}>
+                              🌟 메타인지 우수 학생
+                            </h5>
+                            {aiAnalysisResult.recommendations.map((rec, index) => (
+                              <div key={index} style={{
+                                backgroundColor: '#f1f8e9',
+                                padding: '16px',
+                                borderRadius: '8px',
+                                border: '1px solid #c8e6c9',
+                                marginBottom: '12px'
+                              }}>
+                                <div style={{
+                                  fontSize: '14px',
+                                  fontWeight: 'bold',
+                                  color: '#2e7d32',
+                                  marginBottom: '8px'
+                                }}>
+                                  👤 {rec.name}
+                                </div>
+                                <div style={{
+                                  fontSize: '13px',
+                                  color: '#666',
+                                  marginBottom: '8px',
+                                  fontStyle: 'italic',
+                                  backgroundColor: 'white',
+                                  padding: '8px',
+                                  borderRadius: '4px',
+                                  border: '1px solid #e0e0e0'
+                                }}>
+                                  "{rec.quote}"
+                                </div>
+                                <div style={{
+                                  fontSize: '13px',
+                                  color: '#2e7d32'
+                                }}>
+                                  💡 {rec.reason}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* 피드백 제안 */}
+                        {aiAnalysisResult.feedback_suggestions && aiAnalysisResult.feedback_suggestions.length > 0 && (
+                          <div style={{ marginBottom: '16px' }}>
+                            <h5 style={{
+                              fontSize: '16px',
+                              fontWeight: 'bold',
+                              color: '#ff9800',
+                              marginBottom: '16px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '8px'
+                            }}>
+                              💭 피드백 제안
+                            </h5>
+                            {aiAnalysisResult.feedback_suggestions.map((feedback, index) => (
+                              <div key={index} style={{
+                                backgroundColor: '#fff8e1',
+                                padding: '16px',
+                                borderRadius: '8px',
+                                border: '1px solid #ffcc02',
+                                marginBottom: '12px'
+                              }}>
+                                <div style={{
+                                  fontSize: '14px',
+                                  fontWeight: 'bold',
+                                  color: '#e65100',
+                                  marginBottom: '8px'
+                                }}>
+                                  👤 {feedback.name}
+                                </div>
+                                <div style={{
+                                  fontSize: '13px',
+                                  color: '#666',
+                                  marginBottom: '8px',
+                                  fontStyle: 'italic',
+                                  backgroundColor: 'white',
+                                  padding: '8px',
+                                  borderRadius: '4px',
+                                  border: '1px solid #e0e0e0'
+                                }}>
+                                  "{feedback.quote}"
+                                </div>
+                                <div style={{
+                                  fontSize: '13px',
+                                  color: '#e65100'
+                                }}>
+                                  📝 {feedback.suggestion}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* 데모 모드 표시 */}
+                        {aiAnalysisResult.demo && (
+                          <div style={{
+                            backgroundColor: '#e3f2fd',
+                            padding: '12px',
+                            borderRadius: '6px',
+                            border: '1px solid #2196f3',
+                            fontSize: '13px',
+                            color: '#1565c0',
+                            textAlign: 'center'
+                          }}>
+                            🤖 이 결과는 데모 데이터입니다. 실제 Gemini API를 사용하려면 환경변수를 설정해주세요.
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div style={{
+                        backgroundColor: 'white',
+                        padding: '20px',
+                        borderRadius: '8px',
+                        border: '1px solid #e1e5e9',
+                        textAlign: 'center',
+                        color: '#666'
+                      }}>
+                        <div style={{ fontSize: '48px', marginBottom: '16px' }}>🤖</div>
+                        <p style={{ margin: 0, fontSize: '14px' }}>
+                          날짜와 교시를 선택한 후 "AI 분석 실행" 버튼을 클릭하세요.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                ) : showTableView ? (
                   // 표 보기 - 학생별 교시 테이블
                   <div style={{ overflowX: 'auto' }}>
                     {(() => {

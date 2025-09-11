@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
-import { db } from '../firebase';
+import React, { useState, useEffect, useRef } from 'react';
+import { db, storage } from '../firebase';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import DataBoardModal from './DataBoardModal';
 
 const STUDENTS = [
@@ -16,13 +17,18 @@ const LearningJournalModal = ({ isOpen, onClose, studentName = '' }) => {
   const [loading, setLoading] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
   const [showDataBoard, setShowDataBoard] = useState(false);
+  const [selectedImage, setSelectedImage] = useState(null);
+  const [imagePreview, setImagePreview] = useState(null);
+  const fileInputRef = useRef(null);
   const [formData, setFormData] = useState({
     studentName: studentName || '',
     period: '',
     understanding: 3,
     satisfaction: 3,
     content: '',
-    keyword: ''
+    keyword: '',
+    imageUrl: '',
+    hasImage: false
   });
 
   const allQuestions = [
@@ -55,10 +61,9 @@ const LearningJournalModal = ({ isOpen, onClose, studentName = '' }) => {
       key: 'satisfaction'
     },
     {
-      title: '학습한 내용을 적어보세요',
-      subtitle: '배운 내용을 자유롭게 적어보세요',
-      type: 'textarea',
-      placeholder: '오늘 배운 내용을 자세히 써주세요...',
+      title: '학습한 내용을 사진으로 올려보세요',
+      subtitle: '노트에 적은 내용을 사진으로 찍어서 올려주세요',
+      type: 'image',
       key: 'content'
     },
     {
@@ -89,13 +94,17 @@ const LearningJournalModal = ({ isOpen, onClose, studentName = '' }) => {
     setLoading(false);
     setShowSuccess(false);
     setShowDataBoard(false);
+    setSelectedImage(null);
+    setImagePreview(null);
     setFormData({
       studentName: studentName || '',
       period: '',
       understanding: 3,
       satisfaction: 3,
       content: '',
-      keyword: ''
+      keyword: '',
+      imageUrl: '',
+      hasImage: false
     });
   };
 
@@ -105,6 +114,25 @@ const LearningJournalModal = ({ isOpen, onClose, studentName = '' }) => {
     onClose();
   };
 
+  const handleImageSelect = (event) => {
+    const file = event.target.files[0];
+    if (file) {
+      if (file.size > 10 * 1024 * 1024) { // 10MB 제한
+        alert('파일 크기는 10MB 이하여야 합니다.');
+        return;
+      }
+      
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        setImagePreview(e.target.result);
+        setSelectedImage(file);
+        updateFormData('content', 'image_uploaded');
+        updateFormData('hasImage', true);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
   const handleNext = () => {
     const currentValue = formData[currentQuestion.key];
     
@@ -112,8 +140,12 @@ const LearningJournalModal = ({ isOpen, onClose, studentName = '' }) => {
       alert(`${currentQuestion.title}에 답해주세요.`);
       return;
     }
-    if ((currentQuestion.type === 'textarea' || currentQuestion.type === 'text') && !currentValue?.trim()) {
+    if (currentQuestion.type === 'text' && !currentValue?.trim()) {
       alert(`${currentQuestion.title}에 답해주세요.`);
+      return;
+    }
+    if (currentQuestion.type === 'image' && !selectedImage) {
+      alert('사진을 선택해주세요.');
       return;
     }
     
@@ -134,9 +166,23 @@ const LearningJournalModal = ({ isOpen, onClose, studentName = '' }) => {
     setLoading(true);
     try {
       const today = new Date().toISOString().split('T')[0];
+      let imageUrl = '';
+      
+      // 이미지가 선택된 경우 Firebase Storage에 업로드
+      if (selectedImage) {
+        const timestamp = Date.now();
+        const fileName = `learning-journals/${today}/${formData.studentName}_${formData.period}_${timestamp}.jpg`;
+        const imageRef = ref(storage, fileName);
+        
+        const snapshot = await uploadBytes(imageRef, selectedImage);
+        imageUrl = await getDownloadURL(snapshot.ref);
+      }
       
       await addDoc(collection(db, `journals/${today}/entries`), {
         ...formData,
+        imageUrl: imageUrl,
+        hasImage: !!selectedImage,
+        content: selectedImage ? 'image_uploaded' : formData.content,
         createdAt: serverTimestamp(),
         date: today
       });
@@ -366,29 +412,97 @@ const LearningJournalModal = ({ isOpen, onClose, studentName = '' }) => {
           </div>
         );
 
-      case 'textarea':
+      case 'image':
         return (
-          <textarea
-            value={currentValue}
-            onChange={(e) => updateFormData(question.key, e.target.value)}
-            placeholder={question.placeholder}
-            style={{
-              width: '100%',
-              padding: '20px',
-              border: '2px solid #e8eaed',
-              borderRadius: '16px',
-              fontSize: '16px',
-              height: '240px',
-              resize: 'none',
-              marginTop: '24px',
-              outline: 'none',
-              fontFamily: 'inherit',
-              transition: 'border-color 0.2s ease',
-              boxSizing: 'border-box'
-            }}
-            onFocus={(e) => e.target.style.borderColor = '#4285f4'}
-            onBlur={(e) => e.target.style.borderColor = '#e8eaed'}
-          />
+          <div style={{ marginTop: '24px' }}>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              onChange={handleImageSelect}
+              style={{ display: 'none' }}
+            />
+            
+            <div
+              onClick={() => fileInputRef.current?.click()}
+              style={{
+                width: '100%',
+                minHeight: '240px',
+                border: '2px dashed #e8eaed',
+                borderRadius: '16px',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease',
+                backgroundColor: imagePreview ? 'transparent' : '#f8f9fa',
+                padding: '20px',
+                boxSizing: 'border-box'
+              }}
+              onMouseOver={(e) => {
+                if (!imagePreview) {
+                  e.target.style.borderColor = '#4285f4';
+                  e.target.style.backgroundColor = '#f0f4ff';
+                }
+              }}
+              onMouseOut={(e) => {
+                if (!imagePreview) {
+                  e.target.style.borderColor = '#e8eaed';
+                  e.target.style.backgroundColor = '#f8f9fa';
+                }
+              }}
+            >
+              {imagePreview ? (
+                <div style={{ width: '100%', textAlign: 'center' }}>
+                  <img
+                    src={imagePreview}
+                    alt="선택된 이미지"
+                    style={{
+                      maxWidth: '100%',
+                      maxHeight: '200px',
+                      borderRadius: '8px',
+                      marginBottom: '12px'
+                    }}
+                  />
+                  <p style={{
+                    fontSize: '14px',
+                    color: '#4285f4',
+                    margin: 0,
+                    fontWeight: '500'
+                  }}>
+                    ✓ 이미지가 선택되었습니다. 다른 이미지를 선택하려면 클릭하세요.
+                  </p>
+                </div>
+              ) : (
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{
+                    fontSize: '48px',
+                    marginBottom: '16px',
+                    color: '#9aa0a6'
+                  }}>
+                    📷
+                  </div>
+                  <h3 style={{
+                    fontSize: '18px',
+                    color: '#202124',
+                    margin: '0 0 8px 0',
+                    fontWeight: '500'
+                  }}>
+                    사진을 선택해주세요
+                  </h3>
+                  <p style={{
+                    fontSize: '14px',
+                    color: '#666',
+                    margin: 0
+                  }}>
+                    클릭하여 갤러리에서 사진을 선택하거나<br />
+                    카메라로 직접 촬영해보세요
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
         );
 
       case 'text':
