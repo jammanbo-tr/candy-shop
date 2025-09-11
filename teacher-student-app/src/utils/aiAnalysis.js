@@ -150,33 +150,80 @@ export function analyzeDataLocally(learningDataList) {
 }
 
 /**
- * 텍스트에서 키워드를 추출하는 함수
+ * 텍스트에서 핵심 단어를 추출하는 함수 (명사 위주, 동의어 통합)
  */
 function extractKeywords(text) {
-  // 불용어 목록
+  // 불용어 목록 (일반적인 단어들)
   const stopWords = new Set([
     '그리고', '그래서', '하지만', '그런데', '또한', '그러나', '때문에', '이때', '그때',
     '오늘', '어제', '내일', '지금', '나는', '우리는', '이것', '그것', '저것',
     '했다', '했습니다', '합니다', '입니다', '있다', '없다', '되었다', '한다',
-    '수업', '시간', '교시', '학교', '선생님', '친구', '학습', '공부'
+    '수업', '시간', '교시', '학교', '선생님', '친구', '학습', '공부', '활동',
+    '내용', '모습', '이야기', '말씀', '설명', '이번', '다음', '처음', '마지막',
+    '때문', '정말', '많이', '조금', '너무', '아주', '정도', '같이', '함께',
+    '모든', '여러', '다른', '새로운', '중요한', '특별한', '좋은', '나쁜'
   ]);
 
-  // 한글 단어만 추출 (2글자 이상)
+  // 동의어 그룹 (같은 의미의 단어들을 하나로 통합)
+  const synonymGroups = {
+    '고구려': ['고구려', '고구려왕조', '고구려국'],
+    '백제': ['백제', '백제국', '백제왕조'],
+    '신라': ['신라', '신라국', '신라왕조'],
+    '통일': ['통일', '통합', '합병'],
+    '문화': ['문화', '문명', '전통'],
+    '역사': ['역사', '과거', '옛날'],
+    '왕': ['왕', '임금', '군주', '대왕'],
+    '전쟁': ['전쟁', '싸움', '전투', '정벌'],
+    '발전': ['발전', '성장', '진보', '발달'],
+    '생각': ['생각', '의견', '견해', '느낌'],
+    '공부': ['공부', '학습', '연구', '탐구'],
+    '이해': ['이해', '깨달음', '파악', '인식'],
+    '관찰': ['관찰', '살펴봄', '지켜봄', '확인'],
+    '실험': ['실험', '탐구', '조사', '연구'],
+    '과학': ['과학', '과학기술', '기술'],
+    '변화': ['변화', '변환', '바뀜', '달라짐'],
+    '결과': ['결과', '성과', '효과', '산출물']
+  };
+
+  // 단어를 대표 단어로 변환하는 함수
+  const normalizeWord = (word) => {
+    for (const [representative, synonyms] of Object.entries(synonymGroups)) {
+      if (synonyms.includes(word)) {
+        return representative;
+      }
+    }
+    return word;
+  };
+
+  // 명사 패턴 우선 추출 (한글 2글자 이상)
   const words = text.match(/[가-힣]{2,}/g) || [];
   
-  // 단어 빈도 계산
+  // 단어 빈도 계산 (동의어 통합)
   const wordCount = {};
   words.forEach(word => {
     if (!stopWords.has(word)) {
-      wordCount[word] = (wordCount[word] || 0) + 1;
+      const normalizedWord = normalizeWord(word);
+      wordCount[normalizedWord] = (wordCount[normalizedWord] || 0) + 1;
     }
   });
 
-  // 빈도순으로 정렬하고 상위 10개만 선택
-  return Object.entries(wordCount)
+  // 빈도가 1인 단어는 제외하고, 빈도순으로 정렬하여 상위 5-10개 선택
+  const filteredWords = Object.entries(wordCount)
+    .filter(([word, count]) => count >= 2) // 최소 2번 이상 언급된 단어만
     .sort((a, b) => b[1] - a[1])
-    .slice(0, 10)
-    .map(([text, count]) => ({ text, count }));
+    .slice(0, 10);
+
+  // 최소 5개는 보장 (빈도 1인 것도 포함)
+  if (filteredWords.length < 5) {
+    const additionalWords = Object.entries(wordCount)
+      .filter(([word, count]) => count === 1)
+      .sort((a, b) => a[0].localeCompare(b[0])) // 알파벳 순 정렬
+      .slice(0, 5 - filteredWords.length);
+    
+    filteredWords.push(...additionalWords);
+  }
+
+  return filteredWords.map(([text, count]) => ({ text, count }));
 }
 
 /**
