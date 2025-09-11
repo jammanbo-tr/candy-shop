@@ -345,7 +345,18 @@ const LearningJournalViewModal = ({ isOpen, onClose, selectedDate, refreshData }
 
       console.log('AI 분석 시작:', analysisData);
 
-      // 먼저 로컬 분석 시도
+      // 먼저 Gemini AI 분석 시도 
+      const result = await analyzeDataWithGemini(analysisData);
+      
+      // Gemini 분석 성공 시
+      if (!result.demo && !result.error) {
+        console.log('Gemini AI 분석 성공:', result);
+        setAiAnalysisResult(result);
+        return;
+      }
+      
+      // Gemini 분석 실패 시 로컬 분석으로 백업
+      console.log('Gemini 분석 실패 또는 API 키 없음, 로컬 분석 시도');
       try {
         const localResult = analyzeDataLocally(analysisData);
         if (localResult.error) {
@@ -353,21 +364,10 @@ const LearningJournalViewModal = ({ isOpen, onClose, selectedDate, refreshData }
         }
         console.log('로컬 분석 성공:', localResult);
         setAiAnalysisResult(localResult);
-        return;
       } catch (localError) {
-        console.log('로컬 분석 실패, Gemini AI 시도:', localError);
-      }
-
-      // 로컬 분석 실패 시 Gemini AI 시도
-      const result = await analyzeDataWithGemini(analysisData);
-      
-      // Gemini 분석 결과 처리
-      if (result.demo || result.error) {
-        console.log('Gemini 분석 실패, 로컬 기본 분석 사용');
-        const localFallback = analyzeDataLocally(analysisData);
-        setAiAnalysisResult(localFallback);
-      } else {
-        setAiAnalysisResult(result);
+        console.log('로컬 분석도 실패, 데모 결과 사용:', localError);
+        const demoResult = getDemoAnalysisResult();
+        setAiAnalysisResult(demoResult);
       }
 
     } catch (error) {
@@ -1003,13 +1003,16 @@ const LearningJournalViewModal = ({ isOpen, onClose, selectedDate, refreshData }
                         padding: '20px',
                         borderRadius: '8px',
                         border: '1px solid #e1e5e9',
-                        minHeight: '600px'
+                        minHeight: '70vh', // 화면 높이의 70%로 확장
+                        maxHeight: '80vh'  // 최대 80%까지
                       }}>
                         {/* 좌측: 학생 데이터 목록 */}
                         <div style={{ 
                           flex: '1',
                           paddingRight: '20px',
-                          borderRight: '1px solid #e1e5e9'
+                          borderRight: '1px solid #e1e5e9',
+                          display: 'flex',
+                          flexDirection: 'column'
                         }}>
                           <h5 style={{
                             fontSize: '16px',
@@ -1025,9 +1028,10 @@ const LearningJournalViewModal = ({ isOpen, onClose, selectedDate, refreshData }
                           </h5>
                           
                           <div style={{ 
-                            maxHeight: '500px', 
+                            flex: '1',
                             overflowY: 'auto',
-                            paddingRight: '8px'
+                            paddingRight: '8px',
+                            maxHeight: 'calc(100vh - 350px)' // 화면 높이에 맞춰 동적 조정
                           }}>
                             {(() => {
                               // 선택된 날짜와 교시에 따라 실제 데이터 필터링
