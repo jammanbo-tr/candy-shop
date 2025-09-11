@@ -33,7 +33,7 @@ const WordCloud = ({ words, width = 500, height = 500 }) => {
     
     // 두 단어가 겹치는지 확인하는 함수
     const isOverlapping = (x1, y1, w1, h1, x2, y2, w2, h2) => {
-      const padding = 5; // 여백
+      const padding = 12; // 단어 간 간격을 더 넓게 설정 (5 -> 12)
       return !(x1 + w1 + padding < x2 || 
                x2 + w2 + padding < x1 || 
                y1 + h1 + padding < y2 || 
@@ -42,10 +42,10 @@ const WordCloud = ({ words, width = 500, height = 500 }) => {
     
     // 안전한 위치를 찾는 함수
     const findSafePosition = (fontSize, wordLength) => {
-      const estimatedWidth = wordLength * fontSize * 0.6;
-      const estimatedHeight = fontSize;
+      const estimatedWidth = wordLength * fontSize * 0.65; // 단어 너비 추정을 더 정확하게
+      const estimatedHeight = fontSize * 1.2; // 높이에도 여유 공간 추가
       
-      for (let attempt = 0; attempt < 80; attempt++) {
+      for (let attempt = 0; attempt < 100; attempt++) { // 시도 횟수 증가
         let x, y;
         
         if (attempt < 15) {
@@ -62,12 +62,12 @@ const WordCloud = ({ words, width = 500, height = 500 }) => {
           y = centerY + Math.sin(angle) * distance - estimatedHeight / 2;
         } else {
           // 그 다음은 전체 영역에서 시도
-          x = Math.random() * (width - estimatedWidth - 20) + 10; // 여백 추가
-          y = Math.random() * (height - estimatedHeight - 20) + 10; // 여백 추가
+          x = Math.random() * (width - estimatedWidth - 40) + 20; // 여백을 더 크게
+          y = Math.random() * (height - estimatedHeight - 40) + 20; // 여백을 더 크게
         }
         
-        // 경계 체크
-        if (x < 0 || y < 0 || x + estimatedWidth > width || y + estimatedHeight > height) {
+        // 경계 체크 (더 엄격하게)
+        if (x < 15 || y < 15 || x + estimatedWidth > width - 15 || y + estimatedHeight > height - 15) {
           continue;
         }
         

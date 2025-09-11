@@ -1119,7 +1119,11 @@ const LearningJournalViewModal = ({ isOpen, onClose, selectedDate, refreshData }
                         {/* 우측: 워드클라우드 및 분석 결과 */}
                         <div style={{ 
                           flex: '1',
-                          paddingLeft: '20px'
+                          paddingLeft: '20px',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          maxHeight: 'calc(70vh - 100px)', // 전체 모달 높이에 맞춤
+                          overflowY: 'auto' // 내용이 많을 때 스크롤
                         }}>
                           {/* 워드클라우드 */}
                           {aiAnalysisResult.keywords && aiAnalysisResult.keywords.length > 0 && (
@@ -1165,41 +1169,55 @@ const LearningJournalViewModal = ({ isOpen, onClose, selectedDate, refreshData }
                                 <img src="/lv11.png" alt="우수 학생" style={{ width: '18px', height: '18px' }} />
                                 메타인지 우수 학생
                               </h5>
-                              {aiAnalysisResult.recommendations.map((rec, index) => (
-                                <div key={index} style={{
-                                  backgroundColor: '#f1f8e9',
-                                  padding: '12px',
-                                  borderRadius: '6px',
-                                  border: '1px solid #c8e6c9',
-                                  marginBottom: '8px',
-                                  fontSize: '12px'
-                                }}>
-                                  <div style={{
-                                    fontWeight: 'bold',
-                                    color: '#2e7d32',
-                                    marginBottom: '6px',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: '6px'
+                              <div style={{
+                                maxHeight: '300px', // 최대 높이 제한
+                                overflowY: 'auto',  // 스크롤 가능하게
+                                paddingRight: '8px'
+                              }}>
+                                {aiAnalysisResult.recommendations.map((rec, index) => (
+                                  <div key={index} style={{
+                                    backgroundColor: '#f1f8e9',
+                                    padding: '12px',
+                                    borderRadius: '6px',
+                                    border: '1px solid #c8e6c9',
+                                    marginBottom: '8px',
+                                    fontSize: '12px',
+                                    wordWrap: 'break-word', // 긴 텍스트 줄바꿈
+                                    lineHeight: '1.4'
                                   }}>
-                                    <img src="/seat1.png" alt="학생" style={{ width: '14px', height: '14px' }} />
-                                    {rec.name}
+                                    <div style={{
+                                      fontWeight: 'bold',
+                                      color: '#2e7d32',
+                                      marginBottom: '6px',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      gap: '6px'
+                                    }}>
+                                      <img src="/seat1.png" alt="학생" style={{ width: '14px', height: '14px' }} />
+                                      {rec.name}
+                                    </div>
+                                    <div style={{
+                                      color: '#666',
+                                      marginBottom: '6px',
+                                      fontStyle: 'italic',
+                                      backgroundColor: 'white',
+                                      padding: '6px',
+                                      borderRadius: '3px',
+                                      wordWrap: 'break-word',
+                                      whiteSpace: 'pre-wrap' // 줄바꿈 유지
+                                    }}>
+                                      "{rec.quote}"
+                                    </div>
+                                    <div style={{ 
+                                      color: '#2e7d32',
+                                      wordWrap: 'break-word',
+                                      whiteSpace: 'pre-wrap'
+                                    }}>
+                                      {rec.reason}
+                                    </div>
                                   </div>
-                                  <div style={{
-                                    color: '#666',
-                                    marginBottom: '6px',
-                                    fontStyle: 'italic',
-                                    backgroundColor: 'white',
-                                    padding: '6px',
-                                    borderRadius: '3px'
-                                  }}>
-                                    "{rec.quote}"
-                                  </div>
-                                  <div style={{ color: '#2e7d32' }}>
-                                    {rec.reason}
-                                  </div>
-                                </div>
-                              ))}
+                                ))}
+                              </div>
                             </div>
                           )}
 
@@ -1218,41 +1236,55 @@ const LearningJournalViewModal = ({ isOpen, onClose, selectedDate, refreshData }
                                 <img src="/hangang.png" alt="피드백" style={{ width: '18px', height: '18px' }} />
                                 피드백 제안
                               </h5>
-                              {aiAnalysisResult.feedback_suggestions.map((feedback, index) => (
-                                <div key={index} style={{
-                                  backgroundColor: '#fff8e1',
-                                  padding: '12px',
-                                  borderRadius: '6px',
-                                  border: '1px solid #ffcc02',
-                                  marginBottom: '8px',
-                                  fontSize: '12px'
-                                }}>
-                                  <div style={{
-                                    fontWeight: 'bold',
-                                    color: '#e65100',
-                                    marginBottom: '6px',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: '6px'
+                              <div style={{
+                                maxHeight: '250px', // 최대 높이 제한
+                                overflowY: 'auto',  // 스크롤 가능하게
+                                paddingRight: '8px'
+                              }}>
+                                {aiAnalysisResult.feedback_suggestions.map((feedback, index) => (
+                                  <div key={index} style={{
+                                    backgroundColor: '#fff8e1',
+                                    padding: '12px',
+                                    borderRadius: '6px',
+                                    border: '1px solid #ffcc02',
+                                    marginBottom: '8px',
+                                    fontSize: '12px',
+                                    wordWrap: 'break-word', // 긴 텍스트 줄바꿈
+                                    lineHeight: '1.4'
                                   }}>
-                                    <img src="/seat2.png" alt="학생" style={{ width: '14px', height: '14px' }} />
-                                    {feedback.name}
+                                    <div style={{
+                                      fontWeight: 'bold',
+                                      color: '#e65100',
+                                      marginBottom: '6px',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      gap: '6px'
+                                    }}>
+                                      <img src="/seat2.png" alt="학생" style={{ width: '14px', height: '14px' }} />
+                                      {feedback.name}
+                                    </div>
+                                    <div style={{
+                                      color: '#666',
+                                      marginBottom: '6px',
+                                      fontStyle: 'italic',
+                                      backgroundColor: 'white',
+                                      padding: '6px',
+                                      borderRadius: '3px',
+                                      wordWrap: 'break-word',
+                                      whiteSpace: 'pre-wrap' // 줄바꿈 유지
+                                    }}>
+                                      "{feedback.quote}"
+                                    </div>
+                                    <div style={{ 
+                                      color: '#e65100',
+                                      wordWrap: 'break-word',
+                                      whiteSpace: 'pre-wrap'
+                                    }}>
+                                      {feedback.suggestion}
+                                    </div>
                                   </div>
-                                  <div style={{
-                                    color: '#666',
-                                    marginBottom: '6px',
-                                    fontStyle: 'italic',
-                                    backgroundColor: 'white',
-                                    padding: '6px',
-                                    borderRadius: '3px'
-                                  }}>
-                                    "{feedback.quote}"
-                                  </div>
-                                  <div style={{ color: '#e65100' }}>
-                                    {feedback.suggestion}
-                                  </div>
-                                </div>
-                              ))}
+                                ))}
+                              </div>
                             </div>
                           )}
 
