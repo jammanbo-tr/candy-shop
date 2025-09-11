@@ -570,6 +570,28 @@ const LearningJournalViewModal = ({ isOpen, onClose, selectedDate, refreshData }
               >
                 📊 CSV 다운로드
               </button>
+
+              <button
+                style={{
+                  padding: '8px 16px',
+                  borderRadius: '6px',
+                  border: 'none',
+                  backgroundColor: '#dc3545',
+                  color: 'white',
+                  fontSize: '14px',
+                  fontWeight: '600',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px'
+                }}
+                onClick={() => {
+                  // PDF 다운로드 기능 구현 예정
+                  alert('PDF 다운로드 기능을 구현 중입니다.');
+                }}
+              >
+                📄 PDF 다운로드
+              </button>
               
               {/* 익명 모드 토글 */}
               <div style={{
@@ -615,28 +637,6 @@ const LearningJournalViewModal = ({ isOpen, onClose, selectedDate, refreshData }
                   학생 익명모드
                 </span>
               </div>
-
-              <button
-                style={{
-                  padding: '8px 16px',
-                  borderRadius: '6px',
-                  border: 'none',
-                  backgroundColor: '#dc3545',
-                  color: 'white',
-                  fontSize: '14px',
-                  fontWeight: '600',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '4px'
-                }}
-                onClick={() => {
-                  // PDF 다운로드 기능 구현 예정
-                  alert('PDF 다운로드 기능을 구현 중입니다.');
-                }}
-              >
-                📄 PDF 다운로드
-              </button>
             </div>
             
             <button
