@@ -161,15 +161,25 @@ export function analyzeDataLocally(learningDataList) {
  * 텍스트에서 핵심 단어를 추출하는 함수 (명사 위주, 동의어 통합)
  */
 function extractKeywords(text) {
-  // 불용어 목록 (일반적인 단어들)
+  // 불용어 목록 (명사가 아닌 단어들 포함)
   const stopWords = new Set([
+    // 접속사, 부사
     '그리고', '그래서', '하지만', '그런데', '또한', '그러나', '때문에', '이때', '그때',
     '오늘', '어제', '내일', '지금', '나는', '우리는', '이것', '그것', '저것',
+    '정말', '많이', '조금', '너무', '아주', '정도', '같이', '함께',
+    '모든', '여러', '다른', '새로운', '중요한', '특별한', '좋은', '나쁜',
+    // 동사들
     '했다', '했습니다', '합니다', '입니다', '있다', '없다', '되었다', '한다',
+    '만들다', '만드', '보다', '봤다', '듣다', '들었다', '가다', '갔다',
+    '오다', '왔다', '하다', '한다', '되다', '된다', '알다', '안다',
+    // 조사, 어미
+    '에서', '에게', '에서는', '에게는', '으로', '로', '와', '과', '도', '만',
+    '의', '이', '가', '을', '를', '은', '는', '처럼', '같이', '부터',
+    '까지', '마저', '조차', '안에', '밖에', '위에', '아래', '옆에',
+    // 일반적인 교실 단어
     '수업', '시간', '교시', '학교', '선생님', '친구', '학습', '공부', '활동',
     '내용', '모습', '이야기', '말씀', '설명', '이번', '다음', '처음', '마지막',
-    '때문', '정말', '많이', '조금', '너무', '아주', '정도', '같이', '함께',
-    '모든', '여러', '다른', '새로운', '중요한', '특별한', '좋은', '나쁜'
+    '때문', '생각', '느낌', '마음'
   ]);
 
   // 동의어 그룹 (같은 의미의 단어들을 하나로 통합)
@@ -222,9 +232,41 @@ function extractKeywords(text) {
     return word;
   };
 
+  // 명사인지 확인하는 함수 (한국어 특성 고려)
+  const isLikelyNoun = (word) => {
+    // 명확한 비명사 패턴들
+    const nonNounPatterns = [
+      /다$/, /었다$/, /았다$/, /였다$/, /했다$/, // 동사 과거형
+      /는다$/, /ㄴ다$/, /는가$/, /냐$/, // 동사 현재형, 의문형
+      /게$/, /히$/, /이$/, /적으로$/, // 부사형
+      /면서$/, /으며$/, /며$/, // 연결어미
+      /^안/, /^밖/, /^위/, /^아래/, /^옆/, // 위치 관련 (조사와 함께 쓰임)
+      /^만/, /^좀/, /^더/, /^덜/, /^별로$/, // 정도 부사
+    ];
+    
+    // 비명사 패턴과 매치되면 제외
+    for (const pattern of nonNounPatterns) {
+      if (pattern.test(word)) {
+        return false;
+      }
+    }
+    
+    // 길이가 1글자이거나 너무 긴 경우 제외
+    if (word.length < 2 || word.length > 6) {
+      return false;
+    }
+    
+    return true;
+  };
+
   // 단어를 대표 단어로 변환하는 함수
   const normalizeWord = (word) => {
-    // 먼저 동의어 그룹에서 찾기
+    // 먼저 명사인지 확인
+    if (!isLikelyNoun(word)) {
+      return null; // 명사가 아니면 null 반환
+    }
+    
+    // 동의어 그룹에서 찾기
     for (const [representative, synonyms] of Object.entries(synonymGroups)) {
       if (synonyms.includes(word)) {
         return representative;
@@ -245,12 +287,15 @@ function extractKeywords(text) {
   // 명사 패턴 우선 추출 (한글 2글자 이상)
   const words = text.match(/[가-힣]{2,}/g) || [];
   
-  // 단어 빈도 계산 (동의어 통합)
+  // 단어 빈도 계산 (동의어 통합 및 명사 필터링)
   const wordCount = {};
   words.forEach(word => {
     if (!stopWords.has(word)) {
       const normalizedWord = normalizeWord(word);
-      wordCount[normalizedWord] = (wordCount[normalizedWord] || 0) + 1;
+      // null이 아닌 명사만 카운트
+      if (normalizedWord !== null) {
+        wordCount[normalizedWord] = (wordCount[normalizedWord] || 0) + 1;
+      }
     }
   });
 
