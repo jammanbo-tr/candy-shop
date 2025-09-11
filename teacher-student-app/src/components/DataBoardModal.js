@@ -22,6 +22,7 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시' }) => {
   const [draggedCard, setDraggedCard] = useState(null);
   const [recommendations, setRecommendations] = useState({});
   const [cumulativeRecommendations, setCumulativeRecommendations] = useState({});
+  const [isAnonymousMode, setIsAnonymousMode] = useState(false);
 
   const PERIODS = ['1교시', '2교시', '3교시', '4교시', '5교시', '6교시'];
 
@@ -175,6 +176,23 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시' }) => {
       return () => {};
     }
   };
+
+  // Firebase 익명 모드 상태 구독
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const unsubscribe = onSnapshot(doc(db, 'settings', 'anonymousMode'), (docSnap) => {
+      if (docSnap.exists()) {
+        setIsAnonymousMode(docSnap.data().enabled || false);
+      } else {
+        setIsAnonymousMode(false);
+      }
+    }, (error) => {
+      console.error('익명 모드 상태 구독 실패:', error);
+    });
+
+    return () => unsubscribe();
+  }, [isOpen]);
 
   // 전체 누적 추천 데이터 로딩 (모든 날짜의 데이터를 통합)
   const loadAllRecommendations = async () => {
@@ -491,22 +509,36 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시' }) => {
             borderRadius: '8px',
             overflow: 'hidden',
             boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
-            border: '2px solid #fff'
+            border: '2px solid #fff',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            backgroundColor: isAnonymousMode ? '#f0f0f0' : 'transparent'
           }}>
-            <img 
-              src={levelImages[studentLevel] || levelImages[1]} 
-              alt={`Level ${studentLevel}`}
-              style={{
-                width: '100%',
-                height: '100%',
-                objectFit: 'cover'
-              }}
-              onError={(e) => {
-                // 이미지 로드 실패시 기본 아이콘 표시
-                e.target.style.display = 'none';
-                e.target.parentNode.innerHTML = `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:#f0f0f0;font-size:20px;">${studentIcon}</div>`;
-              }}
-            />
+            {isAnonymousMode ? (
+              <div style={{
+                fontSize: '24px',
+                color: '#999',
+                fontWeight: 'bold'
+              }}>
+                ?
+              </div>
+            ) : (
+              <img 
+                src={levelImages[studentLevel] || levelImages[1]} 
+                alt={`Level ${studentLevel}`}
+                style={{
+                  width: '100%',
+                  height: '100%',
+                  objectFit: 'cover'
+                }}
+                onError={(e) => {
+                  // 이미지 로드 실패시 기본 아이콘 표시
+                  e.target.style.display = 'none';
+                  e.target.parentNode.innerHTML = `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:#f0f0f0;font-size:20px;">${studentIcon}</div>`;
+                }}
+              />
+            )}
           </div>
           <div style={{ flex: 1 }}>
             <h3 style={{
@@ -516,7 +548,7 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시' }) => {
               color: '#2c3e50',
               marginBottom: '2px'
             }}>
-              {journal.studentName}
+              {isAnonymousMode ? '익명' : journal.studentName}
             </h3>
             <div style={{
               display: 'flex',
@@ -919,6 +951,47 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시' }) => {
                 <span>새로고침</span>
               </button>
 
+              {/* 익명 모드 상태 표시 (읽기 전용) */}
+              {isAnonymousMode && (
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  padding: '8px 12px',
+                  backgroundColor: '#fff3e0',
+                  border: '2px solid #ff9800',
+                  borderRadius: '8px',
+                  cursor: 'default'
+                }}>
+                  <div style={{
+                    width: '40px',
+                    height: '20px',
+                    backgroundColor: '#ff9800',
+                    borderRadius: '10px',
+                    position: 'relative'
+                  }}>
+                    <div style={{
+                      width: '16px',
+                      height: '16px',
+                      backgroundColor: 'white',
+                      borderRadius: '50%',
+                      position: 'absolute',
+                      top: '2px',
+                      left: '22px',
+                      boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
+                    }} />
+                  </div>
+                  <span style={{
+                    fontSize: '12px',
+                    fontWeight: '600',
+                    color: '#e65100',
+                    minWidth: '55px'
+                  }}>
+                    익명모드
+                  </span>
+                </div>
+              )}
+
               <button
                 onClick={onClose}
                 style={{
@@ -1065,32 +1138,18 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시' }) => {
                   console.log('Students data keys:', allStudentNames);
                   console.log('Cumulative recommendations keys:', Object.keys(cumulativeRecommendations));
                   console.log('Cumulative recommendations:', cumulativeRecommendations);
-                  console.log('Cumulative recommendations type:', typeof cumulativeRecommendations);
-                  console.log('Is cumulativeRecommendations empty object?', Object.keys(cumulativeRecommendations).length === 0);
                   
-                  // 누적 추천 데이터에서 직접 순위 생성 (studentsData와 무관하게)
-                  const entries = Object.entries(cumulativeRecommendations);
-                  console.log('Object.entries result:', entries);
+                  // 전체 학생 리스트 생성 (추천 수가 0인 학생도 포함)
+                  const allStudentList = Object.keys(studentsData).map(studentName => ({
+                    studentName,
+                    recommendations: cumulativeRecommendations[studentName] || 0,
+                    icon: getStudentIcon(studentName),
+                    level: studentsData[studentName]?.level || 1
+                  }));
                   
-                  const mappedData = entries.map(([studentName, count]) => {
-                    console.log(`Mapping: ${studentName} -> ${count} (type: ${typeof count})`);
-                    return {
-                      studentName,
-                      recommendations: count,
-                      icon: getStudentIcon(studentName),
-                      level: studentsData[studentName]?.level || 1
-                    };
-                  });
-                  console.log('Mapped data:', mappedData);
+                  console.log('All student list:', allStudentList);
                   
-                  const filteredData = mappedData.filter(item => {
-                    const hasRecommendations = item.recommendations > 0;
-                    console.log(`Filtering ${item.studentName}: ${item.recommendations} > 0 = ${hasRecommendations}`);
-                    return hasRecommendations;
-                  });
-                  console.log('Filtered data:', filteredData);
-                  
-                  const leaderboard = filteredData.sort((a, b) => b.recommendations - a.recommendations);
+                  const leaderboard = allStudentList.sort((a, b) => b.recommendations - a.recommendations);
                   
                   console.log('Final leaderboard:', leaderboard);
                   console.log('Leaderboard length:', leaderboard.length);
@@ -1157,23 +1216,45 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시' }) => {
                         <div style={{
                           minWidth: '32px',
                           textAlign: 'center',
-                          filter: 'drop-shadow(2px 2px 4px rgba(0,0,0,0.1))'
+                          filter: 'drop-shadow(2px 2px 4px rgba(0,0,0,0.1))',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center'
                         }}>
-                          <img 
-                            src={levelImages[item.level] || levelImages[1]}
-                            alt={`Level ${item.level}`}
-                            style={{
+                          {isAnonymousMode ? (
+                            <div style={{
                               width: '32px',
                               height: '32px',
-                              objectFit: 'contain'
-                            }}
-                            onError={(e) => {
-                              // 이미지 로드 실패 시 기본 이모지로 대체
-                              e.target.style.display = 'none';
-                              e.target.nextSibling.style.display = 'block';
-                            }}
-                          />
-                          <span style={{ display: 'none' }}>🎭</span>
+                              backgroundColor: '#f0f0f0',
+                              borderRadius: '4px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              fontSize: '18px',
+                              color: '#999',
+                              fontWeight: 'bold'
+                            }}>
+                              ?
+                            </div>
+                          ) : (
+                            <>
+                              <img 
+                                src={levelImages[item.level] || levelImages[1]}
+                                alt={`Level ${item.level}`}
+                                style={{
+                                  width: '32px',
+                                  height: '32px',
+                                  objectFit: 'contain'
+                                }}
+                                onError={(e) => {
+                                  // 이미지 로드 실패 시 기본 이모지로 대체
+                                  e.target.style.display = 'none';
+                                  e.target.nextSibling.style.display = 'block';
+                                }}
+                              />
+                              <span style={{ display: 'none' }}>🎭</span>
+                            </>
+                          )}
                         </div>
 
                         {/* 학생 정보 */}
@@ -1184,7 +1265,7 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시' }) => {
                             color: '#2c3e50',
                             marginBottom: '2px'
                           }}>
-                            {item.studentName}
+                            {isAnonymousMode ? '익명' : item.studentName}
                           </div>
                           <div style={{
                             fontSize: '12px',
@@ -1194,7 +1275,7 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시' }) => {
                             borderRadius: '6px',
                             display: 'inline-block'
                           }}>
-                            Lv.{item.level}
+                            {isAnonymousMode ? 'Lv.?' : `Lv.${item.level}`}
                           </div>
                         </div>
 

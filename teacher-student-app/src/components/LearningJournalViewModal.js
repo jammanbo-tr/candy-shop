@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { collection, getDocs, updateDoc, doc } from 'firebase/firestore';
+import { collection, getDocs, updateDoc, doc, setDoc, onSnapshot } from 'firebase/firestore';
 import { db } from '../firebase';
+import ImageViewerModal from './ImageViewerModal';
 
 const PERIODS = ['1교시', '2교시', '3교시', '4교시', '5교시', '6교시'];
 
@@ -33,14 +34,9 @@ const LearningJournalViewModal = ({ isOpen, onClose, selectedDate, refreshData }
   const [dragOverCell, setDragOverCell] = useState(null);
   const [showMoveConfirmation, setShowMoveConfirmation] = useState(false);
   const [pendingMove, setPendingMove] = useState(null);
-  const [activeTab, setActiveTab] = useState('journal'); // 'journal' | 'ai-analysis'
-  const [aiAnalysisData, setAiAnalysisData] = useState({
-    keywords: [],
-    metaCognitiveStudents: [],
-    feedbackStudents: [],
-    isLoading: false,
-    error: null
-  });
+  const [showImageViewer, setShowImageViewer] = useState(false);
+  const [selectedImageData, setSelectedImageData] = useState(null);
+  const [isAnonymousMode, setIsAnonymousMode] = useState(false);
 
   const getScoreColor = (score, type) => {
     const numScore = parseFloat(score) || 0;
@@ -130,13 +126,6 @@ const LearningJournalViewModal = ({ isOpen, onClose, selectedDate, refreshData }
       fetchData();
     }
   }, [selectedDateFilter, isOpen, fetchData]);
-  
-  // 탭 변경 시 AI 분석 데이터 초기화
-  useEffect(() => {
-    if (activeTab === 'ai-analysis') {
-      setAiAnalysisData(prev => ({ ...prev, keywords: [], metaCognitiveStudents: [], feedbackStudents: [], error: null }));
-    }
-  }, [activeTab]);
 
   // CSV 다운로드 기능
   const downloadCSV = () => {
@@ -297,6 +286,53 @@ const LearningJournalViewModal = ({ isOpen, onClose, selectedDate, refreshData }
     }
   };
 
+  const handleImageView = (entry) => {
+    setSelectedImageData({
+      imageUrl: entry.imageUrl,
+      studentName: entry.studentName,
+      period: entry.period,
+      date: entry.date
+    });
+    setShowImageViewer(true);
+  };
+
+  const closeImageViewer = () => {
+    setShowImageViewer(false);
+    setSelectedImageData(null);
+  };
+
+  // 익명 모드 Firebase 동기화
+  const toggleAnonymousMode = async () => {
+    const newMode = !isAnonymousMode;
+    setIsAnonymousMode(newMode);
+    
+    try {
+      await setDoc(doc(db, 'settings', 'anonymousMode'), {
+        enabled: newMode,
+        updatedAt: new Date(),
+        updatedBy: 'teacher'
+      });
+    } catch (error) {
+      console.error('익명 모드 설정 저장 실패:', error);
+    }
+  };
+
+  // 익명 모드 상태 실시간 구독
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const anonymousModeRef = doc(db, 'settings', 'anonymousMode');
+    const unsubscribe = onSnapshot(anonymousModeRef, (doc) => {
+      if (doc.exists()) {
+        setIsAnonymousMode(doc.data().enabled || false);
+      }
+    }, (error) => {
+      console.error('익명 모드 상태 구독 실패:', error);
+    });
+
+    return unsubscribe;
+  }, [isOpen]);
+
   const handleDragStart = (e, entry) => {
     setDraggedEntry({
       ...entry,
@@ -372,113 +408,6 @@ const LearningJournalViewModal = ({ isOpen, onClose, selectedDate, refreshData }
     }
   };
 
-  // AI 학습 분석 함수
-  const analyzeJournalsWithAI = async () => {
-    setAiAnalysisData(prev => ({ ...prev, isLoading: true, error: null }));
-    
-    try {
-      // 현재 선택된 날짜의 학습일지 데이터 가져오기
-      const filteredData = selectedPeriodFilter === '전체' ? 
-        data : data.filter(entry => entry.period === selectedPeriodFilter);
-      
-      if (filteredData.length === 0) {
-        throw new Error('분석할 학습일지 데이터가 없습니다.');
-      }
-      
-      // 학습일지 데이터를 Gemini API 형식으로 변환
-      const journalTexts = filteredData.map(entry => ({
-        student: entry.studentName,
-        period: entry.period,
-        keyword: entry.keyword || '',
-        content: entry.content || '',
-        understanding: entry.understanding || 0,
-        satisfaction: entry.satisfaction || 0
-      }));
-      
-      // 실제 구현시에는 여기서 Gemini API를 호출해야 합니다
-      // 현재는 모의 데이터로 대체
-      const mockAnalysis = await simulateGeminiAPI(journalTexts);
-      
-      setAiAnalysisData(prev => ({
-        ...prev,
-        keywords: mockAnalysis.keywords,
-        metaCognitiveStudents: mockAnalysis.metaCognitiveStudents,
-        feedbackStudents: mockAnalysis.feedbackStudents,
-        isLoading: false
-      }));
-      
-    } catch (error) {
-      console.error('AI 분석 오류:', error);
-      setAiAnalysisData(prev => ({
-        ...prev,
-        isLoading: false,
-        error: error.message || 'AI 분석 중 오류가 발생했습니다.'
-      }));
-    }
-  };
-  
-  // Gemini API 시뮬레이션 함수 (실제 구현에서는 실제 API 호출로 대체)
-  const simulateGeminiAPI = async (journalData) => {
-    // 2초 지연으로 로딩 효과 시뮬레이션
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    
-    const keywords = {};
-    const metaCognitive = [];
-    const needsFeedback = [];
-    
-    // 키워드 추출 시뮬레이션
-    journalData.forEach(entry => {
-      const text = `${entry.keyword} ${entry.content}`.toLowerCase();
-      const commonKeywords = ['수학', '과학', '영어', '국어', '사회', '배움', '이해', '공부', '학습', '문제', '해결', '생각', '느낀점', '어려웠다', '쉬웠다', '재미있었다'];
-      
-      commonKeywords.forEach(keyword => {
-        if (text.includes(keyword)) {
-          keywords[keyword] = (keywords[keyword] || 0) + 1;
-        }
-      });
-    });
-    
-    // 메타인지적 학생 식별 시뮬레이션
-    journalData.forEach(entry => {
-      const content = entry.content.toLowerCase();
-      if (content.includes('생각해보니') || content.includes('반성') || content.includes('돌아보니') || 
-          content.includes('깨달았다') || content.includes('느꼈다') || content.includes('배웠다') ||
-          content.includes('이해하게 되었다') || entry.understanding >= 4) {
-        metaCognitive.push({
-          studentName: entry.student,
-          reason: '학습 과정에 대한 성찰적 사고를 보여줌',
-          quote: entry.content.substring(0, 50) + '...',
-          score: entry.understanding
-        });
-      }
-    });
-    
-    // 피드백 필요 학생 식별 시뮬레이션
-    journalData.forEach(entry => {
-      const content = entry.content.toLowerCase();
-      if ((content.includes('했다') && content.split('했다').length > 2) ||
-          (content.includes('배웠다') && content.length < 30) ||
-          entry.understanding <= 2) {
-        needsFeedback.push({
-          studentName: entry.student,
-          issue: '단순한 활동 나열에 그침',
-          suggestion: '학습 내용에 대한 깊이 있는 성찰 필요',
-          example: '"오늘 수학을 배웠다" → "오늘 배운 분수의 개념이 처음에는 어려웠지만, 구체적인 예시로 설명을 들으니 이해가 되었다."'
-        });
-      }
-    });
-    
-    return {
-      keywords: Object.entries(keywords).map(([word, frequency]) => ({
-        word,
-        frequency,
-        importance: frequency >= 3 ? '높음' : frequency >= 2 ? '중간' : '낮음'
-      })).sort((a, b) => b.frequency - a.frequency).slice(0, 10),
-      metaCognitiveStudents: metaCognitive.slice(0, 5),
-      feedbackStudents: needsFeedback.slice(0, 5)
-    };
-  };
-
   const confirmMove = async () => {
     if (pendingMove) {
       await handleMoveEntry(pendingMove.draggedEntry, pendingMove.targetPeriod);
@@ -503,10 +432,6 @@ const LearningJournalViewModal = ({ isOpen, onClose, selectedDate, refreshData }
           50% { border-color: #ffdd44; }
           75% { border-color: #ff6b9d; }
           100% { border-color: #ff4444; }
-        }
-        @keyframes spin {
-          0% { transform: rotate(0deg); }
-          100% { transform: rotate(360deg); }
         }
         .learning-journal-modal {
           animation: learningJournalBorder 3s infinite;
@@ -535,132 +460,95 @@ const LearningJournalViewModal = ({ isOpen, onClose, selectedDate, refreshData }
           overflow: 'hidden',
           boxShadow: '0 20px 40px rgba(0, 0, 0, 0.3)'
         }}>
-          {/* 헤더 및 탭 */}
+          {/* 헤더 */}
           <div style={{
             padding: '24px',
             borderBottom: '1px solid #e8eaed',
             display: 'flex',
-            flexDirection: 'column',
-            gap: '16px'
+            justifyContent: 'space-between',
+            alignItems: 'center'
           }}>
-            {/* 탭 버튼 */}
-            <div style={{ display: 'flex', gap: '8px' }}>
-              <button
-                onClick={() => setActiveTab('journal')}
-                style={{
-                  padding: '12px 24px',
-                  borderRadius: '8px',
-                  border: activeTab === 'journal' ? '2px solid #1976d2' : '1px solid #e1e5e9',
-                  backgroundColor: activeTab === 'journal' ? '#1976d2' : 'white',
-                  color: activeTab === 'journal' ? 'white' : '#666',
-                  fontSize: '16px',
-                  fontWeight: '600',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s'
-                }}
-              >
-                📚 학습일지 조회
-              </button>
-              <button
-                onClick={() => setActiveTab('ai-analysis')}
-                style={{
-                  padding: '12px 24px',
-                  borderRadius: '8px',
-                  border: activeTab === 'ai-analysis' ? '2px solid #667eea' : '1px solid #e1e5e9',
-                  backgroundColor: activeTab === 'ai-analysis' ? '#667eea' : 'white',
-                  color: activeTab === 'ai-analysis' ? 'white' : '#666',
-                  fontSize: '16px',
-                  fontWeight: '600',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s'
-                }}
-              >
-                🤖 AI 학습분석
-              </button>
-            </div>
-            
-            {/* 현재 탭 제목 */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
-                <h2 style={{ fontSize: '20px', fontWeight: 'bold', color: '#333', margin: 0 }}>
-                  {activeTab === 'journal' ? '📚 학습일지 조회 🔍' : '🤖 AI 학습분석 📊'}
-                </h2>
-                
-                {activeTab === 'journal' && (
-                  <>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                      <label style={{ fontSize: '14px', fontWeight: '600', color: '#666' }}>
-                        🏷 특정일 보기:
-                      </label>
-                      <input
-                        type="date"
-                        value={selectedDateFilter}
-                        onChange={(e) => setSelectedDateFilter(e.target.value)}
-                        style={{
-                          padding: '4px 8px',
-                          border: '1px solid #ddd',
-                          borderRadius: '4px',
-                          fontSize: '14px'
-                        }}
-                      />
-                    </div>
-                    
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                      <label style={{ fontSize: '14px', fontWeight: '600', color: '#666' }}>
-                        🕰 교시 필터:
-                      </label>
-                      <select
-                        value={selectedPeriodFilter}
-                        onChange={(e) => setSelectedPeriodFilter(e.target.value)}
-                        style={{
-                          padding: '4px 8px',
-                          border: '1px solid #ddd',
-                          borderRadius: '4px',
-                          fontSize: '14px'
-                        }}
-                      >
-                        <option value="전체">전체</option>
-                        {PERIODS.map(period => (
-                          <option key={period} value={period}>{period}</option>
-                        ))}
-                      </select>
-                    </div>
-                  </>
-                )}
-                
-                {activeTab === 'ai-analysis' && (
-                  <button
-                    onClick={analyzeJournalsWithAI}
-                    disabled={aiAnalysisData.isLoading || data.length === 0}
-                    style={{
-                      padding: '8px 16px',
-                      borderRadius: '6px',
-                      border: 'none',
-                      backgroundColor: aiAnalysisData.isLoading ? '#ccc' : '#667eea',
-                      color: 'white',
-                      fontSize: '14px',
-                      fontWeight: '600',
-                      cursor: aiAnalysisData.isLoading ? 'not-allowed' : 'pointer',
-                      transition: 'all 0.2s'
-                    }}
-                  >
-                    {aiAnalysisData.isLoading ? '분석 중...' : '🤖 AI 분석 시작'}
-                  </button>
-                )}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+              <h2 style={{ fontSize: '24px', fontWeight: 'bold', color: '#333', margin: 0 }}>
+                📚 학습일지 조회 🔍
+              </h2>
+              
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <label style={{ fontSize: '14px', fontWeight: '600', color: '#666' }}>
+                  🏷 특정일 보기:
+                </label>
+                <input
+                  type="date"
+                  value={selectedDateFilter || ''}
+                  onChange={(e) => {
+                    const selectedValue = e.target.value;
+                    setSelectedDateFilter(selectedValue || null);
+                  }}
+                  max={new Date().toISOString().split('T')[0]}
+                  min={new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]}
+                  style={{
+                    padding: '8px 12px',
+                    borderRadius: '8px',
+                    border: '1px solid #e1e5e9',
+                    fontSize: '14px',
+                    cursor: 'pointer',
+                    backgroundColor: 'white'
+                  }}
+                />
+                <button
+                  onClick={() => {
+                    const today = new Date().toISOString().split('T')[0];
+                    setSelectedDateFilter(today);
+                  }}
+                  style={{
+                    padding: '8px 12px',
+                    borderRadius: '8px',
+                    border: '1px solid #1976d2',
+                    backgroundColor: '#e3f2fd',
+                    fontSize: '12px',
+                    fontWeight: '600',
+                    color: '#1976d2',
+                    cursor: 'pointer'
+                  }}
+                >
+                  📅 오늘로 이동
+                </button>
               </div>
               
-              <button
-                onClick={onClose}
-                style={{
-                  background: 'none',
-                  border: 'none',
-                  fontSize: '24px',
-                  cursor: 'pointer',
-                  color: '#666'
-                }}
-              >
-                ✕
-              </button>
+              {/* 교시 필터 체크박스 */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginLeft: '24px' }}>
+                <label style={{ fontSize: '14px', fontWeight: '600', color: '#666' }}>
+                  ⏰ 교시 필터:
+                </label>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                  {['전체', '1교시', '2교시', '3교시', '4교시', '5교시', '6교시'].map(period => (
+                    <label 
+                      key={period}
+                      style={{ 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        gap: '4px',
+                        fontSize: '13px',
+                        fontWeight: '500',
+                        color: visiblePeriods[period] ? '#1976d2' : '#666',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={visiblePeriods[period]}
+                        onChange={() => handlePeriodCheckboxChange(period)}
+                        style={{
+                          width: '16px',
+                          height: '16px',
+                          cursor: 'pointer'
+                        }}
+                      />
+                      <span>{period}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
             </div>
             
             <div style={{ display: 'flex', gap: '8px' }}>
@@ -682,6 +570,52 @@ const LearningJournalViewModal = ({ isOpen, onClose, selectedDate, refreshData }
               >
                 📊 CSV 다운로드
               </button>
+              
+              {/* 익명 모드 토글 */}
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '8px 12px',
+                backgroundColor: isAnonymousMode ? '#fff3e0' : '#f8f9fa',
+                border: isAnonymousMode ? '2px solid #ff9800' : '2px solid #e0e0e0',
+                borderRadius: '8px',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease'
+              }}
+              onClick={toggleAnonymousMode}
+              title="학생 데이터 전광판에서 이름과 레벨을 익명으로 표시합니다"
+              >
+                <div style={{
+                  width: '40px',
+                  height: '20px',
+                  backgroundColor: isAnonymousMode ? '#ff9800' : '#e0e0e0',
+                  borderRadius: '10px',
+                  position: 'relative',
+                  transition: 'all 0.2s ease'
+                }}>
+                  <div style={{
+                    width: '16px',
+                    height: '16px',
+                    backgroundColor: 'white',
+                    borderRadius: '50%',
+                    position: 'absolute',
+                    top: '2px',
+                    left: isAnonymousMode ? '22px' : '2px',
+                    transition: 'all 0.2s ease',
+                    boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
+                  }} />
+                </div>
+                <span style={{
+                  fontSize: '12px',
+                  fontWeight: '600',
+                  color: isAnonymousMode ? '#e65100' : '#666',
+                  minWidth: '70px'
+                }}>
+                  학생 익명모드
+                </span>
+              </div>
+
               <button
                 style={{
                   padding: '8px 16px',
@@ -721,14 +655,11 @@ const LearningJournalViewModal = ({ isOpen, onClose, selectedDate, refreshData }
 
           {/* 컨텐츠 영역 */}
           <div style={{ maxHeight: '75vh', overflowY: 'auto', padding: '24px' }}>
-            {activeTab === 'journal' ? (
-              // 학습일지 조회 탭
-              <>
-                {loading ? (
-                  <div style={{ textAlign: 'center', padding: '40px', color: '#666' }}>
-                    데이터를 불러오는 중...
-                  </div>
-                ) : (
+            {loading ? (
+              <div style={{ textAlign: 'center', padding: '40px', color: '#666' }}>
+                데이터를 불러오는 중...
+              </div>
+            ) : (
               <div>
                 <div style={{
                   display: 'flex',
@@ -930,7 +861,7 @@ const LearningJournalViewModal = ({ isOpen, onClose, selectedDate, refreshData }
                                         width: getColumnWidth(),
                                         minWidth: '200px',
                                         cursor: entry ? 'grab' : 'default',
-                                        height: '160px',
+                                        minHeight: '120px',
                                         position: 'relative',
                                         verticalAlign: 'top'
                                       }}
@@ -979,124 +910,164 @@ const LearningJournalViewModal = ({ isOpen, onClose, selectedDate, refreshData }
                                             maxHeight: 'none',
                                             overflow: 'visible'
                                           }}>
-                                            {(() => {
-                                              if (!entry.content || entry.content === '내용 없음') {
-                                                return (
-                                                  <div style={{ 
-                                                    fontSize: '12px', 
-                                                    color: '#999', 
-                                                    fontStyle: 'italic',
-                                                    textAlign: 'center'
-                                                  }}>
-                                                    내용 없음
-                                                  </div>
-                                                );
-                                              }
-
-                                              // 키워드와 내용을 별도 필드에서 가져오기
-                                              const keyword = entry.keyword || '';
-                                              const content = entry.content || '';
-
-                                              return (
-                                                <div>
-                                                  {/* 핵심 키워드 (굵은 글씨) */}
-                                                  {keyword && (
-                                                    <div style={{
-                                                      fontSize: '13px',
-                                                      fontWeight: '800',
-                                                      color: '#e65100',
-                                                      marginBottom: content ? '4px' : '0px',
-                                                      lineHeight: '1.2',
-                                                      wordWrap: 'break-word',
-                                                      overflowWrap: 'break-word'
-                                                    }}>
-                                                      {keyword}
-                                                    </div>
-                                                  )}
-                                                  
-                                                  {/* 상세 학습내용 (얇은 글씨) */}
-                                                  {content && (
-                                                    <div style={{
-                                                      fontSize: '11px',
-                                                      color: '#666',
-                                                      lineHeight: '1.3',
-                                                      fontWeight: '300',
-                                                      wordWrap: 'break-word',
-                                                      overflowWrap: 'break-word'
-                                                    }}>
-                                                      {content}
-                                                    </div>
-                                                  )}
-                                                  
-                                                  {/* 키워드와 내용이 모두 없는 경우 */}
-                                                  {!keyword && !content && (
-                                                    <div style={{ 
-                                                      fontSize: '12px', 
-                                                      color: '#999', 
-                                                      fontStyle: 'italic',
-                                                      textAlign: 'center'
-                                                    }}>
-                                                      내용 없음
-                                                    </div>
-                                                  )}
-                                                </div>
-                                              );
-                                            })()}
+                                            <div style={{
+                                              fontSize: '11px',
+                                              fontWeight: '700',
+                                              color: '#f57c00',
+                                              marginBottom: '6px',
+                                              textAlign: 'center',
+                                              borderBottom: '1px solid #ffcc80',
+                                              paddingBottom: '3px'
+                                            }}>
+                                              💫 핵심 키워드
+                                            </div>
+                                            <div style={{
+                                              fontSize: '12px',
+                                              fontWeight: '600',
+                                              color: '#e65100',
+                                              lineHeight: '1.3',
+                                              textAlign: 'left',
+                                              wordBreak: 'break-word',
+                                              whiteSpace: 'normal'
+                                            }}>
+                                              {entry.keyword || '작성되지 않음'}
+                                            </div>
                                           </div>
-                                          
-                                          {/* 점수 영역 */}
-                                          <div style={{ display: 'flex', gap: '3px', justifyContent: 'center' }}>
-                                            <span style={{
-                                              padding: '3px 6px',
-                                              borderRadius: '4px',
-                                              fontSize: '10px',
-                                              backgroundColor: getScoreColor(entry.understanding, 'understanding'),
-                                              color: 'white',
-                                              fontWeight: '600',
-                                              boxShadow: '0 1px 2px rgba(0,0,0,0.2)'
+
+                                          {/* 학습 내용 영역 */}
+                                          <div style={{
+                                            backgroundColor: '#f3e5f5',
+                                            border: '1px solid #ce93d8',
+                                            borderRadius: '6px',
+                                            padding: '8px 10px',
+                                            marginBottom: '8px',
+                                            minHeight: '70px',
+                                            maxHeight: 'none',
+                                            overflow: 'visible'
+                                          }}>
+                                            <div style={{
+                                              fontSize: '11px',
+                                              fontWeight: '700',
+                                              color: '#7b1fa2',
+                                              marginBottom: '6px',
+                                              textAlign: 'center',
+                                              borderBottom: '1px solid #ce93d8',
+                                              paddingBottom: '3px'
                                             }}>
-                                              이해도 {entry.understanding || 0}
-                                            </span>
-                                            <span style={{
-                                              padding: '3px 6px',
-                                              borderRadius: '4px',
-                                              fontSize: '10px',
-                                              backgroundColor: getScoreColor(entry.satisfaction, 'satisfaction'),
-                                              color: 'white',
-                                              fontWeight: '600',
-                                              boxShadow: '0 1px 2px rgba(0,0,0,0.2)'
+                                              📝 학습 내용
+                                            </div>
+                                            <div style={{
+                                              fontSize: '11px',
+                                              color: '#4a148c',
+                                              lineHeight: '1.4',
+                                              textAlign: 'left',
+                                              wordBreak: 'break-word',
+                                              whiteSpace: 'normal'
                                             }}>
-                                              만족도 {entry.satisfaction || 0}
-                                            </span>
+                                              {entry.hasImage && entry.imageUrl ? (
+                                                <button
+                                                  onClick={() => handleImageView(entry)}
+                                                  style={{
+                                                    backgroundColor: '#e3f2fd',
+                                                    color: '#1976d2',
+                                                    border: '1px solid #bbdefb',
+                                                    borderRadius: '6px',
+                                                    padding: '6px 12px',
+                                                    fontSize: '10px',
+                                                    fontWeight: '600',
+                                                    cursor: 'pointer',
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    gap: '4px',
+                                                    width: '100%',
+                                                    justifyContent: 'center'
+                                                  }}
+                                                  onMouseOver={(e) => {
+                                                    e.target.style.backgroundColor = '#bbdefb';
+                                                  }}
+                                                  onMouseOut={(e) => {
+                                                    e.target.style.backgroundColor = '#e3f2fd';
+                                                  }}
+                                                >
+                                                  📷 자료보기
+                                                </button>
+                                              ) : (
+                                                entry.content || '작성되지 않음'
+                                              )}
+                                            </div>
+                                          </div>
+
+                                          {/* 이해도/만족도 영역 */}
+                                          <div style={{
+                                            display: 'flex',
+                                            justifyContent: 'space-around',
+                                            gap: '8px',
+                                            marginTop: '10px'
+                                          }}>
+                                            {/* 이해도 */}
+                                            <div style={{
+                                              backgroundColor: '#e8f5e8',
+                                              border: '1px solid #4caf50',
+                                              borderRadius: '20px',
+                                              padding: '4px 8px',
+                                              flex: 1,
+                                              textAlign: 'center'
+                                            }}>
+                                              <div style={{
+                                                fontSize: '9px',
+                                                fontWeight: '600',
+                                                color: '#2e7d32'
+                                              }}>
+                                                이해도
+                                              </div>
+                                              <div style={{
+                                                fontSize: '11px',
+                                                fontWeight: '700',
+                                                color: '#1b5e20',
+                                                marginTop: '2px'
+                                              }}>
+                                                {entry.understanding || 0}/5
+                                              </div>
+                                            </div>
+
+                                            {/* 만족도 */}
+                                            <div style={{
+                                              backgroundColor: '#ffebee',
+                                              border: '1px solid #f44336',
+                                              borderRadius: '20px',
+                                              padding: '4px 8px',
+                                              flex: 1,
+                                              textAlign: 'center'
+                                            }}>
+                                              <div style={{
+                                                fontSize: '9px',
+                                                fontWeight: '600',
+                                                color: '#d32f2f'
+                                              }}>
+                                                만족도
+                                              </div>
+                                              <div style={{
+                                                fontSize: '11px',
+                                                fontWeight: '700',
+                                                color: '#c62828',
+                                                marginTop: '2px'
+                                              }}>
+                                                {entry.satisfaction || 0}/5
+                                              </div>
+                                            </div>
                                           </div>
                                         </div>
                                       ) : (
                                         <div style={{
-                                          padding: '20px',
-                                          color: '#999',
+                                          padding: '40px 20px',
+                                          textAlign: 'center',
+                                          color: '#bbb',
                                           fontSize: '12px',
-                                          border: '2px dashed #e0e0e0',
                                           borderRadius: '8px',
-                                          minHeight: '140px',
-                                          display: 'flex',
-                                          flexDirection: 'column',
-                                          alignItems: 'center',
-                                          justifyContent: 'center',
-                                          backgroundColor: '#fafafa',
-                                          boxSizing: 'border-box'
+                                          backgroundColor: '#f9f9f9',
+                                          border: '2px dashed #ddd'
                                         }}>
-                                          <div style={{ 
-                                            fontSize: '20px', 
-                                            marginBottom: '4px',
-                                            opacity: 0.5 
-                                          }}>📝</div>
-                                          <div style={{ 
-                                            fontSize: '11px', 
-                                            color: '#bbb',
-                                            fontWeight: '500'
-                                          }}>
-                                            학습일지 없음
-                                          </div>
+                                          📝<br />미작성
                                         </div>
                                       )}
                                     </td>
@@ -1111,10 +1082,9 @@ const LearningJournalViewModal = ({ isOpen, onClose, selectedDate, refreshData }
                     })()}
                   </div>
                 ) : (
-                  // 리스트 보기
-                  <div style={{ overflowX: 'auto' }}>
+                  // 목록 보기 - 시간순 리스트
+                  <div>
                     {(() => {
-                      // 필터링된 데이터 계산
                       let filteredData = data;
                       
                       if (selectedDateFilter) {
@@ -1131,118 +1101,244 @@ const LearningJournalViewModal = ({ isOpen, onClose, selectedDate, refreshData }
                         }
                       }
 
-                      // 데이터가 없어도 항상 리스트 표시
                       if (filteredData.length === 0) {
-                        // 빈 상태 표시 (등록된 학생들에 대한 빈 항목들)
-                        return students.map((studentName, index) => (
-                          <div
-                            key={`empty-${studentName}-${index}`}
-                            style={{
-                              padding: '16px',
-                              marginBottom: '12px',
-                              backgroundColor: '#f8f9fa',
-                              borderRadius: '8px',
-                              border: '1px solid #e8eaed',
-                              opacity: 0.6
-                            }}
-                          >
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                              <div>
-                                <h4 style={{ margin: '0 0 8px 0', color: '#333' }}>
-                                  👤 {studentName}
-                                </h4>
-                                <p style={{ margin: '0 0 8px 0', fontSize: '14px', color: '#999' }}>
-                                  📅 날짜: {selectedDateFilter ? new Date(selectedDateFilter).toLocaleDateString('ko-KR') : '오늘'}
-                                </p>
-                                <p style={{ margin: '0', fontSize: '14px', lineHeight: '1.5', color: '#999', fontStyle: 'italic' }}>
-                                  📝 학습일지가 작성되지 않았습니다
-                                </p>
-                              </div>
-                              <div style={{ display: 'flex', gap: '8px' }}>
-                                <span style={{
-                                  padding: '4px 8px',
-                                  borderRadius: '4px',
-                                  fontSize: '12px',
-                                  backgroundColor: '#e0e0e0',
-                                  color: '#999'
-                                }}>
-                                  이해도: -
-                                </span>
-                                <span style={{
-                                  padding: '4px 8px',
-                                  borderRadius: '4px',
-                                  fontSize: '12px',
-                                  backgroundColor: '#e0e0e0',
-                                  color: '#999'
-                                }}>
-                                  만족도: -
-                                </span>
-                              </div>
-                            </div>
+                        return (
+                          <div style={{
+                            textAlign: 'center',
+                            padding: '60px 20px',
+                            color: '#666',
+                            backgroundColor: '#f8f9fa',
+                            borderRadius: '12px',
+                            border: '1px solid #e9ecef'
+                          }}>
+                            <div style={{ fontSize: '48px', marginBottom: '16px' }}>📭</div>
+                            <h3 style={{ margin: '0 0 8px 0', color: '#333' }}>데이터가 없습니다</h3>
+                            <p style={{ margin: 0, color: '#666' }}>
+                              선택한 날짜와 교시에 해당하는 학습일지가 없습니다.
+                            </p>
                           </div>
-                        ));
+                        );
                       }
 
-                      return filteredData.map((entry, index) => (
-                        <div
-                          key={entry.id || index}
-                          style={{
-                            padding: '16px',
-                            marginBottom: '12px',
-                            backgroundColor: '#f8f9fa',
-                            borderRadius: '8px',
-                            border: '1px solid #e8eaed'
-                          }}
-                        >
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                            <div>
-                              <h4 style={{ margin: '0 0 8px 0', color: '#333' }}>
-                                👤 {entry.studentName} - 🕐 {entry.period}
-                              </h4>
-                              <p style={{ margin: '0 0 8px 0', fontSize: '14px', color: '#666' }}>
-                                📅 날짜: {new Date(entry.date).toLocaleDateString('ko-KR')}
-                              </p>
-                              <div style={{ margin: '0', fontSize: '14px', lineHeight: '1.5' }}>
-                                📝 
-                                {entry.keyword && (
-                                  <span style={{ fontWeight: '800', color: '#e65100', marginLeft: '4px' }}>
-                                    {entry.keyword}
+                      return (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                          {filteredData.map((entry, index) => (
+                            <div
+                              key={entry.id || index}
+                              style={{
+                                padding: '20px',
+                                backgroundColor: 'white',
+                                borderRadius: '12px',
+                                boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+                                border: '1px solid #e9ecef',
+                                transition: 'transform 0.2s ease, box-shadow 0.2s ease'
+                              }}
+                              onMouseEnter={(e) => {
+                                e.currentTarget.style.transform = 'translateY(-2px)';
+                                e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
+                              }}
+                              onMouseLeave={(e) => {
+                                e.currentTarget.style.transform = 'translateY(0)';
+                                e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.1)';
+                              }}
+                            >
+                              {/* 헤더 정보 */}
+                              <div style={{
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                alignItems: 'center',
+                                marginBottom: '16px',
+                                paddingBottom: '12px',
+                                borderBottom: '1px solid #e9ecef'
+                              }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                  <span style={{
+                                    fontSize: '18px',
+                                    fontWeight: 'bold',
+                                    color: '#1976d2'
+                                  }}>
+                                    👤 {entry.studentName}
                                   </span>
-                                )}
-                                {entry.keyword && entry.content && <br />}
-                                {entry.content && (
-                                  <span style={{ fontWeight: '300', color: '#666', marginLeft: entry.keyword ? '16px' : '4px' }}>
-                                    {entry.content}
+                                  <span style={{
+                                    padding: '4px 12px',
+                                    backgroundColor: '#e3f2fd',
+                                    color: '#1976d2',
+                                    borderRadius: '16px',
+                                    fontSize: '13px',
+                                    fontWeight: '600'
+                                  }}>
+                                    🕐 {entry.period}
                                   </span>
-                                )}
-                                {!entry.keyword && !entry.content && (
-                                  <span style={{ color: '#999', fontStyle: 'italic', marginLeft: '4px' }}>내용 없음</span>
-                                )}
+                                </div>
+                                <div style={{
+                                  fontSize: '13px',
+                                  color: '#666',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '8px'
+                                }}>
+                                  📅 {new Date(entry.date).toLocaleDateString('ko-KR', {
+                                    year: 'numeric',
+                                    month: 'long',
+                                    day: 'numeric',
+                                    weekday: 'short'
+                                  })}
+                                </div>
+                              </div>
+
+                              <div style={{ display: 'flex', gap: '20px' }}>
+                                {/* 키워드 섹션 */}
+                                <div style={{ flex: 1 }}>
+                                  <div style={{
+                                    backgroundColor: '#fff3e0',
+                                    border: '1px solid #ffb74d',
+                                    borderRadius: '8px',
+                                    padding: '16px',
+                                    marginBottom: '16px'
+                                  }}>
+                                    <h4 style={{
+                                      fontSize: '14px',
+                                      fontWeight: '700',
+                                      color: '#f57c00',
+                                      margin: '0 0 8px 0',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      gap: '6px'
+                                    }}>
+                                      💫 핵심 키워드
+                                    </h4>
+                                    <div style={{
+                                      fontSize: '15px',
+                                      fontWeight: '600',
+                                      color: '#e65100',
+                                      lineHeight: '1.4'
+                                    }}>
+                                      {entry.keyword || '작성되지 않음'}
+                                    </div>
+                                  </div>
+                                </div>
+
+                                {/* 학습 내용 섹션 */}
+                                <div style={{ flex: 2 }}>
+                                  <div style={{
+                                    backgroundColor: '#f3e5f5',
+                                    border: '1px solid #ce93d8',
+                                    borderRadius: '8px',
+                                    padding: '16px',
+                                    marginBottom: '16px'
+                                  }}>
+                                    <h4 style={{
+                                      fontSize: '14px',
+                                      fontWeight: '700',
+                                      color: '#7b1fa2',
+                                      margin: '0 0 8px 0',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      gap: '6px'
+                                    }}>
+                                      📝 학습 내용
+                                    </h4>
+                                    <div style={{
+                                      fontSize: '14px',
+                                      color: '#4a148c',
+                                      lineHeight: '1.6',
+                                      whiteSpace: 'pre-wrap'
+                                    }}>
+                                      {entry.hasImage && entry.imageUrl ? (
+                                        <button
+                                          onClick={() => handleImageView(entry)}
+                                          style={{
+                                            backgroundColor: '#e3f2fd',
+                                            color: '#1976d2',
+                                            border: '1px solid #bbdefb',
+                                            borderRadius: '8px',
+                                            padding: '10px 16px',
+                                            fontSize: '14px',
+                                            fontWeight: '600',
+                                            cursor: 'pointer',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '6px',
+                                            justifyContent: 'center'
+                                          }}
+                                          onMouseOver={(e) => {
+                                            e.target.style.backgroundColor = '#bbdefb';
+                                          }}
+                                          onMouseOut={(e) => {
+                                            e.target.style.backgroundColor = '#e3f2fd';
+                                          }}
+                                        >
+                                          📷 자료보기
+                                        </button>
+                                      ) : (
+                                        entry.content || '작성되지 않음'
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* 점수 정보 */}
+                              <div style={{
+                                display: 'flex',
+                                justifyContent: 'center',
+                                gap: '24px',
+                                marginTop: '16px'
+                              }}>
+                                <div style={{
+                                  padding: '12px 20px',
+                                  backgroundColor: '#e8f5e8',
+                                  border: '2px solid #4caf50',
+                                  borderRadius: '20px',
+                                  textAlign: 'center',
+                                  minWidth: '100px'
+                                }}>
+                                  <div style={{
+                                    fontSize: '12px',
+                                    fontWeight: '600',
+                                    color: '#2e7d32'
+                                  }}>
+                                    📈 이해도
+                                  </div>
+                                  <div style={{
+                                    fontSize: '20px',
+                                    fontWeight: '700',
+                                    color: '#1b5e20',
+                                    marginTop: '4px'
+                                  }}>
+                                    {entry.understanding || 0}/5
+                                  </div>
+                                </div>
+
+                                <div style={{
+                                  padding: '12px 20px',
+                                  backgroundColor: '#ffebee',
+                                  border: '2px solid #f44336',
+                                  borderRadius: '20px',
+                                  textAlign: 'center',
+                                  minWidth: '100px'
+                                }}>
+                                  <div style={{
+                                    fontSize: '12px',
+                                    fontWeight: '600',
+                                    color: '#d32f2f'
+                                  }}>
+                                    😊 만족도
+                                  </div>
+                                  <div style={{
+                                    fontSize: '20px',
+                                    fontWeight: '700',
+                                    color: '#c62828',
+                                    marginTop: '4px'
+                                  }}>
+                                    {entry.satisfaction || 0}/5
+                                  </div>
+                                </div>
                               </div>
                             </div>
-                            <div style={{ display: 'flex', gap: '8px' }}>
-                              <span style={{
-                                padding: '4px 8px',
-                                borderRadius: '4px',
-                                fontSize: '12px',
-                                backgroundColor: getScoreColor(entry.understanding, 'understanding'),
-                                color: 'white'
-                              }}>
-                                이해도: {entry.understanding || 0}
-                              </span>
-                              <span style={{
-                                padding: '4px 8px',
-                                borderRadius: '4px',
-                                fontSize: '12px',
-                                backgroundColor: getScoreColor(entry.satisfaction, 'satisfaction'),
-                                color: 'white'
-                              }}>
-                                만족도: {entry.satisfaction || 0}
-                              </span>
-                            </div>
-                          </div>
+                          ))}
                         </div>
-                      ));
+                      );
                     })()}
                   </div>
                 )}
@@ -1518,160 +1614,6 @@ const LearningJournalViewModal = ({ isOpen, onClose, selectedDate, refreshData }
                 )}
               </div>
             )}
-                )}
-              </>
-            ) : (
-              // AI 학습분석 탭
-              <div style={{ padding: '20px' }}>
-                {aiAnalysisData.error ? (
-                  <div style={{ textAlign: 'center', padding: '40px', color: '#f44336', backgroundColor: '#ffebee', borderRadius: '8px' }}>
-                    ⚠️ {aiAnalysisData.error}
-                  </div>
-                ) : aiAnalysisData.isLoading ? (
-                  <div style={{ textAlign: 'center', padding: '60px' }}>
-                    <div style={{ 
-                      width: '40px', 
-                      height: '40px', 
-                      border: '4px solid #667eea', 
-                      borderTop: '4px solid transparent', 
-                      borderRadius: '50%', 
-                      animation: 'spin 1s linear infinite',
-                      margin: '0 auto 20px'
-                    }}></div>
-                    <div style={{ color: '#667eea', fontWeight: 600, fontSize: '16px' }}>
-                      AI가 학습일지를 분석하고 있습니다...
-                    </div>
-                  </div>
-                ) : aiAnalysisData.keywords.length === 0 ? (
-                  <div style={{ textAlign: 'center', padding: '60px', color: '#666' }}>
-                    <div style={{ fontSize: '48px', marginBottom: '20px' }}>🤖</div>
-                    <h3 style={{ color: '#333', marginBottom: '12px' }}>AI 학습분석이 준비되었습니다</h3>
-                    <p style={{ marginBottom: '20px' }}>'🤖 AI 분석 시작' 버튼을 클릭하여 학습일지를 분석해보세요.</p>
-                    <div style={{ fontSize: '14px', color: '#999', lineHeight: '1.6' }}>
-                      • 핵심 키워드 추출<br/>
-                      • 메타인지 우수 학생 발견<br/>
-                      • 피드백 대상 학생 식별
-                    </div>
-                  </div>
-                ) : (
-                  // AI 분석 결과 표시
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
-                    {/* 핵심 키워드 */}
-                    <div style={{ backgroundColor: '#f8f9ff', borderRadius: '16px', padding: '24px' }}>
-                      <h3 style={{ color: '#667eea', marginBottom: '20px', fontSize: '20px', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        🔑 핵심 키워드 분석
-                      </h3>
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px' }}>
-                        {aiAnalysisData.keywords.map((keyword, index) => (
-                          <div key={index} style={{
-                            backgroundColor: keyword.importance === '높음' ? '#667eea' : keyword.importance === '중간' ? '#8b9cf2' : '#b0bef7',
-                            color: 'white',
-                            padding: '8px 16px',
-                            borderRadius: '20px',
-                            fontSize: '14px',
-                            fontWeight: '600',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '6px'
-                          }}>
-                            {keyword.word}
-                            <span style={{ backgroundColor: 'rgba(255,255,255,0.3)', borderRadius: '10px', padding: '2px 6px', fontSize: '12px' }}>
-                              {keyword.frequency}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                    
-                    {/* 메타인지 우수 학생 */}
-                    <div style={{ backgroundColor: '#f0fdf4', borderRadius: '16px', padding: '24px' }}>
-                      <h3 style={{ color: '#16a34a', marginBottom: '20px', fontSize: '20px', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        🏆 메타인지 우수 학생
-                      </h3>
-                      {aiAnalysisData.metaCognitiveStudents.length === 0 ? (
-                        <div style={{ color: '#666', fontStyle: 'italic', textAlign: 'center', padding: '20px' }}>
-                          메타인지적 사고를 보인 학생이 없습니다.
-                        </div>
-                      ) : (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                          {aiAnalysisData.metaCognitiveStudents.map((student, index) => (
-                            <div key={index} style={{
-                              backgroundColor: 'white',
-                              border: '2px solid #16a34a',
-                              borderRadius: '12px',
-                              padding: '16px',
-                              boxShadow: '0 2px 8px rgba(22, 163, 74, 0.1)'
-                            }}>
-                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                                <h4 style={{ color: '#16a34a', fontWeight: 'bold', fontSize: '16px', margin: 0 }}>
-                                  {student.studentName}
-                                </h4>
-                                <div style={{ backgroundColor: '#16a34a', color: 'white', borderRadius: '12px', padding: '4px 8px', fontSize: '12px', fontWeight: 'bold' }}>
-                                  {student.score}점
-                                </div>
-                              </div>
-                              <p style={{ color: '#666', marginBottom: '8px', fontSize: '14px' }}>{student.reason}</p>
-                              <blockquote style={{ 
-                                backgroundColor: '#f9fafb', 
-                                borderLeft: '4px solid #16a34a', 
-                                padding: '12px', 
-                                margin: 0, 
-                                borderRadius: '0 8px 8px 0',
-                                fontSize: '14px',
-                                fontStyle: 'italic',
-                                color: '#374151'
-                              }}>
-                                "{student.quote}"
-                              </blockquote>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                    
-                    {/* 피드백 대상 학생 */}
-                    <div style={{ backgroundColor: '#fff7ed', borderRadius: '16px', padding: '24px' }}>
-                      <h3 style={{ color: '#ea580c', marginBottom: '20px', fontSize: '20px', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        🎯 피드백 대상 학생
-                      </h3>
-                      {aiAnalysisData.feedbackStudents.length === 0 ? (
-                        <div style={{ color: '#666', fontStyle: 'italic', textAlign: 'center', padding: '20px' }}>
-                          피드백이 필요한 학생이 없습니다.
-                        </div>
-                      ) : (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                          {aiAnalysisData.feedbackStudents.map((student, index) => (
-                            <div key={index} style={{
-                              backgroundColor: 'white',
-                              border: '2px solid #ea580c',
-                              borderRadius: '12px',
-                              padding: '16px',
-                              boxShadow: '0 2px 8px rgba(234, 88, 12, 0.1)'
-                            }}>
-                              <h4 style={{ color: '#ea580c', fontWeight: 'bold', fontSize: '16px', margin: '0 0 12px 0' }}>
-                                {student.studentName}
-                              </h4>
-                              <div style={{ marginBottom: '12px' }}>
-                                <div style={{ fontSize: '14px', fontWeight: 'bold', color: '#374151', marginBottom: '4px' }}>🔴 문제점:</div>
-                                <div style={{ fontSize: '14px', color: '#666' }}>{student.issue}</div>
-                              </div>
-                              <div style={{ marginBottom: '12px' }}>
-                                <div style={{ fontSize: '14px', fontWeight: 'bold', color: '#374151', marginBottom: '4px' }}>💡 제안:</div>
-                                <div style={{ fontSize: '14px', color: '#666' }}>{student.suggestion}</div>
-                              </div>
-                              <div style={{ backgroundColor: '#f9fafb', borderRadius: '8px', padding: '12px' }}>
-                                <div style={{ fontSize: '14px', fontWeight: 'bold', color: '#374151', marginBottom: '4px' }}>✨ 개선 예시:</div>
-                                <div style={{ fontSize: '14px', color: '#666', lineHeight: '1.5' }}>{student.example}</div>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
           </div>
         </div>
       </div>
@@ -1762,6 +1704,16 @@ const LearningJournalViewModal = ({ isOpen, onClose, selectedDate, refreshData }
           </div>
         </div>
       )}
+
+      {/* 이미지 뷰어 모달 */}
+      <ImageViewerModal
+        isOpen={showImageViewer}
+        onClose={closeImageViewer}
+        imageUrl={selectedImageData?.imageUrl}
+        studentName={selectedImageData?.studentName}
+        period={selectedImageData?.period}
+        date={selectedImageData?.date}
+      />
     </>
   );
 };
