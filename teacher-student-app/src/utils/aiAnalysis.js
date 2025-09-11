@@ -120,6 +120,154 @@ ${combinedContent}
 }
 
 /**
+ * 실제 학습 데이터를 기반으로 간단한 키워드 분석을 수행하는 함수
+ * @param {Array} learningDataList - {name: string, content: string} 객체 배열
+ * @returns {Object} 분석 결과 객체
+ */
+export function analyzeDataLocally(learningDataList) {
+  if (!Array.isArray(learningDataList) || learningDataList.length === 0) {
+    return { error: "분석할 학습 데이터가 없습니다." };
+  }
+
+  // 모든 학습 내용을 합치기
+  const allContent = learningDataList.map(item => item.content).join(' ');
+  
+  // 간단한 키워드 추출 (한글 단어, 2글자 이상)
+  const keywords = extractKeywords(allContent);
+  
+  // 메타인지 분석
+  const recommendations = analyzeMetacognition(learningDataList);
+  
+  // 피드백 분석
+  const feedback_suggestions = analyzeFeedback(learningDataList);
+
+  return {
+    keywords,
+    recommendations,
+    feedback_suggestions,
+    local: true
+  };
+}
+
+/**
+ * 텍스트에서 키워드를 추출하는 함수
+ */
+function extractKeywords(text) {
+  // 불용어 목록
+  const stopWords = new Set([
+    '그리고', '그래서', '하지만', '그런데', '또한', '그러나', '때문에', '이때', '그때',
+    '오늘', '어제', '내일', '지금', '나는', '우리는', '이것', '그것', '저것',
+    '했다', '했습니다', '합니다', '입니다', '있다', '없다', '되었다', '한다',
+    '수업', '시간', '교시', '학교', '선생님', '친구', '학습', '공부'
+  ]);
+
+  // 한글 단어만 추출 (2글자 이상)
+  const words = text.match(/[가-힣]{2,}/g) || [];
+  
+  // 단어 빈도 계산
+  const wordCount = {};
+  words.forEach(word => {
+    if (!stopWords.has(word)) {
+      wordCount[word] = (wordCount[word] || 0) + 1;
+    }
+  });
+
+  // 빈도순으로 정렬하고 상위 10개만 선택
+  return Object.entries(wordCount)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 10)
+    .map(([text, count]) => ({ text, count }));
+}
+
+/**
+ * 메타인지 능력 분석 (간단한 휴리스틱 기반)
+ */
+function analyzeMetacognition(learningDataList) {
+  const metacognitionKeywords = [
+    '생각', '느낌', '깨달음', '이해', '연결', '비교', '차이점', '공통점',
+    '왜', '어떻게', '만약', '그러면', '때문에', '결론', '추론', '판단',
+    '경험', '과거', '미래', '예상', '예측', '상상', '추측'
+  ];
+
+  const recommendations = [];
+
+  learningDataList.forEach(student => {
+    const content = student.content.toLowerCase();
+    let metacognitionScore = 0;
+    let foundKeywords = [];
+
+    metacognitionKeywords.forEach(keyword => {
+      const regex = new RegExp(keyword, 'g');
+      const matches = content.match(regex);
+      if (matches) {
+        metacognitionScore += matches.length;
+        foundKeywords.push(keyword);
+      }
+    });
+
+    // 문장의 복잡성 점수 (문장 길이와 구두점 사용)
+    const sentences = content.split(/[.!?]/).filter(s => s.trim().length > 10);
+    const complexityScore = sentences.length > 0 ? 
+      sentences.reduce((sum, sentence) => sum + sentence.length, 0) / sentences.length : 0;
+
+    // 총 점수 계산
+    const totalScore = metacognitionScore * 2 + complexityScore * 0.1;
+
+    if (totalScore > 8 && content.length > 50) {
+      const quote = content.length > 100 ? content.substring(0, 97) + '...' : content;
+      recommendations.push({
+        name: student.name,
+        quote,
+        reason: `메타인지 키워드 ${foundKeywords.length}개 사용, 상세한 설명과 성찰적 사고를 보임`
+      });
+    }
+  });
+
+  return recommendations.slice(0, 3); // 상위 3명만
+}
+
+/**
+ * 피드백 필요 학생 분석
+ */
+function analyzeFeedback(learningDataList) {
+  const feedback_suggestions = [];
+
+  learningDataList.forEach(student => {
+    const content = student.content;
+    
+    // 단순 나열 패턴 감지
+    const shortSentences = content.split(/[.!?]/).filter(s => s.trim().length > 0);
+    const avgLength = shortSentences.length > 0 ? 
+      shortSentences.reduce((sum, s) => sum + s.length, 0) / shortSentences.length : 0;
+
+    const simplePatterns = [
+      /했다\s*\./g,
+      /봤다\s*\./g,
+      /들었다\s*\./g,
+      /배웠다\s*\./g
+    ];
+
+    let simplePatternCount = 0;
+    simplePatterns.forEach(pattern => {
+      const matches = content.match(pattern);
+      if (matches) simplePatternCount += matches.length;
+    });
+
+    // 짧은 문장이 많고, 단순 패턴이 많으면 피드백 대상
+    if (avgLength < 15 && simplePatternCount >= 2 && content.length < 100) {
+      const quote = content.length > 60 ? content.substring(0, 57) + '...' : content;
+      feedback_suggestions.push({
+        name: student.name,
+        quote,
+        suggestion: "구체적인 예시나 자신의 생각, 느낀 점을 더 자세히 써보면 좋겠습니다."
+      });
+    }
+  });
+
+  return feedback_suggestions.slice(0, 3); // 상위 3명만
+}
+
+/**
  * 데모용 분석 결과를 반환하는 함수
  * @returns {Object} 데모 분석 결과
  */

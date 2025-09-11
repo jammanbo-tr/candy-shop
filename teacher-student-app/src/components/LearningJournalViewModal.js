@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { collection, getDocs, updateDoc, doc, setDoc, onSnapshot } from 'firebase/firestore';
 import { db } from '../firebase';
 import ImageViewerModal from './ImageViewerModal';
-import { analyzeDataWithGemini, getDemoAnalysisResult } from '../utils/aiAnalysis';
+import { analyzeDataWithGemini, getDemoAnalysisResult, analyzeDataLocally } from '../utils/aiAnalysis';
 import WordCloud from './WordCloud';
 
 const PERIODS = ['1교시', '2교시', '3교시', '4교시', '5교시', '6교시'];
@@ -345,14 +345,27 @@ const LearningJournalViewModal = ({ isOpen, onClose, selectedDate, refreshData }
 
       console.log('AI 분석 시작:', analysisData);
 
-      // AI 분석 실행
+      // 먼저 로컬 분석 시도
+      try {
+        const localResult = analyzeDataLocally(analysisData);
+        if (localResult.error) {
+          throw new Error(localResult.error);
+        }
+        console.log('로컬 분석 성공:', localResult);
+        setAiAnalysisResult(localResult);
+        return;
+      } catch (localError) {
+        console.log('로컬 분석 실패, Gemini AI 시도:', localError);
+      }
+
+      // 로컬 분석 실패 시 Gemini AI 시도
       const result = await analyzeDataWithGemini(analysisData);
       
-      // 데모 모드인 경우 데모 결과 사용
+      // Gemini 분석 결과 처리
       if (result.demo || result.error) {
-        console.log('데모 모드 또는 오류로 인해 데모 결과 사용');
-        const demoResult = getDemoAnalysisResult();
-        setAiAnalysisResult(demoResult);
+        console.log('Gemini 분석 실패, 로컬 기본 분석 사용');
+        const localFallback = analyzeDataLocally(analysisData);
+        setAiAnalysisResult(localFallback);
       } else {
         setAiAnalysisResult(result);
       }
@@ -361,9 +374,30 @@ const LearningJournalViewModal = ({ isOpen, onClose, selectedDate, refreshData }
       console.error('AI 분석 오류:', error);
       alert(`AI 분석 중 오류가 발생했습니다: ${error.message}`);
       
-      // 오류 시 데모 결과 표시
-      const demoResult = getDemoAnalysisResult();
-      setAiAnalysisResult(demoResult);
+      // 오류 시 로컬 분석 시도
+      try {
+        // 다시 데이터 필터링
+        let errorFilteredData = data.filter(entry => {
+          if (selectedDateFilter && entry.date !== selectedDateFilter) return false;
+          const selectedPeriods = Object.keys(visiblePeriods).filter(period => 
+            visiblePeriods[period] && period !== '전체'
+          );
+          if (selectedPeriods.length > 0 && !selectedPeriods.includes(entry.period)) return false;
+          return entry.content && entry.content.trim().length > 0;
+        });
+        
+        const errorAnalysisData = errorFilteredData.map(entry => ({
+          name: entry.studentName || '이름없음',
+          content: entry.content
+        }));
+        
+        const localFallback = analyzeDataLocally(errorAnalysisData);
+        setAiAnalysisResult(localFallback);
+      } catch (fallbackError) {
+        console.error('로컬 분석도 실패:', fallbackError);
+        const demoResult = getDemoAnalysisResult();
+        setAiAnalysisResult(demoResult);
+      }
     } finally {
       setAiAnalysisLoading(false);
     }
@@ -963,160 +997,289 @@ const LearningJournalViewModal = ({ isOpen, onClose, selectedDate, refreshData }
                     {/* 분석 결과 영역 */}
                     {aiAnalysisResult ? (
                       <div style={{
+                        display: 'flex',
+                        gap: '20px',
                         backgroundColor: 'white',
                         padding: '20px',
                         borderRadius: '8px',
-                        border: '1px solid #e1e5e9'
+                        border: '1px solid #e1e5e9',
+                        minHeight: '600px'
                       }}>
-                        {/* 워드클라우드 */}
-                        {aiAnalysisResult.keywords && aiAnalysisResult.keywords.length > 0 && (
-                          <div style={{ marginBottom: '32px' }}>
-                            <h5 style={{
-                              fontSize: '16px',
-                              fontWeight: 'bold',
-                              color: '#1976d2',
-                              marginBottom: '16px',
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '8px'
-                            }}>
-                              ☁️ 핵심 단어 워드클라우드
-                            </h5>
-                            <WordCloud words={aiAnalysisResult.keywords} width={500} height={300} />
-                          </div>
-                        )}
-
-                        {/* 메타인지 우수 학생 추천 */}
-                        {aiAnalysisResult.recommendations && aiAnalysisResult.recommendations.length > 0 && (
-                          <div style={{ marginBottom: '32px' }}>
-                            <h5 style={{
-                              fontSize: '16px',
-                              fontWeight: 'bold',
-                              color: '#4caf50',
-                              marginBottom: '16px',
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '8px'
-                            }}>
-                              🌟 메타인지 우수 학생
-                            </h5>
-                            {aiAnalysisResult.recommendations.map((rec, index) => (
-                              <div key={index} style={{
-                                backgroundColor: '#f1f8e9',
-                                padding: '16px',
-                                borderRadius: '8px',
-                                border: '1px solid #c8e6c9',
-                                marginBottom: '12px'
-                              }}>
-                                <div style={{
-                                  fontSize: '14px',
-                                  fontWeight: 'bold',
-                                  color: '#2e7d32',
-                                  marginBottom: '8px'
-                                }}>
-                                  👤 {rec.name}
-                                </div>
-                                <div style={{
-                                  fontSize: '13px',
-                                  color: '#666',
-                                  marginBottom: '8px',
-                                  fontStyle: 'italic',
-                                  backgroundColor: 'white',
-                                  padding: '8px',
-                                  borderRadius: '4px',
-                                  border: '1px solid #e0e0e0'
-                                }}>
-                                  "{rec.quote}"
-                                </div>
-                                <div style={{
-                                  fontSize: '13px',
-                                  color: '#2e7d32'
-                                }}>
-                                  💡 {rec.reason}
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-
-                        {/* 피드백 제안 */}
-                        {aiAnalysisResult.feedback_suggestions && aiAnalysisResult.feedback_suggestions.length > 0 && (
-                          <div style={{ marginBottom: '16px' }}>
-                            <h5 style={{
-                              fontSize: '16px',
-                              fontWeight: 'bold',
-                              color: '#ff9800',
-                              marginBottom: '16px',
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '8px'
-                            }}>
-                              💭 피드백 제안
-                            </h5>
-                            {aiAnalysisResult.feedback_suggestions.map((feedback, index) => (
-                              <div key={index} style={{
-                                backgroundColor: '#fff8e1',
-                                padding: '16px',
-                                borderRadius: '8px',
-                                border: '1px solid #ffcc02',
-                                marginBottom: '12px'
-                              }}>
-                                <div style={{
-                                  fontSize: '14px',
-                                  fontWeight: 'bold',
-                                  color: '#e65100',
-                                  marginBottom: '8px'
-                                }}>
-                                  👤 {feedback.name}
-                                </div>
-                                <div style={{
-                                  fontSize: '13px',
-                                  color: '#666',
-                                  marginBottom: '8px',
-                                  fontStyle: 'italic',
-                                  backgroundColor: 'white',
-                                  padding: '8px',
-                                  borderRadius: '4px',
-                                  border: '1px solid #e0e0e0'
-                                }}>
-                                  "{feedback.quote}"
-                                </div>
-                                <div style={{
-                                  fontSize: '13px',
-                                  color: '#e65100'
-                                }}>
-                                  📝 {feedback.suggestion}
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-
-                        {/* 데모 모드 표시 */}
-                        {aiAnalysisResult.demo && (
-                          <div style={{
-                            backgroundColor: '#e3f2fd',
-                            padding: '12px',
-                            borderRadius: '6px',
-                            border: '1px solid #2196f3',
-                            fontSize: '13px',
-                            color: '#1565c0',
-                            textAlign: 'center'
+                        {/* 좌측: 학생 데이터 목록 */}
+                        <div style={{ 
+                          flex: '1',
+                          paddingRight: '20px',
+                          borderRight: '1px solid #e1e5e9'
+                        }}>
+                          <h5 style={{
+                            fontSize: '16px',
+                            fontWeight: 'bold',
+                            color: '#1976d2',
+                            marginBottom: '16px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '8px'
                           }}>
-                            🤖 이 결과는 데모 데이터입니다. 실제 Gemini API를 사용하려면 환경변수를 설정해주세요.
+                            <img src="/mindmap.png" alt="학생 데이터" style={{ width: '20px', height: '20px' }} />
+                            학생 학습 내용
+                          </h5>
+                          
+                          <div style={{ 
+                            maxHeight: '500px', 
+                            overflowY: 'auto',
+                            paddingRight: '8px'
+                          }}>
+                            {(() => {
+                              // 선택된 날짜와 교시에 따라 실제 데이터 필터링
+                              let filteredData = data.filter(entry => {
+                                // 날짜 필터
+                                if (selectedDateFilter && entry.date !== selectedDateFilter) {
+                                  return false;
+                                }
+                                
+                                // 교시 필터 (선택된 교시만)
+                                const selectedPeriods = Object.keys(visiblePeriods).filter(period => 
+                                  visiblePeriods[period] && period !== '전체'
+                                );
+                                
+                                if (selectedPeriods.length > 0 && !selectedPeriods.includes(entry.period)) {
+                                  return false;
+                                }
+                                
+                                // 내용이 있는 데이터만
+                                return entry.content && entry.content.trim().length > 0;
+                              });
+
+                              if (filteredData.length === 0) {
+                                return (
+                                  <div style={{
+                                    textAlign: 'center',
+                                    color: '#666',
+                                    padding: '40px 20px'
+                                  }}>
+                                    <img src="/data_bg.png" alt="빈 데이터" style={{ width: '60px', height: '60px', marginBottom: '12px', opacity: 0.5 }} />
+                                    <p style={{ margin: 0 }}>선택된 조건에 해당하는 학습 데이터가 없습니다.</p>
+                                  </div>
+                                );
+                              }
+
+                              return filteredData.map((entry, index) => (
+                                <div key={index} style={{
+                                  backgroundColor: '#f8f9fa',
+                                  padding: '12px',
+                                  borderRadius: '8px',
+                                  marginBottom: '12px',
+                                  border: '1px solid #e9ecef'
+                                }}>
+                                  <div style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    marginBottom: '8px',
+                                    gap: '8px'
+                                  }}>
+                                    <img src="/seat1.png" alt="학생" style={{ width: '16px', height: '16px' }} />
+                                    <span style={{
+                                      fontSize: '14px',
+                                      fontWeight: 'bold',
+                                      color: '#333'
+                                    }}>
+                                      {entry.studentName}
+                                    </span>
+                                    <span style={{
+                                      fontSize: '12px',
+                                      color: '#666',
+                                      backgroundColor: '#e3f2fd',
+                                      padding: '2px 6px',
+                                      borderRadius: '4px'
+                                    }}>
+                                      {entry.period}
+                                    </span>
+                                  </div>
+                                  <div style={{
+                                    fontSize: '13px',
+                                    color: '#555',
+                                    lineHeight: '1.4',
+                                    backgroundColor: 'white',
+                                    padding: '8px',
+                                    borderRadius: '4px',
+                                    border: '1px solid #e0e0e0'
+                                  }}>
+                                    {entry.content}
+                                  </div>
+                                </div>
+                              ));
+                            })()}
                           </div>
-                        )}
+                        </div>
+
+                        {/* 우측: 워드클라우드 및 분석 결과 */}
+                        <div style={{ 
+                          flex: '1',
+                          paddingLeft: '20px'
+                        }}>
+                          {/* 워드클라우드 */}
+                          {aiAnalysisResult.keywords && aiAnalysisResult.keywords.length > 0 && (
+                            <div style={{ marginBottom: '24px' }}>
+                              <h5 style={{
+                                fontSize: '16px',
+                                fontWeight: 'bold',
+                                color: '#1976d2',
+                                marginBottom: '16px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '8px'
+                              }}>
+                                <img src="/data_bg.png" alt="워드클라우드" style={{ width: '20px', height: '20px' }} />
+                                핵심 단어 워드클라우드
+                              </h5>
+                              <div style={{
+                                backgroundColor: '#fafafa',
+                                borderRadius: '8px',
+                                padding: '16px',
+                                border: '1px solid #e1e5e9'
+                              }}>
+                                <WordCloud words={aiAnalysisResult.keywords} width={400} height={250} />
+                              </div>
+                            </div>
+                          )}
+
+                          {/* 메타인지 우수 학생 */}
+                          {aiAnalysisResult.recommendations && aiAnalysisResult.recommendations.length > 0 && (
+                            <div style={{ marginBottom: '24px' }}>
+                              <h5 style={{
+                                fontSize: '14px',
+                                fontWeight: 'bold',
+                                color: '#4caf50',
+                                marginBottom: '12px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '8px'
+                              }}>
+                                <img src="/lv11.png" alt="우수 학생" style={{ width: '18px', height: '18px' }} />
+                                메타인지 우수 학생
+                              </h5>
+                              {aiAnalysisResult.recommendations.map((rec, index) => (
+                                <div key={index} style={{
+                                  backgroundColor: '#f1f8e9',
+                                  padding: '12px',
+                                  borderRadius: '6px',
+                                  border: '1px solid #c8e6c9',
+                                  marginBottom: '8px',
+                                  fontSize: '12px'
+                                }}>
+                                  <div style={{
+                                    fontWeight: 'bold',
+                                    color: '#2e7d32',
+                                    marginBottom: '6px',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '6px'
+                                  }}>
+                                    <img src="/seat1.png" alt="학생" style={{ width: '14px', height: '14px' }} />
+                                    {rec.name}
+                                  </div>
+                                  <div style={{
+                                    color: '#666',
+                                    marginBottom: '6px',
+                                    fontStyle: 'italic',
+                                    backgroundColor: 'white',
+                                    padding: '6px',
+                                    borderRadius: '3px'
+                                  }}>
+                                    "{rec.quote}"
+                                  </div>
+                                  <div style={{ color: '#2e7d32' }}>
+                                    {rec.reason}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+
+                          {/* 피드백 제안 */}
+                          {aiAnalysisResult.feedback_suggestions && aiAnalysisResult.feedback_suggestions.length > 0 && (
+                            <div style={{ marginBottom: '16px' }}>
+                              <h5 style={{
+                                fontSize: '14px',
+                                fontWeight: 'bold',
+                                color: '#ff9800',
+                                marginBottom: '12px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '8px'
+                              }}>
+                                <img src="/hangang.png" alt="피드백" style={{ width: '18px', height: '18px' }} />
+                                피드백 제안
+                              </h5>
+                              {aiAnalysisResult.feedback_suggestions.map((feedback, index) => (
+                                <div key={index} style={{
+                                  backgroundColor: '#fff8e1',
+                                  padding: '12px',
+                                  borderRadius: '6px',
+                                  border: '1px solid #ffcc02',
+                                  marginBottom: '8px',
+                                  fontSize: '12px'
+                                }}>
+                                  <div style={{
+                                    fontWeight: 'bold',
+                                    color: '#e65100',
+                                    marginBottom: '6px',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '6px'
+                                  }}>
+                                    <img src="/seat2.png" alt="학생" style={{ width: '14px', height: '14px' }} />
+                                    {feedback.name}
+                                  </div>
+                                  <div style={{
+                                    color: '#666',
+                                    marginBottom: '6px',
+                                    fontStyle: 'italic',
+                                    backgroundColor: 'white',
+                                    padding: '6px',
+                                    borderRadius: '3px'
+                                  }}>
+                                    "{feedback.quote}"
+                                  </div>
+                                  <div style={{ color: '#e65100' }}>
+                                    {feedback.suggestion}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+
+                          {/* 데모 모드 표시 */}
+                          {aiAnalysisResult.demo && (
+                            <div style={{
+                              backgroundColor: '#e3f2fd',
+                              padding: '8px',
+                              borderRadius: '4px',
+                              border: '1px solid #2196f3',
+                              fontSize: '11px',
+                              color: '#1565c0',
+                              textAlign: 'center',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              gap: '6px'
+                            }}>
+                              <img src="/logo192.png" alt="데모" style={{ width: '16px', height: '16px' }} />
+                              이 결과는 데모 데이터입니다. 실제 Gemini API를 사용하려면 환경변수를 설정해주세요.
+                            </div>
+                          )}
+                        </div>
                       </div>
                     ) : (
                       <div style={{
                         backgroundColor: 'white',
-                        padding: '20px',
+                        padding: '40px',
                         borderRadius: '8px',
                         border: '1px solid #e1e5e9',
                         textAlign: 'center',
                         color: '#666'
                       }}>
-                        <div style={{ fontSize: '48px', marginBottom: '16px' }}>🤖</div>
+                        <img src="/mindmap.png" alt="AI 분석" style={{ width: '48px', height: '48px', marginBottom: '16px', opacity: 0.6 }} />
                         <p style={{ margin: 0, fontSize: '14px' }}>
                           날짜와 교시를 선택한 후 "AI 분석 실행" 버튼을 클릭하세요.
                         </p>

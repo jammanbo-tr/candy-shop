@@ -23,24 +23,97 @@ const WordCloud = ({ words, width = 400, height = 300 }) => {
       .domain([minCount, maxCount])
       .range([16, 48]);
 
-    // 간단한 원형 배치 알고리즘
+    // 충돌 방지를 위한 배치 알고리즘
     const centerX = width / 2;
     const centerY = height / 2;
-    const radius = Math.min(width, height) / 3;
-
-    // 단어들을 원형으로 배치
-    const angleStep = (2 * Math.PI) / words.length;
+    const maxRadius = Math.min(width, height) / 3;
+    
+    // 이미 배치된 단어들의 위치를 저장
+    const placedWords = [];
+    
+    // 두 단어가 겹치는지 확인하는 함수
+    const isOverlapping = (x1, y1, w1, h1, x2, y2, w2, h2) => {
+      const padding = 5; // 여백
+      return !(x1 + w1 + padding < x2 || 
+               x2 + w2 + padding < x1 || 
+               y1 + h1 + padding < y2 || 
+               y2 + h2 + padding < y1);
+    };
+    
+    // 안전한 위치를 찾는 함수
+    const findSafePosition = (fontSize, wordLength) => {
+      const estimatedWidth = wordLength * fontSize * 0.6;
+      const estimatedHeight = fontSize;
+      
+      for (let attempt = 0; attempt < 50; attempt++) {
+        let x, y;
+        
+        if (attempt < 10) {
+          // 처음 10번은 중앙 근처에서 시도
+          const angle = Math.random() * 2 * Math.PI;
+          const distance = Math.random() * maxRadius * 0.5;
+          x = centerX + Math.cos(angle) * distance - estimatedWidth / 2;
+          y = centerY + Math.sin(angle) * distance - estimatedHeight / 2;
+        } else {
+          // 그 다음은 전체 영역에서 시도
+          x = Math.random() * (width - estimatedWidth);
+          y = Math.random() * (height - estimatedHeight);
+        }
+        
+        // 경계 체크
+        if (x < 0 || y < 0 || x + estimatedWidth > width || y + estimatedHeight > height) {
+          continue;
+        }
+        
+        // 겹침 체크
+        let overlapping = false;
+        for (const placed of placedWords) {
+          if (isOverlapping(x, y, estimatedWidth, estimatedHeight, 
+                           placed.x, placed.y, placed.width, placed.height)) {
+            overlapping = true;
+            break;
+          }
+        }
+        
+        if (!overlapping) {
+          return { 
+            x: x + estimatedWidth / 2, 
+            y: y + estimatedHeight / 2, 
+            width: estimatedWidth, 
+            height: estimatedHeight 
+          };
+        }
+      }
+      
+      // 안전한 위치를 찾지 못한 경우 스파이럴 배치
+      const spiralAngle = placedWords.length * 0.5;
+      const spiralRadius = Math.min(maxRadius + placedWords.length * 5, Math.min(width, height) / 2);
+      const x = centerX + Math.cos(spiralAngle) * spiralRadius;
+      const y = centerY + Math.sin(spiralAngle) * spiralRadius;
+      
+      return { 
+        x, 
+        y, 
+        width: estimatedWidth, 
+        height: estimatedHeight 
+      };
+    };
     
     words.forEach((word, index) => {
-      const angle = index * angleStep;
-      const distance = Math.random() * radius;
-      const x = centerX + Math.cos(angle) * distance;
-      const y = centerY + Math.sin(angle) * distance;
       const fontSize = fontSizeScale(word.count);
+      const position = findSafePosition(fontSize, word.text.length);
+      
+      // 배치된 단어 정보 저장
+      placedWords.push({
+        x: position.x - position.width / 2,
+        y: position.y - position.height / 2,
+        width: position.width,
+        height: position.height
+      });
 
       svg.append("text")
-        .attr("x", x)
-        .attr("y", y)
+        .attr("x", position.x)
+        .attr("y", position.y)
         .attr("text-anchor", "middle")
         .attr("font-family", "Arial, sans-serif")
         .attr("font-size", fontSize)
@@ -73,8 +146,8 @@ const WordCloud = ({ words, width = 400, height = 300 }) => {
 
       // 빈도수 표시 (작은 텍스트로)
       svg.append("text")
-        .attr("x", x)
-        .attr("y", y + fontSize / 2 + 12)
+        .attr("x", position.x)
+        .attr("y", position.y + fontSize / 2 + 12)
         .attr("text-anchor", "middle")
         .attr("font-family", "Arial, sans-serif")
         .attr("font-size", 10)
