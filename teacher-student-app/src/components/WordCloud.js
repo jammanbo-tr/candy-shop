@@ -1,7 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import * as d3 from 'd3';
 
-const WordCloud = ({ words, width = 400, height = 300 }) => {
+const WordCloud = ({ words, width = 500, height = 500 }) => {
   const svgRef = useRef(null);
 
   useEffect(() => {

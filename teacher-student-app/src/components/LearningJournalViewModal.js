@@ -1145,7 +1145,7 @@ const LearningJournalViewModal = ({ isOpen, onClose, selectedDate, refreshData }
                                 justifyContent: 'center',
                                 alignItems: 'center'
                               }}>
-                                <WordCloud words={aiAnalysisResult.keywords} width={450} height={450} />
+                                <WordCloud words={aiAnalysisResult.keywords} width={500} height={500} />
                               </div>
                             </div>
                           )}
