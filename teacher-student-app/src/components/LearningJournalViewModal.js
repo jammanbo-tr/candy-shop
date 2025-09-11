@@ -1140,9 +1140,12 @@ const LearningJournalViewModal = ({ isOpen, onClose, selectedDate, refreshData }
                                 backgroundColor: '#fafafa',
                                 borderRadius: '8px',
                                 padding: '16px',
-                                border: '1px solid #e1e5e9'
+                                border: '1px solid #e1e5e9',
+                                display: 'flex',
+                                justifyContent: 'center',
+                                alignItems: 'center'
                               }}>
-                                <WordCloud words={aiAnalysisResult.keywords} width={400} height={250} />
+                                <WordCloud words={aiAnalysisResult.keywords} width={450} height={450} />
                               </div>
                             </div>
                           )}

@@ -45,19 +45,25 @@ const WordCloud = ({ words, width = 400, height = 300 }) => {
       const estimatedWidth = wordLength * fontSize * 0.6;
       const estimatedHeight = fontSize;
       
-      for (let attempt = 0; attempt < 50; attempt++) {
+      for (let attempt = 0; attempt < 80; attempt++) {
         let x, y;
         
-        if (attempt < 10) {
-          // 처음 10번은 중앙 근처에서 시도
+        if (attempt < 15) {
+          // 처음 15번은 중앙 근처에서 시도 (더 넓은 중앙 영역)
           const angle = Math.random() * 2 * Math.PI;
-          const distance = Math.random() * maxRadius * 0.5;
+          const distance = Math.random() * maxRadius * 0.7;
+          x = centerX + Math.cos(angle) * distance - estimatedWidth / 2;
+          y = centerY + Math.sin(angle) * distance - estimatedHeight / 2;
+        } else if (attempt < 40) {
+          // 중간 시도는 더 넓은 중앙 영역
+          const angle = Math.random() * 2 * Math.PI;
+          const distance = Math.random() * maxRadius * 1.2;
           x = centerX + Math.cos(angle) * distance - estimatedWidth / 2;
           y = centerY + Math.sin(angle) * distance - estimatedHeight / 2;
         } else {
           // 그 다음은 전체 영역에서 시도
-          x = Math.random() * (width - estimatedWidth);
-          y = Math.random() * (height - estimatedHeight);
+          x = Math.random() * (width - estimatedWidth - 20) + 10; // 여백 추가
+          y = Math.random() * (height - estimatedHeight - 20) + 10; // 여백 추가
         }
         
         // 경계 체크
