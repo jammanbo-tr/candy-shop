@@ -94,13 +94,25 @@ const EmotionDashboardModal = ({ isOpen, onClose, students }) => {
   const [individualEndDate, setIndividualEndDate] = useState('');
   const [useCustomDateRange, setUseCustomDateRange] = useState(false); // 7, 14, 21일
   const [aiAnalysisResults, setAiAnalysisResults] = useState([]);
-  const [activeTab, setActiveTab] = useState(0); // 0: 전체 분석, 1: 개별 분석, 2: 감정 클러스터링
+  const [activeTab, setActiveTab] = useState(0); // 0: 전체 분석, 1: 개별 분석, 2: 감정 클러스터링, 3: 주간분석
   const [clusteringDate, setClusteringDate] = useState('');
   const [clusteringData, setClusteringData] = useState([]);
   const [clusteringAnalysis, setClusteringAnalysis] = useState(null);
   const [clusteringLoading, setClusteringLoading] = useState(false);
   const [hoveredStudent, setHoveredStudent] = useState(null);
   const [tooltipPosition, setTooltipPosition] = useState({ x: 0, y: 0 });
+  
+  // 주간분석을 위한 상태들
+  const [weeklyData, setWeeklyData] = useState([]);
+  const [weeklyAverage, setWeeklyAverage] = useState([]);
+  const [weeklyAnalysis, setWeeklyAnalysis] = useState('');
+  const [weeklyLoading, setWeeklyLoading] = useState(false);
+  const [selectedWeekStart, setSelectedWeekStart] = useState('');
+  const [weeklyStats, setWeeklyStats] = useState({
+    currentWeek: {},
+    averageWeek: {},
+    comparison: {}
+  });
 
   // 무지개 테두리 애니메이션을 위한 글로벌 스타일
   useEffect(() => {
@@ -146,13 +158,22 @@ const EmotionDashboardModal = ({ isOpen, onClose, students }) => {
       // 클러스터링 날짜 초기화 (오늘)
       setClusteringDate(todayString);
       
+      // 주간분석 초기화 (이번 주 월요일부터)
+      const today = new Date();
+      const currentDay = today.getDay();
+      const mondayOffset = currentDay === 0 ? 6 : currentDay - 1; // 일요일이면 6, 그 외는 현재요일-1
+      const thisMonday = new Date(today);
+      thisMonday.setDate(today.getDate() - mondayOffset);
+      setSelectedWeekStart(getKoreaDateString(thisMonday));
+      
       console.log('📅 감정출석부 대시보드 열림 - 날짜 설정:', {
         selectedDate: todayString,
         chartStartDate: getKoreaDateString(startDate),
         chartEndDate: getKoreaDateString(endDate),
         individualStartDate: getKoreaDateString(individualStart),
         individualEndDate: getKoreaDateString(individualEnd),
-        clusteringDate: todayString
+        clusteringDate: todayString,
+        selectedWeekStart: getKoreaDateString(thisMonday)
       });
     }
   }, [isOpen]);
@@ -168,6 +189,13 @@ const EmotionDashboardModal = ({ isOpen, onClose, students }) => {
       loadChartData();
     }
   }, [isOpen, chartStartDate, chartEndDate]);
+
+  // 주간분석 데이터 로딩
+  useEffect(() => {
+    if (isOpen && selectedWeekStart && activeTab === 3) {
+      loadWeeklyData(selectedWeekStart);
+    }
+  }, [isOpen, selectedWeekStart, activeTab]);
 
   const loadEmotionData = async () => {
     setLoading(true);
@@ -1312,6 +1340,203 @@ ${clusterInfo}
     }
   };
 
+  // 주간분석 데이터 로딩 함수
+  const loadWeeklyData = async (weekStartDate) => {
+    if (!weekStartDate) return;
+    
+    setWeeklyLoading(true);
+    try {
+      // 주간 데이터 계산 (월~금)
+      const weekDays = [];
+      const weekStart = new Date(weekStartDate);
+      
+      for (let i = 0; i < 5; i++) { // 월~금
+        const date = new Date(weekStart);
+        date.setDate(weekStart.getDate() + i);
+        weekDays.push(getKoreaDateString(date));
+      }
+      
+      // 현재 주간 데이터 가져오기
+      const currentWeekData = [];
+      for (const dateStr of weekDays) {
+        const dayData = await getDayEmotionData(dateStr);
+        currentWeekData.push({
+          date: dateStr,
+          dayName: ['월', '화', '수', '목', '금'][weekDays.indexOf(dateStr)],
+          emotionCounts: dayData.emotions,
+          students: dayData.data,
+          averageIntensity: dayData.averageIntensity || 0
+        });
+      }
+      
+      // 누적 평균 데이터 계산 (지난 4주간의 같은 요일 평균)
+      const averageWeekData = await calculateWeeklyAverage(weekDays);
+      
+      setWeeklyData(currentWeekData);
+      setWeeklyAverage(averageWeekData);
+      
+      // Gemini API로 주간 분석 수행
+      await analyzeWeeklyTrends(currentWeekData, averageWeekData);
+      
+    } catch (error) {
+      console.error('주간 데이터 로딩 실패:', error);
+    } finally {
+      setWeeklyLoading(false);
+    }
+  };
+
+  // 특정 날짜의 감정 데이터 가져오기
+  const getDayEmotionData = async (dateStr) => {
+    try {
+      const emotionQuery = query(
+        collection(db, `emotionAttendance/${dateStr}/records`),
+        orderBy('timestamp', 'desc')
+      );
+      
+      const querySnapshot = await getDocs(emotionQuery);
+      const data = [];
+      const emotions = {};
+      let totalIntensity = 0;
+      let intensityCount = 0;
+      
+      querySnapshot.forEach((doc) => {
+        const docData = doc.data();
+        data.push({
+          id: doc.id,
+          ...docData
+        });
+        
+        if (docData.emotion) {
+          emotions[docData.emotion] = (emotions[docData.emotion] || 0) + 1;
+          if (docData.intensity) {
+            totalIntensity += parseInt(docData.intensity);
+            intensityCount++;
+          }
+        }
+      });
+      
+      return {
+        data,
+        emotions,
+        averageIntensity: intensityCount > 0 ? totalIntensity / intensityCount : 0
+      };
+    } catch (error) {
+      console.error('날짜별 감정 데이터 조회 실패:', error);
+      return { data: [], emotions: {}, averageIntensity: 0 };
+    }
+  };
+
+  // 누적 평균 계산 (지난 4주간의 같은 요일 평균)
+  const calculateWeeklyAverage = async (weekDays) => {
+    const averageData = [];
+    
+    for (let i = 0; i < 5; i++) { // 월~금
+      const dayName = ['월', '화', '수', '목', '금'][i];
+      const pastDays = [];
+      
+      // 지난 4주간의 같은 요일 데이터 수집
+      for (let week = 1; week <= 4; week++) {
+        const pastDate = new Date(weekDays[i]);
+        pastDate.setDate(pastDate.getDate() - (week * 7));
+        const pastDateStr = getKoreaDateString(pastDate);
+        
+        const dayData = await getDayEmotionData(pastDateStr);
+        if (dayData.data.length > 0) {
+          pastDays.push(dayData);
+        }
+      }
+      
+      // 평균 계산
+      const avgEmotions = {};
+      let avgIntensity = 0;
+      let totalStudents = 0;
+      
+      if (pastDays.length > 0) {
+        const emotionTotals = {};
+        let totalIntensitySum = 0;
+        let totalIntensityCount = 0;
+        
+        pastDays.forEach(day => {
+          Object.keys(day.emotions).forEach(emotion => {
+            emotionTotals[emotion] = (emotionTotals[emotion] || 0) + day.emotions[emotion];
+          });
+          totalIntensitySum += day.averageIntensity * day.data.length;
+          totalIntensityCount += day.data.length;
+          totalStudents += day.data.length;
+        });
+        
+        // 평균값으로 변환
+        Object.keys(emotionTotals).forEach(emotion => {
+          avgEmotions[emotion] = Math.round(emotionTotals[emotion] / pastDays.length);
+        });
+        
+        avgIntensity = totalIntensityCount > 0 ? totalIntensitySum / totalIntensityCount : 0;
+      }
+      
+      averageData.push({
+        dayName,
+        emotionCounts: avgEmotions,
+        averageIntensity: avgIntensity,
+        averageStudents: Math.round(totalStudents / Math.max(pastDays.length, 1))
+      });
+    }
+    
+    return averageData;
+  };
+
+  // Gemini API로 주간 트렌드 분석
+  const analyzeWeeklyTrends = async (currentWeek, averageWeek) => {
+    try {
+      const genAI = new GoogleGenerativeAI(process.env.REACT_APP_GEMINI_API_KEY);
+      const model = genAI.getGenerativeModel({ model: "gemini-pro" });
+
+      // 분석용 데이터 준비
+      const currentWeekSummary = currentWeek.map(day => ({
+        day: day.dayName,
+        emotions: day.emotionCounts,
+        intensity: day.averageIntensity,
+        studentCount: day.students.length,
+        notes: day.students.map(s => s.notes || s.reason).filter(n => n && n.trim()).join('; ')
+      }));
+
+      const averageWeekSummary = averageWeek.map(day => ({
+        day: day.dayName,
+        emotions: day.emotionCounts,
+        intensity: day.averageIntensity,
+        averageStudents: day.averageStudents
+      }));
+
+      const prompt = `
+다음은 이번 주 학생들의 감정출석 데이터와 지난 4주간의 평균 데이터입니다.
+
+## 이번 주 데이터:
+${JSON.stringify(currentWeekSummary, null, 2)}
+
+## 지난 4주 평균 데이터:
+${JSON.stringify(averageWeekSummary, null, 2)}
+
+## 분석 요청:
+1. **주간 감정 트렌드 분석**: 월요일부터 금요일까지의 감정 변화 패턴
+2. **평균 대비 분석**: 이번 주가 평소와 어떻게 다른지 비교
+3. **비고 내용 분석**: 학생들이 작성한 비고를 바탕으로 한 심층 분석
+4. **주의사항 및 권장사항**: 교사가 알아야 할 중요한 인사이트
+
+분석 결과를 한국어로, 교사가 이해하기 쉽게 작성해주세요.
+각 항목을 명확히 구분하여 제시하고, 구체적인 수치와 예시를 포함해주세요.
+`;
+
+      const result = await model.generateContent(prompt);
+      const response = await result.response;
+      const analysisText = response.text();
+      
+      setWeeklyAnalysis(analysisText);
+      
+    } catch (error) {
+      console.error('주간 분석 실패:', error);
+      setWeeklyAnalysis('주간 분석을 불러오는 중 오류가 발생했습니다. 다시 시도해주세요.');
+    }
+  };
+
   const chartOptions = {
     responsive: true,
     maintainAspectRatio: false,
@@ -1521,6 +1746,14 @@ ${clusterInfo}
                 fontSize: '1.1rem',
                 fontWeight: 600,
                 color: activeTab === 2 ? '#1976d2' : '#666'
+              }}
+            />
+            <Tab 
+              label="📅 주간 분석" 
+              sx={{ 
+                fontSize: '1.1rem',
+                fontWeight: 600,
+                color: activeTab === 3 ? '#1976d2' : '#666'
               }}
             />
           </Tabs>
@@ -2775,6 +3008,253 @@ ${clusterInfo}
                       </Typography>
                       <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
                         다른 날짜를 선택해주세요.
+                      </Typography>
+                    </Box>
+                  )}
+                </CardContent>
+              </Card>
+            </>
+          )}
+
+          {/* 주간분석 탭 */}
+          {activeTab === 3 && (
+            <>
+              <Card sx={{ 
+                boxShadow: '0 4px 20px rgba(0,0,0,0.08)', 
+                borderRadius: 3,
+                border: '1px solid #e3f2fd'
+              }}>
+                <CardContent sx={{ p: 3 }}>
+                  <Typography 
+                    variant="h5" 
+                    sx={{ 
+                      mb: 3, 
+                      fontWeight: 700, 
+                      color: '#1976d2',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 1
+                    }}
+                  >
+                    📅 주간 감정 분석
+                  </Typography>
+
+                  {/* 주간 선택 */}
+                  <Box sx={{ mb: 3 }}>
+                    <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>
+                      분석할 주간 선택 (월요일 기준)
+                    </Typography>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                      <TextField
+                        type="date"
+                        value={selectedWeekStart}
+                        onChange={(e) => setSelectedWeekStart(e.target.value)}
+                        sx={{ 
+                          minWidth: 200,
+                          '& .MuiInputBase-root': {
+                            borderRadius: 2,
+                            backgroundColor: '#f8f9fa'
+                          }
+                        }}
+                      />
+                      <Button
+                        variant="contained"
+                        onClick={() => loadWeeklyData(selectedWeekStart)}
+                        disabled={weeklyLoading}
+                        sx={{
+                          borderRadius: 2,
+                          textTransform: 'none',
+                          fontWeight: 600
+                        }}
+                      >
+                        {weeklyLoading ? '분석 중...' : '주간 분석 시작'}
+                      </Button>
+                    </Box>
+                  </Box>
+
+                  {/* 로딩 상태 */}
+                  {weeklyLoading && (
+                    <Box sx={{ textAlign: 'center', p: 4 }}>
+                      <Typography color="text.secondary" variant="h6">
+                        📊 주간 데이터를 분석하고 있습니다...
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                        잠시만 기다려주세요.
+                      </Typography>
+                    </Box>
+                  )}
+
+                  {/* 주간 분석 결과 */}
+                  {!weeklyLoading && weeklyData.length > 0 && (
+                    <Box>
+                      {/* 주간 감정 그래프 */}
+                      <Card sx={{ mb: 3, backgroundColor: '#f8f9fa' }}>
+                        <CardContent>
+                          <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>
+                            📊 주간 감정 동향 비교
+                          </Typography>
+                          <Box sx={{ height: 400, mb: 2 }}>
+                            <Line 
+                              data={{
+                                labels: weeklyData.map(day => day.dayName),
+                                datasets: [
+                                  {
+                                    label: '이번 주 긍정 감정',
+                                    data: weeklyData.map(day => 
+                                      (day.emotionCounts['기쁨'] || 0) + 
+                                      (day.emotionCounts['행복'] || 0) + 
+                                      (day.emotionCounts['신남'] || 0)
+                                    ),
+                                    borderColor: '#4caf50',
+                                    backgroundColor: 'rgba(76, 175, 80, 0.1)',
+                                    fill: true,
+                                    tension: 0.4
+                                  },
+                                  {
+                                    label: '이번 주 부정 감정',
+                                    data: weeklyData.map(day => 
+                                      (day.emotionCounts['슬픔'] || 0) + 
+                                      (day.emotionCounts['화남'] || 0) + 
+                                      (day.emotionCounts['스트레스'] || 0)
+                                    ),
+                                    borderColor: '#f44336',
+                                    backgroundColor: 'rgba(244, 67, 54, 0.1)',
+                                    fill: true,
+                                    tension: 0.4
+                                  },
+                                  {
+                                    label: '평균 긍정 감정',
+                                    data: weeklyAverage.map(day => 
+                                      (day.emotionCounts['기쁨'] || 0) + 
+                                      (day.emotionCounts['행복'] || 0) + 
+                                      (day.emotionCounts['신남'] || 0)
+                                    ),
+                                    borderColor: '#81c784',
+                                    backgroundColor: 'transparent',
+                                    borderDash: [5, 5],
+                                    fill: false,
+                                    tension: 0.4
+                                  },
+                                  {
+                                    label: '평균 부정 감정',
+                                    data: weeklyAverage.map(day => 
+                                      (day.emotionCounts['슬픔'] || 0) + 
+                                      (day.emotionCounts['화남'] || 0) + 
+                                      (day.emotionCounts['스트레스'] || 0)
+                                    ),
+                                    borderColor: '#ef5350',
+                                    backgroundColor: 'transparent',
+                                    borderDash: [5, 5],
+                                    fill: false,
+                                    tension: 0.4
+                                  }
+                                ]
+                              }}
+                              options={{
+                                responsive: true,
+                                maintainAspectRatio: false,
+                                plugins: {
+                                  legend: {
+                                    position: 'top',
+                                    labels: {
+                                      usePointStyle: true,
+                                      pointStyle: 'circle'
+                                    }
+                                  },
+                                  title: {
+                                    display: true,
+                                    text: '이번 주 vs 평균 감정 비교'
+                                  }
+                                },
+                                scales: {
+                                  y: {
+                                    beginAtZero: true,
+                                    title: {
+                                      display: true,
+                                      text: '학생 수'
+                                    }
+                                  },
+                                  x: {
+                                    title: {
+                                      display: true,
+                                      text: '요일'
+                                    }
+                                  }
+                                }
+                              }}
+                            />
+                          </Box>
+                        </CardContent>
+                      </Card>
+
+                      {/* 주간 분석 상세 */}
+                      {weeklyAnalysis && (
+                        <Card sx={{ mb: 3, backgroundColor: '#e8f5e8' }}>
+                          <CardContent>
+                            <Typography variant="h6" sx={{ mb: 2, fontWeight: 600, color: '#2e7d32' }}>
+                              🤖 AI 주간 분석 리포트
+                            </Typography>
+                            <Box sx={{ 
+                              whiteSpace: 'pre-wrap', 
+                              lineHeight: 1.7,
+                              fontSize: '0.95rem',
+                              color: '#333'
+                            }}>
+                              {weeklyAnalysis}
+                            </Box>
+                          </CardContent>
+                        </Card>
+                      )}
+
+                      {/* 주간 상세 데이터 */}
+                      <Grid container spacing={2}>
+                        {weeklyData.map((day, index) => (
+                          <Grid item xs={12} md={6} lg={4} key={day.dayName}>
+                            <Card sx={{ backgroundColor: '#f3e5f5' }}>
+                              <CardContent>
+                                <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>
+                                  {day.dayName}요일 ({day.date})
+                                </Typography>
+                                <Typography variant="body2" sx={{ mb: 1 }}>
+                                  <strong>참여 학생:</strong> {day.students.length}명
+                                </Typography>
+                                <Typography variant="body2" sx={{ mb: 2 }}>
+                                  <strong>평균 강도:</strong> {day.averageIntensity.toFixed(1)}
+                                </Typography>
+                                <Box>
+                                  <Typography variant="body2" sx={{ mb: 1, fontWeight: 600 }}>
+                                    감정 분포:
+                                  </Typography>
+                                  {Object.entries(day.emotionCounts).map(([emotion, count]) => (
+                                    <Chip
+                                      key={emotion}
+                                      label={`${emotion} ${count}명`}
+                                      size="small"
+                                      sx={{ 
+                                        mr: 0.5, 
+                                        mb: 0.5,
+                                        backgroundColor: emotion === '기쁨' || emotion === '행복' || emotion === '신남' 
+                                          ? '#c8e6c9' : '#ffcdd2'
+                                      }}
+                                    />
+                                  ))}
+                                </Box>
+                              </CardContent>
+                            </Card>
+                          </Grid>
+                        ))}
+                      </Grid>
+                    </Box>
+                  )}
+
+                  {/* 데이터 없음 */}
+                  {!weeklyLoading && weeklyData.length === 0 && selectedWeekStart && (
+                    <Box sx={{ textAlign: 'center', p: 4 }}>
+                      <Typography color="text.secondary" variant="h6">
+                        😔 선택한 주간에 감정 데이터가 없습니다.
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                        다른 주간을 선택해주세요.
                       </Typography>
                     </Box>
                   )}

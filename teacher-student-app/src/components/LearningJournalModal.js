@@ -61,10 +61,18 @@ const LearningJournalModal = ({ isOpen, onClose, studentName = '' }) => {
       key: 'satisfaction'
     },
     {
-      title: '학습한 내용을 사진으로 올려보세요',
-      subtitle: '노트에 적은 내용을 사진으로 찍어서 올려주세요',
-      type: 'image',
+      title: '오늘 수업에서 학습한 내용을 적어주세요',
+      subtitle: '배운 내용, 느낀점, 궁금한 점 등을 자유롭게 작성해보세요',
+      type: 'text',
+      placeholder: '예: 오늘은 광개토대왕의 정복활동에 대해 배웠다. 특히 고구려가 어떻게 영토를 확장했는지 알 수 있었고...',
       key: 'content'
+    },
+    {
+      title: '학습 자료 사진을 첨부하시겠어요? (선택사항)',
+      subtitle: '노트나 교과서, 활동지 사진을 올려주세요',
+      type: 'image',
+      key: 'imageAttachment',
+      optional: true
     },
     {
       title: '이 수업에서 가장 중요하다고 생각한 단어는?',
@@ -124,13 +132,51 @@ const LearningJournalModal = ({ isOpen, onClose, studentName = '' }) => {
       
       const reader = new FileReader();
       reader.onload = (e) => {
-        setImagePreview(e.target.result);
-        setSelectedImage(file);
-        updateFormData('content', 'image_uploaded');
-        updateFormData('hasImage', true);
+        // 이미지 압축 처리
+        compressImage(e.target.result, (compressedImage) => {
+          setImagePreview(compressedImage);
+          setSelectedImage(file);
+          updateFormData('hasImage', true);
+        });
       };
       reader.readAsDataURL(file);
     }
+  };
+
+  // 이미지 압축 함수
+  const compressImage = (base64, callback) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      
+      // 최대 크기 설정 (긴 쪽이 1200px를 넘지 않도록)
+      const maxSize = 1200;
+      let { width, height } = img;
+      
+      if (width > height) {
+        if (width > maxSize) {
+          height = (height * maxSize) / width;
+          width = maxSize;
+        }
+      } else {
+        if (height > maxSize) {
+          width = (width * maxSize) / height;
+          height = maxSize;
+        }
+      }
+      
+      canvas.width = width;
+      canvas.height = height;
+      
+      // 이미지 그리기
+      ctx.drawImage(img, 0, 0, width, height);
+      
+      // 압축된 Base64 반환 (품질 0.7)
+      const compressedBase64 = canvas.toDataURL('image/jpeg', 0.7);
+      callback(compressedBase64);
+    };
+    img.src = base64;
   };
 
   const handleNext = () => {
@@ -140,11 +186,11 @@ const LearningJournalModal = ({ isOpen, onClose, studentName = '' }) => {
       alert(`${currentQuestion.title}에 답해주세요.`);
       return;
     }
-    if (currentQuestion.type === 'text' && !currentValue?.trim()) {
+    if (currentQuestion.type === 'text' && !currentValue?.trim() && !currentQuestion.optional) {
       alert(`${currentQuestion.title}에 답해주세요.`);
       return;
     }
-    if (currentQuestion.type === 'image' && !selectedImage) {
+    if (currentQuestion.type === 'image' && !selectedImage && !currentQuestion.optional) {
       alert('사진을 선택해주세요.');
       return;
     }
@@ -166,29 +212,24 @@ const LearningJournalModal = ({ isOpen, onClose, studentName = '' }) => {
     setLoading(true);
     try {
       const today = new Date().toISOString().split('T')[0];
-      let imageUrl = '';
+      let imageBase64 = '';
       
-      // 이미지가 선택된 경우 Firebase Storage에 업로드
+      // 이미지가 선택된 경우 Base64로 인코딩 (Storage 우회)
       if (selectedImage) {
-        const timestamp = Date.now();
-        const fileName = `learning-journals/${today}/${formData.studentName}_${formData.period}_${timestamp}.jpg`;
-        const imageRef = ref(storage, fileName);
-        
-        const snapshot = await uploadBytes(imageRef, selectedImage);
-        imageUrl = await getDownloadURL(snapshot.ref);
+        imageBase64 = imagePreview; // 이미 압축된 Base64 데이터
       }
       
       await addDoc(collection(db, `journals/${today}/entries`), {
         ...formData,
-        imageUrl: imageUrl,
+        imageBase64: imageBase64,
         hasImage: !!selectedImage,
-        content: selectedImage ? 'image_uploaded' : formData.content,
+        content: formData.content || '',
         createdAt: serverTimestamp(),
         date: today
       });
 
       setShowSuccess(true);
-      // 자동 닫기 제거하여 사용자가 데이터 전광판을 볼 수 있도록 함
+      setLoading(false);
     } catch (error) {
       console.error('Error submitting entry:', error);
       alert('제출 중 오류가 발생했습니다: ' + error.message);
@@ -506,27 +547,62 @@ const LearningJournalModal = ({ isOpen, onClose, studentName = '' }) => {
         );
 
       case 'text':
-        return (
-          <input
-            type="text"
-            value={currentValue}
-            onChange={(e) => updateFormData(question.key, e.target.value)}
-            placeholder={question.placeholder}
-            style={{
-              width: '100%',
-              padding: '20px',
-              border: '2px solid #e8eaed',
-              borderRadius: '16px',
-              fontSize: '16px',
-              marginTop: '24px',
-              outline: 'none',
-              transition: 'border-color 0.2s ease',
-              boxSizing: 'border-box'
-            }}
-            onFocus={(e) => e.target.style.borderColor = '#4285f4'}
-            onBlur={(e) => e.target.style.borderColor = '#e8eaed'}
-          />
-        );
+        if (question.key === 'content') {
+          // 학습 내용은 textarea 사용
+          return (
+            <textarea
+              value={currentValue}
+              onChange={(e) => {
+                updateFormData(question.key, e.target.value);
+                // 자동 높이 조정
+                e.target.style.height = 'auto';
+                e.target.style.height = Math.max(240, e.target.scrollHeight) + 'px';
+              }}
+              placeholder={question.placeholder}
+              rows={10}
+              style={{
+                width: '100%',
+                padding: '20px',
+                border: '2px solid #e8eaed',
+                borderRadius: '16px',
+                fontSize: '16px',
+                marginTop: '24px',
+                outline: 'none',
+                transition: 'border-color 0.2s ease',
+                boxSizing: 'border-box',
+                resize: 'vertical',
+                fontFamily: 'inherit',
+                minHeight: '240px',
+                overflow: 'hidden'
+              }}
+              onFocus={(e) => e.target.style.borderColor = '#4285f4'}
+              onBlur={(e) => e.target.style.borderColor = '#e8eaed'}
+            />
+          );
+        } else {
+          // 키워드 입력은 input 사용
+          return (
+            <input
+              type="text"
+              value={currentValue}
+              onChange={(e) => updateFormData(question.key, e.target.value)}
+              placeholder={question.placeholder}
+              style={{
+                width: '100%',
+                padding: '20px',
+                border: '2px solid #e8eaed',
+                borderRadius: '16px',
+                fontSize: '16px',
+                marginTop: '24px',
+                outline: 'none',
+                transition: 'border-color 0.2s ease',
+                boxSizing: 'border-box'
+              }}
+              onFocus={(e) => e.target.style.borderColor = '#4285f4'}
+              onBlur={(e) => e.target.style.borderColor = '#e8eaed'}
+            />
+          );
+        }
 
       default:
         return null;

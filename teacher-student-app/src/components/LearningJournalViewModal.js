@@ -31,6 +31,20 @@ const LearningJournalViewModal = ({ isOpen, onClose, selectedDate, refreshData }
     '5교시': true,
     '6교시': true
   });
+
+  // AI 분석 전용 필터 상태 (표보기와 독립)
+  const [aiSelectedDate, setAiSelectedDate] = useState(
+    selectedDate ? selectedDate.toISOString().split('T')[0] : new Date().toISOString().split('T')[0]
+  );
+  const [aiVisiblePeriods, setAiVisiblePeriods] = useState({
+    '전체': true,
+    '1교시': true,
+    '2교시': true,
+    '3교시': true,
+    '4교시': true,
+    '5교시': true,
+    '6교시': true
+  });
   const [showTableView, setShowTableView] = useState(true);
   const [showAIAnalysis, setShowAIAnalysis] = useState(false);
   const [aiAnalysisLoading, setAiAnalysisLoading] = useState(false);
@@ -246,7 +260,7 @@ const LearningJournalViewModal = ({ isOpen, onClose, selectedDate, refreshData }
     return `${periodColumnWidth}%`;
   };
 
-  // 교시 필터 체크박스 핸들러
+  // 표보기용 교시 필터 체크박스 핸들러
   const handlePeriodCheckboxChange = (period) => {
     if (period === '전체') {
       // 전체 체크/언체크
@@ -267,6 +281,30 @@ const LearningJournalViewModal = ({ isOpen, onClose, selectedDate, refreshData }
       newState['전체'] = allPeriodsChecked;
       
       setVisiblePeriods(newState);
+    }
+  };
+
+  // AI 분석용 교시 필터 체크박스 핸들러 (독립적)
+  const handleAiPeriodCheckboxChange = (period) => {
+    if (period === '전체') {
+      // 전체 체크/언체크
+      const allChecked = aiVisiblePeriods['전체'];
+      const newState = {};
+      Object.keys(aiVisiblePeriods).forEach(key => {
+        newState[key] = !allChecked;
+      });
+      setAiVisiblePeriods(newState);
+    } else {
+      // 개별 교시 체크/언체크
+      const newState = { ...aiVisiblePeriods };
+      newState[period] = !newState[period];
+      
+      // 모든 교시가 선택되면 전체도 체크, 하나라도 해제되면 전체 해제
+      const periodKeys = ['1교시', '2교시', '3교시', '4교시', '5교시', '6교시'];
+      const allPeriodsChecked = periodKeys.every(key => newState[key]);
+      newState['전체'] = allPeriodsChecked;
+      
+      setAiVisiblePeriods(newState);
     }
   };
 
@@ -293,7 +331,7 @@ const LearningJournalViewModal = ({ isOpen, onClose, selectedDate, refreshData }
 
   const handleImageView = (entry) => {
     setSelectedImageData({
-      imageUrl: entry.imageUrl,
+      imageUrl: entry.imageBase64 || entry.imageUrl, // Base64 우선, 기존 Storage URL 호환
       studentName: entry.studentName,
       period: entry.period,
       date: entry.date
@@ -312,16 +350,16 @@ const LearningJournalViewModal = ({ isOpen, onClose, selectedDate, refreshData }
     setAiAnalysisResult(null);
 
     try {
-      // 선택된 날짜와 교시에 따라 데이터 필터링
+      // AI 전용 필터를 사용하여 데이터 필터링
       let filteredData = data.filter(entry => {
-        // 날짜 필터
-        if (selectedDateFilter && entry.date !== selectedDateFilter) {
+        // 날짜 필터 (AI 전용)
+        if (aiSelectedDate && entry.date !== aiSelectedDate) {
           return false;
         }
         
-        // 교시 필터 (선택된 교시만)
-        const selectedPeriods = Object.keys(visiblePeriods).filter(period => 
-          visiblePeriods[period] && period !== '전체'
+        // 교시 필터 (AI 전용, 선택된 교시만)
+        const selectedPeriods = Object.keys(aiVisiblePeriods).filter(period => 
+          aiVisiblePeriods[period] && period !== '전체'
         );
         
         if (selectedPeriods.length > 0 && !selectedPeriods.includes(entry.period)) {
@@ -828,7 +866,7 @@ const LearningJournalViewModal = ({ isOpen, onClose, selectedDate, refreshData }
                       transition: 'all 0.2s ease'
                     }}
                   >
-                    📋 목록 보기
+                    목록 보기
                   </button>
                   <button
                     onClick={() => {
@@ -847,7 +885,7 @@ const LearningJournalViewModal = ({ isOpen, onClose, selectedDate, refreshData }
                       transition: 'all 0.2s ease'
                     }}
                   >
-                    📊 표 보기
+                    표 보기
                   </button>
                   <button
                     onClick={() => setShowAIAnalysis(true)}
@@ -863,7 +901,7 @@ const LearningJournalViewModal = ({ isOpen, onClose, selectedDate, refreshData }
                       transition: 'all 0.2s ease'
                     }}
                   >
-                    🤖 AI 학습분석
+                    AI 학습분석
                   </button>
                 </div>
 
@@ -884,7 +922,7 @@ const LearningJournalViewModal = ({ isOpen, onClose, selectedDate, refreshData }
                       alignItems: 'center',
                       gap: '8px'
                     }}>
-                      🤖 AI 학습분석
+                      AI 학습분석
                     </h4>
                     
                     {/* 날짜와 교시 선택 UI */}
@@ -916,8 +954,8 @@ const LearningJournalViewModal = ({ isOpen, onClose, selectedDate, refreshData }
                         </label>
                         <input
                           type="date"
-                          value={selectedDateFilter}
-                          onChange={(e) => setSelectedDateFilter(e.target.value)}
+                          value={aiSelectedDate}
+                          onChange={(e) => setAiSelectedDate(e.target.value)}
                           style={{
                             padding: '8px 12px',
                             borderRadius: '6px',
@@ -952,16 +990,13 @@ const LearningJournalViewModal = ({ isOpen, onClose, selectedDate, refreshData }
                               cursor: 'pointer',
                               padding: '4px 8px',
                               borderRadius: '4px',
-                              backgroundColor: visiblePeriods[period] ? '#e3f2fd' : '#f5f5f5',
-                              border: '1px solid ' + (visiblePeriods[period] ? '#1976d2' : '#ddd')
+                              backgroundColor: aiVisiblePeriods[period] ? '#e3f2fd' : '#f5f5f5',
+                              border: '1px solid ' + (aiVisiblePeriods[period] ? '#1976d2' : '#ddd')
                             }}>
                               <input
                                 type="checkbox"
-                                checked={visiblePeriods[period]}
-                                onChange={(e) => setVisiblePeriods(prev => ({
-                                  ...prev,
-                                  [period]: e.target.checked
-                                }))}
+                                checked={aiVisiblePeriods[period]}
+                                onChange={() => handleAiPeriodCheckboxChange(period)}
                                 style={{ margin: 0 }}
                               />
                               {period}
@@ -1034,16 +1069,16 @@ const LearningJournalViewModal = ({ isOpen, onClose, selectedDate, refreshData }
                             maxHeight: 'calc(100vh - 350px)' // 화면 높이에 맞춰 동적 조정
                           }}>
                             {(() => {
-                              // 선택된 날짜와 교시에 따라 실제 데이터 필터링
+                              // AI 전용 필터를 사용하여 실제 데이터 필터링
                               let filteredData = data.filter(entry => {
-                                // 날짜 필터
-                                if (selectedDateFilter && entry.date !== selectedDateFilter) {
+                                // 날짜 필터 (AI 전용)
+                                if (aiSelectedDate && entry.date !== aiSelectedDate) {
                                   return false;
                                 }
                                 
-                                // 교시 필터 (선택된 교시만)
-                                const selectedPeriods = Object.keys(visiblePeriods).filter(period => 
-                                  visiblePeriods[period] && period !== '전체'
+                                // 교시 필터 (AI 전용, 선택된 교시만)
+                                const selectedPeriods = Object.keys(aiVisiblePeriods).filter(period => 
+                                  aiVisiblePeriods[period] && period !== '전체'
                                 );
                                 
                                 if (selectedPeriods.length > 0 && !selectedPeriods.includes(entry.period)) {
@@ -1546,7 +1581,13 @@ const LearningJournalViewModal = ({ isOpen, onClose, selectedDate, refreshData }
                                               wordBreak: 'break-word',
                                               whiteSpace: 'normal'
                                             }}>
-                                              {entry.hasImage && entry.imageUrl ? (
+                                              {/* 텍스트 내용 표시 */}
+                                              <div style={{ marginBottom: entry.hasImage && (entry.imageBase64 || entry.imageUrl) ? '8px' : '0' }}>
+                                                {entry.content || '작성되지 않음'}
+                                              </div>
+                                              
+                                              {/* 이미지가 있으면 자료보기 버튼도 표시 */}
+                                              {entry.hasImage && (entry.imageBase64 || entry.imageUrl) && (
                                                 <button
                                                   onClick={() => handleImageView(entry)}
                                                   style={{
@@ -1573,8 +1614,6 @@ const LearningJournalViewModal = ({ isOpen, onClose, selectedDate, refreshData }
                                                 >
                                                   📷 자료보기
                                                 </button>
-                                              ) : (
-                                                entry.content || '작성되지 않음'
                                               )}
                                             </div>
                                           </div>
@@ -1826,7 +1865,13 @@ const LearningJournalViewModal = ({ isOpen, onClose, selectedDate, refreshData }
                                       lineHeight: '1.6',
                                       whiteSpace: 'pre-wrap'
                                     }}>
-                                      {entry.hasImage && entry.imageUrl ? (
+                                      {/* 텍스트 내용 표시 */}
+                                      <div style={{ marginBottom: entry.hasImage && (entry.imageBase64 || entry.imageUrl) ? '12px' : '0' }}>
+                                        {entry.content || '작성되지 않음'}
+                                      </div>
+                                      
+                                      {/* 이미지가 있으면 자료보기 버튼도 표시 */}
+                                      {entry.hasImage && (entry.imageBase64 || entry.imageUrl) && (
                                         <button
                                           onClick={() => handleImageView(entry)}
                                           style={{
@@ -1852,8 +1897,6 @@ const LearningJournalViewModal = ({ isOpen, onClose, selectedDate, refreshData }
                                         >
                                           📷 자료보기
                                         </button>
-                                      ) : (
-                                        entry.content || '작성되지 않음'
                                       )}
                                     </div>
                                   </div>

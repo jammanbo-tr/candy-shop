@@ -3,6 +3,45 @@ import React from 'react';
 const ImageViewerModal = ({ isOpen, onClose, imageUrl, studentName, period, date }) => {
   if (!isOpen || !imageUrl) return null;
 
+  // 이미지 다운로드 함수
+  const handleDownload = () => {
+    try {
+      const link = document.createElement('a');
+      const fileName = `학습일지_${studentName}_${period}_${date}.jpg`;
+      
+      if (imageUrl.startsWith('data:')) {
+        // Base64 이미지인 경우
+        link.href = imageUrl;
+      } else {
+        // URL 이미지인 경우 - CORS 우회를 위해 fetch 사용
+        fetch(imageUrl)
+          .then(response => response.blob())
+          .then(blob => {
+            const url = URL.createObjectURL(blob);
+            link.href = url;
+            link.download = fileName;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+          })
+          .catch(() => {
+            // 실패시 새 창에서 열기
+            window.open(imageUrl, '_blank');
+          });
+        return;
+      }
+      
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (error) {
+      console.error('다운로드 실패:', error);
+      alert('이미지 다운로드에 실패했습니다.');
+    }
+  };
+
   return (
     <div style={{
       position: 'fixed',
@@ -120,9 +159,9 @@ const ImageViewerModal = ({ isOpen, onClose, imageUrl, studentName, period, date
           gap: '12px'
         }}>
           <button
-            onClick={() => window.open(imageUrl, '_blank')}
+            onClick={handleDownload}
             style={{
-              backgroundColor: '#4285f4',
+              backgroundColor: '#00c851',
               color: 'white',
               border: 'none',
               borderRadius: '8px',
@@ -134,10 +173,10 @@ const ImageViewerModal = ({ isOpen, onClose, imageUrl, studentName, period, date
               alignItems: 'center',
               gap: '6px'
             }}
-            onMouseOver={(e) => e.target.style.backgroundColor = '#3367d6'}
-            onMouseOut={(e) => e.target.style.backgroundColor = '#4285f4'}
+            onMouseOver={(e) => e.target.style.backgroundColor = '#00a73e'}
+            onMouseOut={(e) => e.target.style.backgroundColor = '#00c851'}
           >
-            🔗 원본 보기
+            💾 다운로드
           </button>
           <button
             onClick={onClose}

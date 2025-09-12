@@ -16,17 +16,17 @@ const WordCloud = ({ words, width = 500, height = 500 }) => {
     // 색상 스케일
     const colorScale = d3.scaleOrdinal(d3.schemeCategory10);
 
-    // 폰트 크기 스케일 (빈도수에 따라)
+    // 폰트 크기 스케일 (빈도수에 따라) - 전체적으로 크기 증가
     const maxCount = d3.max(words, d => d.count) || 1;
     const minCount = d3.min(words, d => d.count) || 1;
     const fontSizeScale = d3.scaleLinear()
       .domain([minCount, maxCount])
-      .range([16, 48]);
+      .range([24, 64]); // 최소 16→24, 최대 48→64로 증가
 
-    // 충돌 방지를 위한 배치 알고리즘
+    // 충돌 방지를 위한 배치 알고리즘 - 배치 범위 확대
     const centerX = width / 2;
     const centerY = height / 2;
-    const maxRadius = Math.min(width, height) / 3;
+    const maxRadius = Math.min(width, height) / 2.5; // 범위를 더 넓게 (3 → 2.5)
     
     // 이미 배치된 단어들의 위치를 저장
     const placedWords = [];
@@ -51,13 +51,13 @@ const WordCloud = ({ words, width = 500, height = 500 }) => {
         if (attempt < 15) {
           // 처음 15번은 중앙 근처에서 시도 (더 넓은 중앙 영역)
           const angle = Math.random() * 2 * Math.PI;
-          const distance = Math.random() * maxRadius * 0.7;
+          const distance = Math.random() * maxRadius * 0.8; // 0.7 → 0.8로 확대
           x = centerX + Math.cos(angle) * distance - estimatedWidth / 2;
           y = centerY + Math.sin(angle) * distance - estimatedHeight / 2;
         } else if (attempt < 40) {
           // 중간 시도는 더 넓은 중앙 영역
           const angle = Math.random() * 2 * Math.PI;
-          const distance = Math.random() * maxRadius * 1.2;
+          const distance = Math.random() * maxRadius * 1.4; // 1.2 → 1.4로 확대
           x = centerX + Math.cos(angle) * distance - estimatedWidth / 2;
           y = centerY + Math.sin(angle) * distance - estimatedHeight / 2;
         } else {
