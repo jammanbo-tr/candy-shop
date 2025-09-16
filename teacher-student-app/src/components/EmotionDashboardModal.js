@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { db } from '../firebase';
-import { collection, query, where, getDocs, orderBy, doc, getDoc } from 'firebase/firestore';
+import { collection, query, where, getDocs, orderBy, doc, getDoc, setDoc, deleteDoc } from 'firebase/firestore';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import {
   Dialog,
@@ -81,7 +81,8 @@ const EmotionDashboardModal = ({ isOpen, onClose, students }) => {
     submissionRate: 0,
     emotions: {},
     causes: {},
-    averageIntensity: 0
+    averageIntensity: 0,
+    error: null
   });
 
   // 새로운 기능을 위한 상태들
@@ -108,11 +109,14 @@ const EmotionDashboardModal = ({ isOpen, onClose, students }) => {
   const [weeklyAnalysis, setWeeklyAnalysis] = useState('');
   const [weeklyLoading, setWeeklyLoading] = useState(false);
   const [selectedWeekStart, setSelectedWeekStart] = useState('');
+  const [batchGenerating, setBatchGenerating] = useState(false);
+  const [batchProgress, setBatchProgress] = useState({ current: 0, total: 0 });
   const [weeklyStats, setWeeklyStats] = useState({
     currentWeek: {},
     averageWeek: {},
     comparison: {}
   });
+  const [globalAverageInfo, setGlobalAverageInfo] = useState(null);
 
   // 무지개 테두리 애니메이션을 위한 글로벌 스타일
   useEffect(() => {
@@ -190,12 +194,19 @@ const EmotionDashboardModal = ({ isOpen, onClose, students }) => {
     }
   }, [isOpen, chartStartDate, chartEndDate]);
 
-  // 주간분석 데이터 로딩
+  // 전체 평균 데이터 상태 로딩
   useEffect(() => {
-    if (isOpen && selectedWeekStart && activeTab === 3) {
-      loadWeeklyData(selectedWeekStart);
+    if (isOpen) {
+      loadGlobalAverageInfo();
     }
-  }, [isOpen, selectedWeekStart, activeTab]);
+  }, [isOpen]);
+
+  const loadGlobalAverageInfo = async () => {
+    const info = await getGlobalWeeklyAverageInfo();
+    setGlobalAverageInfo(info);
+  };
+
+  // 주간분석 탭에서는 자동 로딩하지 않음 (사용자가 버튼을 클릭해야 함)
 
   const loadEmotionData = async () => {
     setLoading(true);
@@ -207,6 +218,26 @@ const EmotionDashboardModal = ({ isOpen, onClose, students }) => {
       selectedDate: selectedDate,
       studentsDetail: students // 전체 학생 정보 출력
     });
+
+    // 먼저 emotionAttendance 컬렉션 전체를 확인해보자
+    try {
+      const allEmotionQuery = query(collection(db, 'emotionAttendance'));
+      const allEmotionSnapshot = await safeFirestoreQuery(allEmotionQuery);
+      console.log('🔍 emotionAttendance 컬렉션 전체 확인:', {
+        totalDocuments: allEmotionSnapshot.size,
+        documents: allEmotionSnapshot.docs.map(doc => ({
+          id: doc.id,
+          data: doc.data()
+        }))
+      });
+    } catch (error) {
+      console.error('❌ emotionAttendance 컬렉션 조회 오류:', error);
+      // 네트워크 오류 시 사용자에게 알림
+      setStats(prevStats => ({
+        ...prevStats,
+        error: '네트워크 연결을 확인해주세요. 잠시 후 다시 시도해주세요.'
+      }));
+    }
     
     try {
       // 1. 기존 구조에서 데이터 조회
@@ -221,7 +252,7 @@ const EmotionDashboardModal = ({ isOpen, onClose, students }) => {
         orderBy('timestamp', 'desc')
       );
       
-      const legacySnapshot = await getDocs(legacyQuery);
+      const legacySnapshot = await safeFirestoreQuery(legacyQuery);
       const legacyData = [];
       legacySnapshot.forEach((doc) => {
         legacyData.push({ id: doc.id, ...doc.data(), source: 'legacy' });
@@ -249,7 +280,7 @@ const EmotionDashboardModal = ({ isOpen, onClose, students }) => {
               studentName: student.name
             });
             
-            const emotionDoc = await getDoc(emotionRef);
+            const emotionDoc = await safeFirestoreGet(emotionRef);
             if (emotionDoc.exists()) {
               const data = emotionDoc.data();
               console.log(`✅ 학생 ${student.name || student.id}의 감정출석 데이터 발견:`, data);
@@ -397,6 +428,61 @@ const EmotionDashboardModal = ({ isOpen, onClose, students }) => {
     } catch (error) {
       console.error('차트 데이터 로드 오류:', error);
     }
+  };
+
+  // 감정을 3가지 범주로 분류하는 함수
+  const categorizeEmotion = (emotion) => {
+    const positiveEmotions = ['기쁨', '평온함', '기대감', 'happy', 'calm', 'excited', 'joy', 'pleasant', 'good', '좋음', '행복', '즐거움'];
+    const negativeEmotions = ['슬픔', '화남', '불안', 'sad', 'angry', 'anxious', 'upset', 'worried', 'stressed', '스트레스', '걱정', '짜증'];
+    const neutralEmotions = ['confused', 'bored', 'tired', 'neutral', 'okay', 'normal', '보통', '그냥', '무난'];
+    
+    if (positiveEmotions.includes(emotion)) {
+      return 'positive';
+    } else if (negativeEmotions.includes(emotion)) {
+      return 'negative';
+    } else if (neutralEmotions.includes(emotion)) {
+      return 'neutral';
+    } else {
+      // 분류되지 않은 감정은 중립으로 처리
+      console.log(`⚠️ 미분류 감정: ${emotion} → neutral로 처리`);
+      return 'neutral';
+    }
+  };
+
+  // 감정 데이터를 비율로 변환하는 함수
+  const calculateEmotionRatio = (emotionCounts) => {
+    const totalCount = Object.values(emotionCounts).reduce((sum, count) => sum + count, 0);
+    if (totalCount === 0) return { positive: 0, neutral: 0, negative: 0 };
+    
+    let positiveCount = 0, neutralCount = 0, negativeCount = 0;
+    
+    console.log('🔍 감정 비율 계산:', {
+      inputEmotions: emotionCounts,
+      totalCount
+    });
+    
+    Object.entries(emotionCounts).forEach(([emotion, count]) => {
+      const category = categorizeEmotion(emotion);
+      console.log(`  ${emotion}: ${count}명 → ${category}`);
+      
+      if (category === 'positive') positiveCount += count;
+      else if (category === 'neutral') neutralCount += count;
+      else negativeCount += count;
+    });
+    
+    const result = {
+      positive: Math.round((positiveCount / totalCount) * 100),
+      neutral: Math.round((neutralCount / totalCount) * 100),
+      negative: Math.round((negativeCount / totalCount) * 100)
+    };
+    
+    console.log('📊 비율 계산 결과:', {
+      positiveCount, neutralCount, negativeCount,
+      totalCount,
+      ratios: result
+    });
+    
+    return result;
   };
 
   // 감정을 강도에 따른 점수로 변환하는 함수 (1-5점 강도를 반영)
@@ -629,7 +715,7 @@ const EmotionDashboardModal = ({ isOpen, onClose, students }) => {
   const analyzePatternWithAI = async (targetStudent, targetPattern, comparisonStudents) => {
     try {
       const genAI = new GoogleGenerativeAI('AIzaSyDWuEDjA__mWPWE1njZpGPYSG__MnHYycM');
-      const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+      const model = genAI.getGenerativeModel({ model: 'gemini-2.5-pro' });
 
       // 분석용 데이터 준비
       const targetPatternText = targetPattern.map(p => 
@@ -934,7 +1020,7 @@ ${comparisonTexts}
   const analyzeClusteringWithAI = async (clusters, targetDate) => {
     try {
       const genAI = new GoogleGenerativeAI('AIzaSyDWuEDjA__mWPWE1njZpGPYSG__MnHYycM');
-      const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+      const model = genAI.getGenerativeModel({ model: 'gemini-2.5-pro' });
 
       // 클러스터 정보를 텍스트로 변환
       const clusterInfo = clusters.map(cluster => {
@@ -1345,7 +1431,31 @@ ${clusterInfo}
     if (!weekStartDate) return;
     
     setWeeklyLoading(true);
+    setWeeklyData([]);
+    setWeeklyAverage([]);
+    setWeeklyAnalysis('');
+    
     try {
+      // 임시: 9월 8일 주간 캐시 삭제 (intensity 수정사항 적용을 위해)
+      if (weekStartDate === '2025-09-08') {
+        try {
+          const cacheRef = doc(db, 'weeklyAverageCache', weekStartDate);
+          await deleteDoc(cacheRef);
+          console.log('🗑️ 9월 8일 주간 캐시 삭제 완료');
+        } catch (error) {
+          console.log('🗑️ 캐시 삭제 중 오류 (무시):', error);
+        }
+      }
+      
+      // 먼저 선택한 주간에 충분한 데이터가 있는지 확인
+      const hasCurrentWeekData = await hasValidWeekData(weekStartDate);
+      
+      if (!hasCurrentWeekData) {
+        setWeeklyAnalysis('선택한 주간에는 충분한 감정출석 데이터가 없습니다. 방학이나 공휴일 기간일 가능성이 있습니다. 다른 주간을 선택해주세요.');
+        setWeeklyLoading(false);
+        return;
+      }
+      
       // 주간 데이터 계산 (월~금)
       const weekDays = [];
       const weekStart = new Date(weekStartDate);
@@ -1356,8 +1466,21 @@ ${clusterInfo}
         weekDays.push(getKoreaDateString(date));
       }
       
-      // 현재 주간 데이터 가져오기
+      console.log('📅 선택된 주간 분석:', {
+        weekStart: weekStartDate,
+        weekDays,
+        dayNames: ['월', '화', '수', '목', '금'],
+        hasValidData: hasCurrentWeekData
+      });
+      
+      // 전체 평균 데이터 상태 확인
+      const globalInfo = await getGlobalWeeklyAverageInfo();
+      console.log('🌐 전체 평균 데이터 상태:', globalInfo);
+      
+      // 현재 주간 데이터만 효율적으로 계산
       const currentWeekData = [];
+      console.log('📊 선택한 주간 데이터만 계산 시작');
+      
       for (const dateStr of weekDays) {
         const dayData = await getDayEmotionData(dateStr);
         currentWeekData.push({
@@ -1369,9 +1492,34 @@ ${clusterInfo}
         });
       }
       
-      // 누적 평균 데이터 계산 (지난 4주간의 같은 요일 평균)
-      const averageWeekData = await calculateWeeklyAverage(weekDays);
+      // 평균 데이터는 캐시에서만 가져오기 (이미 일괄 생성된 것 사용)
+      let averageWeekData = await getWeeklyAverageCache(weekStartDate);
       
+      if (!averageWeekData && globalInfo) {
+        // 전체 평균이 생성되었지만 해당 주간 캐시가 없는 경우 빈 배열 사용
+        console.log('⚠️ 전체 평균은 생성되었지만 해당 주간 평균 없음 (방학/공휴일 추정)');
+        averageWeekData = Array.from({ length: 5 }, (_, i) => ({
+          dayName: ['월', '화', '수', '목', '금'][i],
+          emotionCounts: {},
+          averageIntensity: 0,
+          averageStudents: 0
+        }));
+      } else if (!averageWeekData) {
+        console.log('📊 전체 평균 데이터 없음 - 개별 계산 필요 (평균값 일괄 생성 먼저 수행하세요)');
+        setWeeklyAnalysis('평균 데이터가 없습니다. 먼저 "평균값 일괄 생성" 버튼을 클릭하여 평균 데이터를 생성해주세요.');
+        setWeeklyLoading(false);
+        return;
+      } else {
+        console.log('📋 캐시된 평균 데이터 사용');
+      }
+      
+      console.log('📊 주간 데이터 로딩 완료:', {
+        currentWeekData: currentWeekData,
+        averageWeekData: averageWeekData,
+        currentWeekDataLength: currentWeekData.length,
+        averageWeekDataLength: averageWeekData.length
+      });
+
       setWeeklyData(currentWeekData);
       setWeeklyAverage(averageWeekData);
       
@@ -1385,66 +1533,331 @@ ${clusterInfo}
     }
   };
 
+  // 재시도 로직이 포함된 안전한 Firestore 조회 함수
+  const safeFirestoreGet = async (docRef, maxRetries = 3) => {
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        const doc = await getDoc(docRef);
+        return doc;
+      } catch (error) {
+        console.warn(`Firestore 조회 시도 ${attempt} 실패:`, error.message);
+        if (attempt === maxRetries) {
+          throw error;
+        }
+        // 재시도 전 잠시 대기 (지수 백오프)
+        await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt) * 1000));
+      }
+    }
+  };
+
+  const safeFirestoreQuery = async (queryRef, maxRetries = 3) => {
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        const snapshot = await getDocs(queryRef);
+        return snapshot;
+      } catch (error) {
+        console.warn(`Firestore 쿼리 시도 ${attempt} 실패:`, error.message);
+        if (attempt === maxRetries) {
+          throw error;
+        }
+        // 재시도 전 잠시 대기 (지수 백오프)
+        await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt) * 1000));
+      }
+    }
+  };
+
   // 특정 날짜의 감정 데이터 가져오기
   const getDayEmotionData = async (dateStr) => {
     try {
-      const emotionQuery = query(
-        collection(db, `emotionAttendance/${dateStr}/records`),
-        orderBy('timestamp', 'desc')
-      );
+      console.log(`📅 ${dateStr} 감정 데이터 조회 시작`);
       
-      const querySnapshot = await getDocs(emotionQuery);
       const data = [];
       const emotions = {};
       let totalIntensity = 0;
       let intensityCount = 0;
       
-      querySnapshot.forEach((doc) => {
-        const docData = doc.data();
-        data.push({
-          id: doc.id,
-          ...docData
-        });
-        
-        if (docData.emotion) {
-          emotions[docData.emotion] = (emotions[docData.emotion] || 0) + 1;
-          if (docData.intensity) {
-            totalIntensity += parseInt(docData.intensity);
-            intensityCount++;
+      // 모든 학생의 해당 날짜 감정 데이터 조회
+      if (students && students.length > 0) {
+        for (const student of students) {
+          try {
+            // 새로운 구조: students/[학생ID]/emotions/[날짜]
+            const emotionRef = doc(db, 'students', student.id, 'emotions', dateStr);
+            const emotionDoc = await safeFirestoreGet(emotionRef);
+            
+            if (emotionDoc.exists()) {
+              const docData = emotionDoc.data();
+              console.log(`✅ 학생 ${student.name} (${dateStr}):`, docData);
+              
+              data.push({
+                id: emotionDoc.id,
+                studentId: student.id,
+                studentName: student.name,
+                date: dateStr,
+                ...docData
+              });
+              
+              if (docData.emotion) {
+                emotions[docData.emotion] = (emotions[docData.emotion] || 0) + 1;
+                const intensity = docData.intensity || 3;
+                totalIntensity += parseInt(intensity);
+                intensityCount++;
+              }
+            } else {
+              // 기존 구조에서도 시도
+              const legacyQuery = query(
+                collection(db, 'emotionAttendance'),
+                where('date', '==', dateStr),
+                where('studentId', '==', student.id)
+              );
+              const legacySnapshot = await safeFirestoreQuery(legacyQuery);
+              
+              legacySnapshot.forEach((doc) => {
+                const docData = doc.data();
+                console.log(`📊 기존 구조에서 학생 ${student.name} (${dateStr}):`, docData);
+                
+                data.push({
+                  id: doc.id,
+                  studentId: student.id,
+                  studentName: student.name,
+                  date: dateStr,
+                  ...docData,
+                  source: 'legacy'
+                });
+                
+                if (docData.emotion) {
+                  emotions[docData.emotion] = (emotions[docData.emotion] || 0) + 1;
+                  const intensity = docData.intensity || 3;
+                  totalIntensity += parseInt(intensity);
+                  intensityCount++;
+                }
+              });
+            }
+          } catch (error) {
+            console.error(`학생 ${student.name} (${dateStr}) 조회 오류:`, error);
           }
         }
-      });
+      }
       
-      return {
+      const result = {
         data,
         emotions,
         averageIntensity: intensityCount > 0 ? totalIntensity / intensityCount : 0
       };
+      
+      console.log(`📊 ${dateStr} 감정 데이터 결과:`, {
+        studentsCount: data.length,
+        emotions: emotions,
+        emotionsKeys: Object.keys(emotions),
+        emotionsValues: Object.values(emotions),
+        averageIntensity: result.averageIntensity,
+        totalIntensity,
+        intensityCount,
+        rawData: data
+      });
+      
+      return result;
     } catch (error) {
       console.error('날짜별 감정 데이터 조회 실패:', error);
       return { data: [], emotions: {}, averageIntensity: 0 };
     }
   };
 
-  // 누적 평균 계산 (지난 4주간의 같은 요일 평균)
+  // 주간 평균 데이터 캐시 저장
+  const saveWeeklyAverageCache = async (weekStart, averageData) => {
+    try {
+      const cacheRef = doc(db, 'weeklyAverageCache', weekStart);
+      await setDoc(cacheRef, {
+        weekStart,
+        averageData,
+        createdAt: new Date(),
+        expiredAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) // 7일 후 만료
+      });
+      console.log('📦 주간 평균 캐시 저장 완료:', weekStart);
+    } catch (error) {
+      console.warn('📦 주간 평균 캐시 저장 실패:', error);
+    }
+  };
+
+  // 주간 평균 데이터 캐시 조회
+  const getWeeklyAverageCache = async (weekStart) => {
+    try {
+      const cacheRef = doc(db, 'weeklyAverageCache', weekStart);
+      const cacheDoc = await safeFirestoreGet(cacheRef);
+      
+      if (cacheDoc.exists()) {
+        const cacheData = cacheDoc.data();
+        const now = new Date();
+        const expiredAt = cacheData.expiredAt.toDate();
+        
+        if (now < expiredAt) {
+          console.log('📦 주간 평균 캐시 사용:', weekStart);
+          return cacheData.averageData;
+        } else {
+          console.log('📦 주간 평균 캐시 만료:', weekStart);
+          // 만료된 캐시 삭제
+          await deleteDoc(cacheRef);
+        }
+      }
+    } catch (error) {
+      console.warn('📦 주간 평균 캐시 조회 실패:', error);
+    }
+    return null;
+  };
+
+  // 방학 기간 체크 함수 (하드코딩)
+  const isVacationPeriod = (dateStr) => {
+    const date = new Date(dateStr);
+    const year = date.getFullYear();
+    
+    // 2025년 방학 기간들
+    if (year === 2025) {
+      // 여름방학: 7월 21일 ~ 8월 20일
+      const summerStart = new Date('2025-07-21');
+      const summerEnd = new Date('2025-08-20');
+      
+      // 겨울방학: 12월 23일 ~ 2월 말
+      const winterStart = new Date('2025-12-23');
+      const winterEnd = new Date('2026-02-28');
+      
+      if ((date >= summerStart && date <= summerEnd) || 
+          (date >= winterStart && date <= winterEnd)) {
+        return true;
+      }
+    }
+    
+    // 2024년 방학 기간들 (만약 과거 데이터가 있다면)
+    if (year === 2024) {
+      // 여름방학: 7월 22일 ~ 8월 19일
+      const summerStart = new Date('2024-07-22');
+      const summerEnd = new Date('2024-08-19');
+      
+      // 겨울방학: 12월 23일 ~ 2월 말
+      const winterStart = new Date('2024-12-23');
+      const winterEnd = new Date('2025-02-28');
+      
+      if ((date >= summerStart && date <= summerEnd) || 
+          (date >= winterStart && date <= winterEnd)) {
+        return true;
+      }
+    }
+    
+    return false;
+  };
+
+  // 특정 주간에 충분한 데이터가 있는지 확인하는 함수 (방학 기간 제외)
+  const hasValidWeekData = async (weekStart) => {
+    // 먼저 방학 기간인지 확인
+    if (isVacationPeriod(weekStart)) {
+      console.log(`🏖️ ${weekStart} 주차는 방학 기간으로 제외`);
+      return false;
+    }
+    
+    const weekDays = [];
+    const startDate = new Date(weekStart);
+    
+    // 해당 주의 월~금 날짜 생성
+    for (let j = 0; j < 5; j++) {
+      const date = new Date(startDate);
+      date.setDate(startDate.getDate() + j);
+      const dateStr = getKoreaDateString(date);
+      
+      // 각 날짜도 방학 기간인지 체크
+      if (!isVacationPeriod(dateStr)) {
+        weekDays.push(dateStr);
+      }
+    }
+    
+    // 방학 기간으로 인해 체크할 날짜가 없으면 무효
+    if (weekDays.length === 0) {
+      console.log(`🏖️ ${weekStart} 주차는 전체가 방학 기간`);
+      return false;
+    }
+    
+    let daysWithData = 0;
+    for (const dateStr of weekDays) {
+      const dayData = await getDayEmotionData(dateStr);
+      if (dayData.data.length > 0) {
+        daysWithData++;
+      }
+    }
+    
+    // 수업일의 40% 이상에 데이터가 있어야 유효한 주간으로 간주
+    const requiredDays = Math.max(1, Math.ceil(weekDays.length * 0.4));
+    const isValid = daysWithData >= requiredDays;
+    
+    console.log(`📊 ${weekStart} 주차 데이터 체크:`, {
+      weekDays: weekDays.length,
+      daysWithData,
+      requiredDays,
+      isValid
+    });
+    
+    return isValid;
+  };
+
+  // 누적 평균 계산 (데이터가 있는 주간만 포함)
   const calculateWeeklyAverage = async (weekDays) => {
+    const weekStart = weekDays[0]; // 월요일 날짜
+    
+    // 캐시된 데이터 확인
+    const cachedData = await getWeeklyAverageCache(weekStart);
+    if (cachedData) {
+      return cachedData;
+    }
+
+    console.log('📊 주간 평균 계산 시작 (캐시 없음)');
     const averageData = [];
     
     for (let i = 0; i < 5; i++) { // 월~금
       const dayName = ['월', '화', '수', '목', '금'][i];
       const pastDays = [];
+      const validWeeks = [];
       
-      // 지난 4주간의 같은 요일 데이터 수집
-      for (let week = 1; week <= 4; week++) {
-        const pastDate = new Date(weekDays[i]);
-        pastDate.setDate(pastDate.getDate() - (week * 7));
-        const pastDateStr = getKoreaDateString(pastDate);
+      // 최대 16주까지 확장하여 유효한 데이터가 있는 주간 찾기 (방학 기간 고려)
+      let weekCount = 0;
+      let weekOffset = 1;
+      
+      while (weekCount < 4 && weekOffset <= 16) {
+        const pastWeekStart = new Date(weekStart);
+        pastWeekStart.setDate(pastWeekStart.getDate() - (weekOffset * 7));
+        const pastWeekStartStr = getKoreaDateString(pastWeekStart);
         
-        const dayData = await getDayEmotionData(pastDateStr);
-        if (dayData.data.length > 0) {
-          pastDays.push(dayData);
+        // 해당 주간이 유효한 데이터를 가지고 있는지 확인
+        const isValidWeek = await hasValidWeekData(pastWeekStartStr);
+        
+        if (isValidWeek) {
+          // 해당 주의 같은 요일 데이터 가져오기
+          const pastDate = new Date(weekDays[i]);
+          pastDate.setDate(pastDate.getDate() - (weekOffset * 7));
+          const pastDateStr = getKoreaDateString(pastDate);
+          
+          // 개별 날짜도 방학 기간인지 체크
+          if (!isVacationPeriod(pastDateStr)) {
+            const dayData = await getDayEmotionData(pastDateStr);
+            if (dayData.data.length > 0) {
+              pastDays.push(dayData);
+              validWeeks.push(pastWeekStartStr);
+              weekCount++;
+              console.log(`✅ ${dayName}요일 유효 데이터 추가: ${pastDateStr}`);
+            }
+          } else {
+            console.log(`🏖️ ${dayName}요일 방학 기간 제외: ${pastDateStr}`);
+          }
         }
+        
+        weekOffset++;
       }
+      
+      console.log(`📅 ${dayName}요일 평균 계산:`, {
+        validWeeksFound: weekCount,
+        validWeeks: validWeeks,
+        totalWeeksChecked: weekOffset - 1,
+        pastDaysData: pastDays.map(day => ({
+          emotions: day.emotions,
+          dataLength: day.data.length,
+          averageIntensity: day.averageIntensity
+        }))
+      });
       
       // 평균 계산
       const avgEmotions = {};
@@ -1456,11 +1869,19 @@ ${clusterInfo}
         let totalIntensitySum = 0;
         let totalIntensityCount = 0;
         
-        pastDays.forEach(day => {
-          Object.keys(day.emotions).forEach(emotion => {
+        pastDays.forEach((day, index) => {
+          console.log(`📊 ${dayName}요일 ${index + 1}번째 과거 데이터:`, {
+            emotions: day.emotions,
+            emotionsKeys: Object.keys(day.emotions || {}),
+            dataLength: day.data.length,
+            averageIntensity: day.averageIntensity
+          });
+          
+          Object.keys(day.emotions || {}).forEach(emotion => {
             emotionTotals[emotion] = (emotionTotals[emotion] || 0) + day.emotions[emotion];
           });
-          totalIntensitySum += day.averageIntensity * day.data.length;
+          const intensityValue = day.averageIntensity || 3; // averageIntensity가 0이면 기본값 3 사용
+          totalIntensitySum += intensityValue * day.data.length;
           totalIntensityCount += day.data.length;
           totalStudents += day.data.length;
         });
@@ -1471,14 +1892,31 @@ ${clusterInfo}
         });
         
         avgIntensity = totalIntensityCount > 0 ? totalIntensitySum / totalIntensityCount : 0;
+        
+        console.log(`🎯 ${dayName}요일 최종 평균 결과:`, {
+          emotionTotals,
+          avgEmotions,
+          avgIntensity,
+          totalStudents,
+          pastDaysLength: pastDays.length
+        });
       }
       
-      averageData.push({
+      const dayResult = {
         dayName,
         emotionCounts: avgEmotions,
         averageIntensity: avgIntensity,
         averageStudents: Math.round(totalStudents / Math.max(pastDays.length, 1))
-      });
+      };
+      
+      console.log(`📋 ${dayName}요일 averageData 추가:`, dayResult);
+      
+      averageData.push(dayResult);
+    }
+    
+    // 계산된 평균 데이터를 캐시에 저장
+    if (averageData.length > 0) {
+      await saveWeeklyAverageCache(weekStart, averageData);
     }
     
     return averageData;
@@ -1488,7 +1926,7 @@ ${clusterInfo}
   const analyzeWeeklyTrends = async (currentWeek, averageWeek) => {
     try {
       const genAI = new GoogleGenerativeAI(process.env.REACT_APP_GEMINI_API_KEY);
-      const model = genAI.getGenerativeModel({ model: "gemini-pro" });
+      const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
       // 분석용 데이터 준비
       const currentWeekSummary = currentWeek.map(day => ({
@@ -1509,20 +1947,22 @@ ${clusterInfo}
       const prompt = `
 다음은 이번 주 학생들의 감정출석 데이터와 지난 4주간의 평균 데이터입니다.
 
-## 이번 주 데이터:
-${JSON.stringify(currentWeekSummary, null, 2)}
+이번 주 데이터: ${JSON.stringify(currentWeekSummary, null, 2)}
+지난 4주 평균: ${JSON.stringify(averageWeekSummary, null, 2)}
 
-## 지난 4주 평균 데이터:
-${JSON.stringify(averageWeekSummary, null, 2)}
+다음 조건에 맞춰 분석해주세요:
+1. 전체 500자 이내로 작성
+2. 마크다운 문법 사용 금지 (**, ##, - 등 사용 안 함)
+3. 읽기 쉬운 평문으로 작성
+4. 중요한 내용만 간결하게 요약
 
-## 분석 요청:
-1. **주간 감정 트렌드 분석**: 월요일부터 금요일까지의 감정 변화 패턴
-2. **평균 대비 분석**: 이번 주가 평소와 어떻게 다른지 비교
-3. **비고 내용 분석**: 학생들이 작성한 비고를 바탕으로 한 심층 분석
-4. **주의사항 및 권장사항**: 교사가 알아야 할 중요한 인사이트
+분석할 내용:
+- 이번 주 감정 상태가 평소와 어떻게 다른지
+- 주목할 만한 변화나 패턴
+- 교사가 알아야 할 핵심 포인트
+- 간단한 권장사항
 
-분석 결과를 한국어로, 교사가 이해하기 쉽게 작성해주세요.
-각 항목을 명확히 구분하여 제시하고, 구체적인 수치와 예시를 포함해주세요.
+한국어로 교사가 한눈에 이해할 수 있도록 간결하게 작성해주세요.
 `;
 
       const result = await model.generateContent(prompt);
@@ -1534,6 +1974,114 @@ ${JSON.stringify(averageWeekSummary, null, 2)}
     } catch (error) {
       console.error('주간 분석 실패:', error);
       setWeeklyAnalysis('주간 분석을 불러오는 중 오류가 발생했습니다. 다시 시도해주세요.');
+    }
+  };
+
+  // 전체 평균 데이터 저장
+  const saveGlobalWeeklyAverage = async () => {
+    try {
+      const globalRef = doc(db, 'globalWeeklyAverage', 'latest');
+      await setDoc(globalRef, {
+        generatedAt: new Date(),
+        version: Date.now(), // 버전 관리
+        status: 'completed'
+      });
+      console.log('📦 전체 평균 데이터 저장 완료');
+    } catch (error) {
+      console.error('전체 평균 데이터 저장 실패:', error);
+    }
+  };
+
+  // 전체 평균 데이터 조회
+  const getGlobalWeeklyAverageInfo = async () => {
+    try {
+      const globalRef = doc(db, 'globalWeeklyAverage', 'latest');
+      const globalDoc = await getDoc(globalRef);
+      
+      if (globalDoc.exists()) {
+        const data = globalDoc.data();
+        return {
+          generatedAt: data.generatedAt.toDate(),
+          version: data.version,
+          status: data.status
+        };
+      }
+      return null;
+    } catch (error) {
+      console.error('전체 평균 데이터 조회 실패:', error);
+      return null;
+    }
+  };
+
+  // 주간 평균 데이터 일괄 생성 (지난 8주간)
+  const generateBatchWeeklyAverages = async () => {
+    setBatchGenerating(true);
+    
+    try {
+      const today = new Date();
+      const weeks = [];
+      
+      // 지난 16주간의 월요일 날짜들 생성 (방학 기간 고려하여 더 많이 생성)
+      for (let i = 0; i < 16; i++) {
+        const mondayDate = new Date(today);
+        mondayDate.setDate(today.getDate() - ((today.getDay() + 6) % 7) - (i * 7)); // 월요일로 맞춤
+        weeks.push(getKoreaDateString(mondayDate));
+      }
+      
+      setBatchProgress({ current: 0, total: weeks.length });
+      
+      for (let i = 0; i < weeks.length; i++) {
+        const weekStart = weeks[i];
+        console.log(`📦 ${i + 1}/${weeks.length} 주차 평균 생성 중: ${weekStart}`);
+        
+        // 해당 주간에 충분한 데이터가 있는지 먼저 확인
+        const hasData = await hasValidWeekData(weekStart);
+        
+        if (!hasData) {
+          console.log(`⏭️ ${weekStart} 주차는 데이터가 부족하여 건너뜀 (방학/공휴일 추정)`);
+          setBatchProgress({ current: i + 1, total: weeks.length });
+          continue;
+        }
+        
+        // 해당 주의 월~금 날짜 생성
+        const weekDays = [];
+        const startDate = new Date(weekStart);
+        for (let j = 0; j < 5; j++) {
+          const date = new Date(startDate);
+          date.setDate(startDate.getDate() + j);
+          weekDays.push(getKoreaDateString(date));
+        }
+        
+        // 캐시가 없는 경우에만 계산
+        const existingCache = await getWeeklyAverageCache(weekStart);
+        if (!existingCache) {
+          await calculateWeeklyAverage(weekDays);
+          console.log(`✅ ${weekStart} 주차 평균 데이터 생성 완료`);
+        } else {
+          console.log(`📋 ${weekStart} 주차 평균 데이터 이미 존재`);
+        }
+        
+        setBatchProgress({ current: i + 1, total: weeks.length });
+        
+        // 다음 요청 전 잠시 대기 (서버 부하 방지)
+        if (i < weeks.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+      }
+      
+      // 전체 평균 데이터 DB 저장 (생성 시기 기록)
+      await saveGlobalWeeklyAverage();
+      
+      // 상태 업데이트
+      await loadGlobalAverageInfo();
+      
+      console.log('🎉 모든 주간 평균 데이터 생성 완료!');
+      
+    } catch (error) {
+      console.error('❌ 일괄 생성 실패:', error);
+    } finally {
+      setBatchGenerating(false);
+      setBatchProgress({ current: 0, total: 0 });
     }
   };
 
@@ -1768,6 +2316,33 @@ ${JSON.stringify(averageWeekSummary, null, 2)}
           {/* 전체 감정 분석 탭 */}
           {activeTab === 0 && (
             <>
+              {/* 네트워크 오류 메시지 */}
+              {stats.error && (
+                <Card sx={{ mb: 3, backgroundColor: '#ffebee', border: '1px solid #f44336' }}>
+                  <CardContent>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <Typography variant="h6" sx={{ color: '#d32f2f', fontWeight: 600 }}>
+                        ⚠️ 연결 오류
+                      </Typography>
+                    </Box>
+                    <Typography variant="body2" sx={{ color: '#d32f2f', mt: 1 }}>
+                      {stats.error}
+                    </Typography>
+                    <Button 
+                      variant="outlined" 
+                      size="small" 
+                      sx={{ mt: 2, color: '#d32f2f', borderColor: '#d32f2f' }}
+                      onClick={() => {
+                        setStats(prev => ({ ...prev, error: null }));
+                        loadEmotionData();
+                      }}
+                    >
+                      다시 시도
+                    </Button>
+                  </CardContent>
+                </Card>
+              )}
+              
               <Card sx={{ mb: 3, boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }}>
           <CardContent>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
@@ -3025,19 +3600,80 @@ ${JSON.stringify(averageWeekSummary, null, 2)}
                 border: '1px solid #e3f2fd'
               }}>
                 <CardContent sx={{ p: 3 }}>
-                  <Typography 
-                    variant="h5" 
-                    sx={{ 
-                      mb: 3, 
-                      fontWeight: 700, 
-                      color: '#1976d2',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 1
-                    }}
-                  >
-                    📅 주간 감정 분석
-                  </Typography>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+                    <Typography 
+                      variant="h5" 
+                      sx={{ 
+                        fontWeight: 700, 
+                        color: '#1976d2',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 1
+                      }}
+                    >
+                      📅 주간 감정 분석
+                    </Typography>
+                    
+                    {/* 우측 관리 버튼들 */}
+                    <Box sx={{ display: 'flex', gap: 2 }}>
+                      <Button
+                        variant="outlined"
+                        size="small"
+                        onClick={generateBatchWeeklyAverages}
+                        disabled={batchGenerating}
+                        sx={{
+                          borderRadius: 2,
+                          textTransform: 'none',
+                          fontWeight: 600,
+                          borderColor: '#ff9800',
+                          color: '#ff9800',
+                          '&:hover': {
+                            borderColor: '#f57c00',
+                            backgroundColor: 'rgba(255, 152, 0, 0.04)'
+                          }
+                        }}
+                      >
+                        {batchGenerating ? '📦 생성 중...' : '📦 평균값 일괄 생성'}
+                      </Button>
+                    </Box>
+                    
+                    {/* 평균 데이터 생성 시기 표시 */}
+                    {globalAverageInfo && (
+                      <Typography variant="caption" sx={{ color: '#666', mt: 1, display: 'block' }}>
+                        최근 생성: {globalAverageInfo.generatedAt.toLocaleString('ko-KR')}
+                      </Typography>
+                    )}
+                  </Box>
+
+                  {/* 일괄 생성 진행 상황 */}
+                  {batchGenerating && (
+                    <Card sx={{ mb: 3, backgroundColor: '#fff3e0', border: '1px solid #ff9800' }}>
+                      <CardContent>
+                        <Typography variant="h6" sx={{ color: '#ef6c00', fontWeight: 600, mb: 2 }}>
+                          📦 주간 평균 데이터 생성 중
+                        </Typography>
+                        <Typography variant="body2" sx={{ color: '#ef6c00', mb: 2 }}>
+                          지난 8주간의 평균 데이터를 생성하고 있습니다. 잠시만 기다려주세요.
+                        </Typography>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                          <Typography variant="body2" sx={{ color: '#ef6c00' }}>
+                            진행률: {batchProgress.current}/{batchProgress.total}
+                          </Typography>
+                          <Box sx={{ flexGrow: 1, backgroundColor: '#ffcc02', borderRadius: 1, height: 8 }}>
+                            <Box 
+                              sx={{ 
+                                width: `${(batchProgress.current / Math.max(batchProgress.total, 1)) * 100}%`,
+                                backgroundColor: '#ff9800',
+                                height: '100%',
+                                borderRadius: 1,
+                                transition: 'width 0.3s ease'
+                              }}
+                            />
+                          </Box>
+                        </Box>
+                      </CardContent>
+                    </Card>
+                  )}
 
                   {/* 주간 선택 */}
                   <Box sx={{ mb: 3 }}>
@@ -3094,57 +3730,132 @@ ${JSON.stringify(averageWeekSummary, null, 2)}
                             📊 주간 감정 동향 비교
                           </Typography>
                           <Box sx={{ height: 400, mb: 2 }}>
+                            {(() => {
+                              const currentPositive = weeklyData && weeklyData.length > 0 ? weeklyData.map(day => {
+                                const emotions = day.emotionCounts || {};
+                                const positive = (emotions['기쁨'] || 0) + 
+                                               (emotions['행복'] || 0) + 
+                                               (emotions['신남'] || 0) + 
+                                               (emotions['좋음'] || 0) + 
+                                               (emotions['설렘'] || 0);
+                                console.log(`📈 ${day.dayName} 긍정:`, positive, emotions);
+                                return positive;
+                              }) : [0, 0, 0, 0, 0];
+
+                              const currentNegative = weeklyData && weeklyData.length > 0 ? weeklyData.map(day => {
+                                const emotions = day.emotionCounts || {};
+                                const negative = (emotions['슬픔'] || 0) + 
+                                               (emotions['화남'] || 0) + 
+                                               (emotions['스트레스'] || 0) + 
+                                               (emotions['피곤'] || 0) + 
+                                               (emotions['불안'] || 0);
+                                console.log(`📉 ${day.dayName} 부정:`, negative, emotions);
+                                return negative;
+                              }) : [0, 0, 0, 0, 0];
+
+                              const avgPositive = weeklyAverage && weeklyAverage.length > 0 ? weeklyAverage.map(day => {
+                                const emotions = day.emotionCounts || {};
+                                const positive = (emotions['기쁨'] || 0) + 
+                                               (emotions['행복'] || 0) + 
+                                               (emotions['신남'] || 0) + 
+                                               (emotions['좋음'] || 0) + 
+                                               (emotions['설렘'] || 0);
+                                console.log(`📊 평균 ${day.dayName} 긍정:`, positive, emotions);
+                                return positive;
+                              }) : [0, 0, 0, 0, 0];
+
+                              const avgNegative = weeklyAverage && weeklyAverage.length > 0 ? weeklyAverage.map(day => {
+                                const emotions = day.emotionCounts || {};
+                                const negative = (emotions['슬픔'] || 0) + 
+                                               (emotions['화남'] || 0) + 
+                                               (emotions['스트레스'] || 0) + 
+                                               (emotions['피곤'] || 0) + 
+                                               (emotions['불안'] || 0);
+                                console.log(`📊 평균 ${day.dayName} 부정:`, negative, emotions);
+                                return negative;
+                              }) : [0, 0, 0, 0, 0];
+
+                              console.log('🎯 그래프 데이터 최종:', {
+                                currentPositive,
+                                currentNegative,
+                                avgPositive,
+                                avgNegative,
+                                weeklyDataLength: weeklyData?.length,
+                                weeklyAverageLength: weeklyAverage?.length
+                              });
+
+                              return null;
+                            })()}
                             <Line 
                               data={{
-                                labels: weeklyData.map(day => day.dayName),
+                                labels: ['월', '화', '수', '목', '금'],
                                 datasets: [
                                   {
-                                    label: '이번 주 긍정 감정',
-                                    data: weeklyData.map(day => 
-                                      (day.emotionCounts['기쁨'] || 0) + 
-                                      (day.emotionCounts['행복'] || 0) + 
-                                      (day.emotionCounts['신남'] || 0)
-                                    ),
+                                    label: '이번 주 긍정적 비율(%)',
+                                    data: weeklyData && weeklyData.length > 0 ? weeklyData.map(day => {
+                                      const ratios = calculateEmotionRatio(day.emotionCounts || {});
+                                      return ratios.positive;
+                                    }) : [0, 0, 0, 0, 0],
                                     borderColor: '#4caf50',
                                     backgroundColor: 'rgba(76, 175, 80, 0.1)',
                                     fill: true,
                                     tension: 0.4
                                   },
                                   {
-                                    label: '이번 주 부정 감정',
-                                    data: weeklyData.map(day => 
-                                      (day.emotionCounts['슬픔'] || 0) + 
-                                      (day.emotionCounts['화남'] || 0) + 
-                                      (day.emotionCounts['스트레스'] || 0)
-                                    ),
+                                    label: '이번 주 중립적 비율(%)',
+                                    data: weeklyData && weeklyData.length > 0 ? weeklyData.map(day => {
+                                      const ratios = calculateEmotionRatio(day.emotionCounts || {});
+                                      return ratios.neutral;
+                                    }) : [0, 0, 0, 0, 0],
+                                    borderColor: '#ff9800',
+                                    backgroundColor: 'rgba(255, 152, 0, 0.1)',
+                                    fill: true,
+                                    tension: 0.4
+                                  },
+                                  {
+                                    label: '이번 주 부정적 비율(%)',
+                                    data: weeklyData && weeklyData.length > 0 ? weeklyData.map(day => {
+                                      const ratios = calculateEmotionRatio(day.emotionCounts || {});
+                                      return ratios.negative;
+                                    }) : [0, 0, 0, 0, 0],
                                     borderColor: '#f44336',
                                     backgroundColor: 'rgba(244, 67, 54, 0.1)',
                                     fill: true,
                                     tension: 0.4
                                   },
                                   {
-                                    label: '평균 긍정 감정',
-                                    data: weeklyAverage.map(day => 
-                                      (day.emotionCounts['기쁨'] || 0) + 
-                                      (day.emotionCounts['행복'] || 0) + 
-                                      (day.emotionCounts['신남'] || 0)
-                                    ),
+                                    label: '평균 긍정적 비율 (지난 4주, %)',
+                                    data: weeklyAverage && weeklyAverage.length > 0 ? weeklyAverage.map(day => {
+                                      const ratios = calculateEmotionRatio(day.emotionCounts || {});
+                                      return ratios.positive;
+                                    }) : [0, 0, 0, 0, 0],
                                     borderColor: '#81c784',
                                     backgroundColor: 'transparent',
-                                    borderDash: [5, 5],
+                                    borderDash: [3, 3],
                                     fill: false,
                                     tension: 0.4
                                   },
                                   {
-                                    label: '평균 부정 감정',
-                                    data: weeklyAverage.map(day => 
-                                      (day.emotionCounts['슬픔'] || 0) + 
-                                      (day.emotionCounts['화남'] || 0) + 
-                                      (day.emotionCounts['스트레스'] || 0)
-                                    ),
+                                    label: '평균 중립적 비율 (지난 4주, %)',
+                                    data: weeklyAverage && weeklyAverage.length > 0 ? weeklyAverage.map(day => {
+                                      const ratios = calculateEmotionRatio(day.emotionCounts || {});
+                                      return ratios.neutral;
+                                    }) : [0, 0, 0, 0, 0],
+                                    borderColor: '#ffb74d',
+                                    backgroundColor: 'transparent',
+                                    borderDash: [3, 3],
+                                    fill: false,
+                                    tension: 0.4
+                                  },
+                                  {
+                                    label: '평균 부정적 비율 (지난 4주, %)',
+                                    data: weeklyAverage && weeklyAverage.length > 0 ? weeklyAverage.map(day => {
+                                      const ratios = calculateEmotionRatio(day.emotionCounts || {});
+                                      return ratios.negative;
+                                    }) : [0, 0, 0, 0, 0],
                                     borderColor: '#ef5350',
                                     backgroundColor: 'transparent',
-                                    borderDash: [5, 5],
+                                    borderDash: [3, 3],
                                     fill: false,
                                     tension: 0.4
                                   }
@@ -3169,9 +3880,15 @@ ${JSON.stringify(averageWeekSummary, null, 2)}
                                 scales: {
                                   y: {
                                     beginAtZero: true,
+                                    max: 100,
                                     title: {
                                       display: true,
-                                      text: '학생 수'
+                                      text: '비율 (%)'
+                                    },
+                                    ticks: {
+                                      callback: function(value) {
+                                        return value + '%';
+                                      }
                                     }
                                   },
                                   x: {
