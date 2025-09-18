@@ -46,15 +46,29 @@ const WatermelonGamePage = () => {
   const nextItemLevel = useRef(1);
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
   const [isSmallMobile, setIsSmallMobile] = useState(window.innerWidth <= 480);
+  const [isTablet, setIsTablet] = useState(window.innerWidth > 480 && window.innerWidth <= 1024);
 
   // 게임 초기화 함수 (useCallback으로 먼저 정의)
   const initGame = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    // 모바일 반응형 캔버스 크기
-    const canvasWidth = isMobile ? Math.min(window.innerWidth - 40, 400) : 600;
-    const canvasHeight = isMobile ? Math.round(canvasWidth * 4/3) : 800;
+    // 반응형 캔버스 크기 (아이패드 미니 최적화)
+    let canvasWidth, canvasHeight;
+    
+    if (isSmallMobile) {
+      // 스마트폰 (480px 이하)
+      canvasWidth = Math.min(window.innerWidth - 40, 350);
+      canvasHeight = Math.round(canvasWidth * 4/3);
+    } else if (isTablet) {
+      // 태블릿 (아이패드 미니 포함, 481-1024px)
+      canvasWidth = Math.min(window.innerWidth - 200, 500);
+      canvasHeight = Math.round(canvasWidth * 4/3);
+    } else {
+      // 데스크톱 (1024px 이상)
+      canvasWidth = 600;
+      canvasHeight = 800;
+    }
     
     canvas.width = canvasWidth;
     canvas.height = canvasHeight;
@@ -65,7 +79,7 @@ const WatermelonGamePage = () => {
     setGameOver(false);
     setScore(0);
     setCurrentLevel(1);
-  }, [isMobile]);
+  }, [isMobile, isSmallMobile, isTablet]);
 
   // 8단계 한국사 아이템 정의
   const historyItems = useMemo(() => ({
@@ -114,6 +128,7 @@ const WatermelonGamePage = () => {
     const handleResize = () => {
       setIsMobile(window.innerWidth <= 768);
       setIsSmallMobile(window.innerWidth <= 480);
+      setIsTablet(window.innerWidth > 480 && window.innerWidth <= 1024);
     };
 
     window.addEventListener('resize', handleResize);
@@ -480,7 +495,7 @@ const WatermelonGamePage = () => {
 
   // 게임 아이템 클래스
   class GameItem {
-    constructor(x, y, level) {
+    constructor(x, y, level, game = null) {
       this.x = x;
       this.y = y;
       this.level = level;
@@ -491,46 +506,88 @@ const WatermelonGamePage = () => {
       this.emoji = historyItems[level].emoji;
       this.name = historyItems[level].name;
       this.merged = false;
+      this.game = game;
+      
+      // 회전 물리를 위한 속성
+      this.angle = 0; // 현재 회전 각도
+      this.angularVelocity = 0; // 각속도
     }
 
     update() {
+      // 위치 업데이트
       this.x += this.vx;
       this.y += this.vy;
-      this.vy += 0.6; // 중력을 약간 증가 (더 자연스러운 낙하)
+      this.vy += 0.8; // 중력 증가 (더 현실적인 낙하)
+      
+      // 단순한 회전 물리 (시각적 효과만)
+      if (Math.abs(this.vx) > 0.1) {
+        // 단순한 회전 - 이동 속도에 비례
+        this.angularVelocity = -this.vx / this.radius * 0.5; // 절반 속도로 회전
+      } else {
+        // 서서히 회전 멈춤
+        this.angularVelocity *= 0.9;
+      }
+      
+      // 회전 각도 업데이트
+      this.angle += this.angularVelocity;
+
+      // 게임 인스턴스가 있는 경우 동적 경계 사용, 없으면 기본값 사용
+      const gameAreaTop = this.game ? this.game.gameAreaTop : 120;
+      const gameAreaBottom = this.game ? this.game.gameAreaBottom : 720;
+      const gameAreaLeft = this.game ? this.game.gameAreaLeft : 40;
+      const gameAreaRight = this.game ? this.game.gameAreaRight : 560;
 
       // 상단 경계 체크 (게임 영역 위쪽)
-      if (this.y - this.radius < 120) {
-        this.y = 120 + this.radius;
+      if (this.y - this.radius < gameAreaTop) {
+        this.y = gameAreaTop + this.radius;
         this.vy = Math.abs(this.vy) * 0.3; // 위쪽 충돌 시 아래로 밀어냄
       }
 
       // 바닥 충돌
-      if (this.y + this.radius > 720) {
-        this.y = 720 - this.radius;
+      if (this.y + this.radius > gameAreaBottom) {
+        this.y = gameAreaBottom - this.radius;
         this.vy *= -0.3;
         this.vx *= 0.85; // 바닥 마찰력 약간 증가
         this.isDropping = false; // 바닥에 닿으면 드롭 완료
       }
 
       // 벽 충돌 (게임 영역 경계)
-      if (this.x - this.radius < 40) {
-        this.x = 40 + this.radius;
+      if (this.x - this.radius < gameAreaLeft) {
+        this.x = gameAreaLeft + this.radius;
         this.vx *= -0.7; // 벽 반발계수 조정
       }
-      if (this.x + this.radius > 560) {
-        this.x = 560 - this.radius;
+      if (this.x + this.radius > gameAreaRight) {
+        this.x = gameAreaRight - this.radius;
         this.vx *= -0.7; // 벽 반발계수 조정
       }
 
-      // 공기 저항 및 마찰력
-      this.vx *= 0.995; // 수평 마찰력 약간 증가
-      if (Math.abs(this.vy) < 0.1 && this.y + this.radius >= 720) {
+      // 공기 저항 및 마찰력 (더 현실적인 물리)
+      this.vx *= 0.998; // 수평 공기 저항 감소 (더 잘 굴러가도록)
+      
+      // 바닥에서의 미세한 진동 방지 및 안정화
+      if (Math.abs(this.vy) < 0.2 && this.y + this.radius >= gameAreaBottom - 2) {
         this.vy = 0; // 바닥에서 미세한 진동 방지
+        this.y = gameAreaBottom - this.radius; // 정확한 바닥 위치로 고정
+        this.vx *= 0.95; // 바닥에서 적당한 마찰력
       }
       
-      // 속도가 충분히 느려지면 드롭 상태 해제
-      if (this.isDropping && Math.abs(this.vx) < 0.5 && Math.abs(this.vy) < 0.5) {
+      // 속도가 충분히 느려지면 드롭 상태 해제 (더 엄격한 조건)
+      if (this.isDropping && Math.abs(this.vx) < 0.3 && Math.abs(this.vy) < 0.3) {
         this.isDropping = false;
+      }
+      
+      // 완전 정지 상태 감지 (미세한 움직임 제거) - 더 엄격한 기준
+      if (Math.abs(this.vx) < 0.2 && Math.abs(this.vy) < 0.2) {
+        this.vx = 0;
+        this.vy = 0;
+        this.angularVelocity *= 0.8; // 회전도 빨리 멈춤
+      }
+      
+      // 바닥에서 미세한 진동 완전 차단
+      const groundContact = this.y + this.radius >= (this.game ? this.game.gameAreaBottom - 1 : 719);
+      if (groundContact && Math.abs(this.vy) < 0.3) {
+        this.vy = 0;
+        this.y = (this.game ? this.game.gameAreaBottom : 720) - this.radius;
       }
     }
 
@@ -545,15 +602,20 @@ const WatermelonGamePage = () => {
       const img = loadedImages.current[this.level];
       
       if (img) {
-        // 이미지가 로드되면 원형으로 클리핑해서 그리기
+        // 이미지가 로드되면 원형으로 클리핑해서 회전된 모습으로 그리기
         ctx.save();
+        
+        // 회전 중심을 공의 중심으로 이동
+        ctx.translate(this.x, this.y);
+        ctx.rotate(this.angle);
+        
         ctx.beginPath();
-        ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+        ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
         ctx.clip();
         
-        // 이미지를 원형에 맞게 그리기
+        // 이미지를 원형에 맞게 그리기 (회전된 상태)
         const imgSize = this.radius * 2;
-        ctx.drawImage(img, this.x - this.radius, this.y - this.radius, imgSize, imgSize);
+        ctx.drawImage(img, -this.radius, -this.radius, imgSize, imgSize);
         
         ctx.restore();
         
@@ -616,17 +678,27 @@ const WatermelonGamePage = () => {
       this.ctx = canvas.getContext('2d');
       this.items = [];
       this.nextItem = null;
-      this.dropX = 300;
+      
+      // 캔버스 크기에 따른 동적 설정
+      this.width = canvas.width;
+      this.height = canvas.height;
+      this.dropX = this.width / 2; // 캔버스 중앙
+      this.gameAreaLeft = this.width * 0.067; // 좌측 경계 (40/600 비율)
+      this.gameAreaRight = this.width * 0.933; // 우측 경계 (560/600 비율)
+      this.gameAreaTop = this.height * 0.15; // 상단 경계 (120/800 비율)
+      this.gameAreaBottom = this.height * 0.9; // 하단 경계 (720/800 비율)
+      this.dangerLine = this.height * 0.225; // 위험선 (180/800 비율)
+      
       this.gameRunning = true;
       this.currentScore = 0; // 게임 내부 점수 추적
-      console.log('WatermelonGame 생성자 호출 - 게임 시작');
+      console.log('WatermelonGame 생성자 호출 - 게임 시작, 캔버스 크기:', this.width, 'x', this.height);
       this.initNextItem();
     }
 
     initNextItem() {
       const level = Math.random() < 0.7 ? 1 : Math.random() < 0.9 ? 2 : 3;
       nextItemLevel.current = level; // 다음 아이템 레벨 저장
-      this.nextItem = new GameItem(this.dropX, 140, level);
+      this.nextItem = new GameItem(this.dropX, this.gameAreaTop + 20, level, this);
       this.nextItem.isDropping = false; // 드롭 중이 아님
     }
 
@@ -671,7 +743,7 @@ const WatermelonGamePage = () => {
               this.items.splice(Math.min(i, j), 1);
 
               // 새 아이템 추가
-              this.items.push(new GameItem(newX, newY, newLevel));
+              this.items.push(new GameItem(newX, newY, newLevel, this));
               break;
             } else {
               // 물리적 충돌 처리
@@ -681,6 +753,7 @@ const WatermelonGamePage = () => {
               const overlap = item1.radius + item2.radius - distance;
 
               if (overlap > 0) {
+                // 더 안정적인 분리를 위해 overlap의 50%만 분리 (떨림 방지)
                 const separateX = (dx / distance) * overlap * 0.5;
                 const separateY = (dy / distance) * overlap * 0.5;
 
@@ -690,27 +763,67 @@ const WatermelonGamePage = () => {
                 item2.x += separateX;
                 item2.y += separateY;
 
-                // 경계 체크 - 분리 후 경계를 벗어나지 않도록 보정
+                // 동적 경계 체크 - 분리 후 경계를 벗어나지 않도록 보정
                 // item1 경계 체크
-                if (item1.x - item1.radius < 40) item1.x = 40 + item1.radius;
-                if (item1.x + item1.radius > 560) item1.x = 560 - item1.radius;
-                if (item1.y + item1.radius > 720) item1.y = 720 - item1.radius;
-                if (item1.y - item1.radius < 120) item1.y = 120 + item1.radius;
+                if (item1.x - item1.radius < this.gameAreaLeft) item1.x = this.gameAreaLeft + item1.radius;
+                if (item1.x + item1.radius > this.gameAreaRight) item1.x = this.gameAreaRight - item1.radius;
+                if (item1.y + item1.radius > this.gameAreaBottom) {
+                  item1.y = this.gameAreaBottom - item1.radius;
+                  item1.vy = 0; // 바닥에 닿으면 수직 속도 제거
+                  item1.isDropping = false;
+                }
+                if (item1.y - item1.radius < this.gameAreaTop) item1.y = this.gameAreaTop + item1.radius;
 
                 // item2 경계 체크
-                if (item2.x - item2.radius < 40) item2.x = 40 + item2.radius;
-                if (item2.x + item2.radius > 560) item2.x = 560 - item2.radius;
-                if (item2.y + item2.radius > 720) item2.y = 720 - item2.radius;
-                if (item2.y - item2.radius < 120) item2.y = 120 + item2.radius;
+                if (item2.x - item2.radius < this.gameAreaLeft) item2.x = this.gameAreaLeft + item2.radius;
+                if (item2.x + item2.radius > this.gameAreaRight) item2.x = this.gameAreaRight - item2.radius;
+                if (item2.y + item2.radius > this.gameAreaBottom) {
+                  item2.y = this.gameAreaBottom - item2.radius;
+                  item2.vy = 0; // 바닥에 닿으면 수직 속도 제거
+                  item2.isDropping = false;
+                }
+                if (item2.y - item2.radius < this.gameAreaTop) item2.y = this.gameAreaTop + item2.radius;
 
-                // 속도 교환 (탄성 충돌)
+                // 속도 교환 (더 부드러운 탄성 충돌)
                 const vx1 = item1.vx, vy1 = item1.vy;
                 const vx2 = item2.vx, vy2 = item2.vy;
 
-                item1.vx = vx2 * 0.8;
-                item1.vy = vy2 * 0.8;
-                item2.vx = vx1 * 0.8;
-                item2.vy = vy1 * 0.8;
+                // 질량 고려한 속도 교환 (더 현실적인 물리)
+                const mass1 = item1.radius * item1.radius; // 질량은 반지름 제곱에 비례
+                const mass2 = item2.radius * item2.radius;
+                const totalMass = mass1 + mass2;
+
+                item1.vx = ((mass1 - mass2) * vx1 + 2 * mass2 * vx2) / totalMass * 0.6;
+                item1.vy = ((mass1 - mass2) * vy1 + 2 * mass2 * vy2) / totalMass * 0.6;
+                item2.vx = ((mass2 - mass1) * vx2 + 2 * mass1 * vx1) / totalMass * 0.6;
+                item2.vy = ((mass2 - mass1) * vy2 + 2 * mass1 * vy1) / totalMass * 0.6;
+                
+                // 미끄러짐 효과 구현 (접촉점에서 낮은 마찰)
+                const contactFriction = 0.1; // 매우 낮은 접촉 마찰로 미끄러짐 효과
+                
+                // 접촉면에서의 상대 속도 계산
+                const relativeVx = vx2 - vx1;
+                const relativeVy = vy2 - vy1;
+                
+                // 접촉면 방향벡터 (단위벡터)
+                const contactNormalX = dx / distance;
+                const contactNormalY = dy / distance;
+                
+                // 접촉면 접선 방향벡터
+                const contactTangentX = -contactNormalY;
+                const contactTangentY = contactNormalX;
+                
+                // 접선 방향 상대속도 (미끄러짐 속도)
+                const tangentRelativeVelocity = relativeVx * contactTangentX + relativeVy * contactTangentY;
+                
+                // 미끄러짐 마찰력 (매우 작게)
+                const frictionForce = tangentRelativeVelocity * contactFriction;
+                
+                // 미끄러짐 효과를 속도에 적용 (살짝만)
+                item1.vx += frictionForce * contactTangentX * 0.3;
+                item1.vy += frictionForce * contactTangentY * 0.3;
+                item2.vx -= frictionForce * contactTangentX * 0.3;
+                item2.vy -= frictionForce * contactTangentY * 0.3;
               }
             }
           }
@@ -718,24 +831,24 @@ const WatermelonGamePage = () => {
       }
 
       // 게임 오버 체크 (정지된 아이템이 위험선에 닿으면)
-      const dangerLine = 180; // 위험선을 더 높게 조정 (절반 정도 찰 때까지 게임 지속)
+      const dangerLine = this.dangerLine; // 동적 위험선 사용
       const staticItems = this.items.filter(item => 
         !item.isDropping && 
         Math.abs(item.vy) < 0.5 && 
         Math.abs(item.vx) < 0.5
       );
       
-      // 게임 시작 후 최소 8초 후에만 위험선 체크 (충분한 안정화 시간)
+      // 게임 시작 후 최소 3초 후에만 위험선 체크 (초기 안정화 시간)
       const gameStartTime = gameStartTimeRef.current;
       const gameRunningTime = gameStartTime ? Date.now() - gameStartTime : 0;
       
-      // 위험선을 넘는 정지된 아이템들 체크 (연속 2초간 위험선 위에 있어야 게임오버)
+      // 위험선을 넘는 정지된 아이템들 체크 (연속 1초간 위험선 위에 있어야 게임오버)
       const dangerousItems = staticItems.filter(item => item.y - item.radius < dangerLine);
       
-      if (gameRunningTime > 8000 && dangerousItems.length > 0) {
+      if (gameRunningTime > 2000 && dangerousItems.length > 0) {
         if (!this.dangerTime) {
           this.dangerTime = Date.now();
-        } else if (Date.now() - this.dangerTime > 2000) { // 2초 대기
+        } else if (Date.now() - this.dangerTime > 500) { // 0.5초 대기
           console.log('위험선 터치로 게임 오버 - 게임 진행 시간:', gameRunningTime + 'ms', '내부 점수:', this.currentScore);
           this.gameRunning = false;
           setGameOver(true);
@@ -754,27 +867,29 @@ const WatermelonGamePage = () => {
 
     draw() {
       // 배경 그라데이션
-      const gradient = this.ctx.createLinearGradient(0, 0, 0, 800);
+      const gradient = this.ctx.createLinearGradient(0, 0, 0, this.height);
       gradient.addColorStop(0, '#FFF8DC');
       gradient.addColorStop(1, '#F5DEB3');
       this.ctx.fillStyle = gradient;
-      this.ctx.fillRect(0, 0, 600, 800);
+      this.ctx.fillRect(0, 0, this.width, this.height);
 
       // 게임 영역 테두리 (둥근 모서리)
       this.ctx.strokeStyle = '#8B4513';
       this.ctx.lineWidth = 8;
       this.ctx.fillStyle = '#FFFFE0';
-      this.ctx.fillRect(20, 120, 560, 600);
-      this.ctx.strokeRect(20, 120, 560, 600);
+      const gameAreaWidth = this.gameAreaRight - this.gameAreaLeft;
+      const gameAreaHeight = this.gameAreaBottom - this.gameAreaTop;
+      this.ctx.fillRect(this.gameAreaLeft, this.gameAreaTop, gameAreaWidth, gameAreaHeight);
+      this.ctx.strokeRect(this.gameAreaLeft, this.gameAreaTop, gameAreaWidth, gameAreaHeight);
 
       // 위험 라인 (게임 오버 라인)
-      const dangerLine = 180; // 위험선을 더 높게 조정 (절반 정도 찰 때까지 게임 지속)
+      const dangerLine = this.dangerLine; // 동적 위험선 사용
       this.ctx.strokeStyle = '#FF4444';
       this.ctx.lineWidth = 3;
       this.ctx.setLineDash([10, 10]);
       this.ctx.beginPath();
-      this.ctx.moveTo(20, dangerLine);
-      this.ctx.lineTo(580, dangerLine);
+      this.ctx.moveTo(this.gameAreaLeft, dangerLine);
+      this.ctx.lineTo(this.gameAreaRight, dangerLine);
       this.ctx.stroke();
       this.ctx.setLineDash([]);
       
@@ -1313,21 +1428,22 @@ const WatermelonGamePage = () => {
       {/* 메인 게임 영역 */}
       <div style={{
         display: 'flex',
-        flexDirection: isMobile ? 'column' : 'row',
+        flexDirection: (isMobile || isTablet) ? 'column' : 'row',
         gap: isMobile ? '15px' : '20px',
-        alignItems: isMobile ? 'center' : 'flex-start',
+        alignItems: (isMobile || isTablet) ? 'center' : 'flex-start',
         maxWidth: '1200px',
         width: '100%',
-        justifyContent: 'center'
+        justifyContent: 'center',
+        padding: isTablet ? '0 20px' : '0'
       }}>
         {/* 왼쪽: 다음 아이템 및 컨트롤 */}
         <div style={{
-          width: isMobile ? '100%' : '200px',
-          maxWidth: isMobile ? '400px' : '200px',
+          width: (isMobile || isTablet) ? '100%' : '200px',
+          maxWidth: (isMobile || isTablet) ? '500px' : '200px',
           display: 'flex',
-          flexDirection: isMobile ? 'row' : 'column',
+          flexDirection: (isMobile || isTablet) ? 'row' : 'column',
           gap: '15px',
-          justifyContent: isMobile ? 'center' : 'flex-start'
+          justifyContent: (isMobile || isTablet) ? 'center' : 'flex-start'
         }}>
           {/* 다음 아이템 */}
           <div style={{
