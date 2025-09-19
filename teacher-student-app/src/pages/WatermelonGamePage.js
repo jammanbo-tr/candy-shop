@@ -679,10 +679,10 @@ const WatermelonGamePage = () => {
       this.scaleX = this.displayWidth / this.baseWidth;
       this.scaleY = this.displayHeight / this.baseHeight;
       this.scale = Math.min(this.scaleX, this.scaleY);
-      this.gameAreaLeft = this.scaleX * 20;
-      this.gameAreaRight = this.displayWidth - this.scaleX * 20;
-      this.gameAreaTop = this.scaleY * 120;
-      this.gameAreaBottom = this.displayHeight - this.scaleY * 80;
+      this.gameAreaLeft = this.scaleX * 10; // 20 -> 10으로 여백 축소 (게임 공간 20% 증가)
+      this.gameAreaRight = this.displayWidth - this.scaleX * 10; // 20 -> 10으로 여백 축소
+      this.gameAreaTop = this.scaleY * 100; // 120 -> 100으로 상단 여백 축소
+      this.gameAreaBottom = this.displayHeight - this.scaleY * 60; // 80 -> 60으로 하단 여백 축소
       this.gameAreaWidth = this.gameAreaRight - this.gameAreaLeft;
       this.gameAreaHeight = this.gameAreaBottom - this.gameAreaTop;
       this.dangerLine = this.scaleY * 180;
@@ -796,25 +796,38 @@ const WatermelonGamePage = () => {
 
           if (item1.checkCollision(item2)) {
             // 같은 레벨이면 합성
-            if (item1.level === item2.level && !item1.merged && !item2.merged && item1.level < 8) {
-              const newX = (item1.x + item2.x) / 2;
-              const newY = (item1.y + item2.y) / 2;
-              const newLevel = item1.level + 1;
-              
-              // 점수 추가 (내부 점수와 React 상태 모두 업데이트)
-              const scoreToAdd = historyItems[newLevel].score;
-              this.currentScore += scoreToAdd;
-              setScore(this.currentScore);
-              setCurrentLevel(prev => Math.max(prev, newLevel));
-              console.log(`점수 추가: +${scoreToAdd}, 총 점수: ${this.currentScore}`);
+            if (item1.level === item2.level && !item1.merged && !item2.merged) {
+              if (item1.level === 8) {
+                // 삼국통일(8단계) 특별 처리: 2개가 만나면 사라지고 500점 획득
+                this.currentScore += 500;
+                setScore(this.currentScore);
+                console.log('삼국통일 완성! +500점, 총 점수:', this.currentScore);
+                
+                // 두 아이템 모두 제거
+                this.items.splice(Math.max(i, j), 1);
+                this.items.splice(Math.min(i, j), 1);
+                break;
+              } else if (item1.level < 8) {
+                // 일반 합성 (7단계까지)
+                const newX = (item1.x + item2.x) / 2;
+                const newY = (item1.y + item2.y) / 2;
+                const newLevel = item1.level + 1;
+                
+                // 점수 추가 (내부 점수와 React 상태 모두 업데이트)
+                const scoreToAdd = historyItems[newLevel].score;
+                this.currentScore += scoreToAdd;
+                setScore(this.currentScore);
+                setCurrentLevel(prev => Math.max(prev, newLevel));
+                console.log(`점수 추가: +${scoreToAdd}, 총 점수: ${this.currentScore}`);
 
-              // 기존 아이템 제거
-              this.items.splice(Math.max(i, j), 1);
-              this.items.splice(Math.min(i, j), 1);
+                // 기존 아이템 제거
+                this.items.splice(Math.max(i, j), 1);
+                this.items.splice(Math.min(i, j), 1);
 
-              // 새 아이템 추가
-              this.items.push(new GameItem(newX, newY, newLevel, this));
-              break;
+                // 새 아이템 추가
+                this.items.push(new GameItem(newX, newY, newLevel, this));
+                break;
+              }
             } else {
               // 물리적 충돌 처리
               const dx = item2.x - item1.x;
