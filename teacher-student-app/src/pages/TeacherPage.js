@@ -4,6 +4,7 @@ import { collection, doc, updateDoc, arrayUnion, setDoc, getDocs, query, orderBy
 import { db } from '../firebase';
 import StudentCard from '../components/StudentCard';
 import NotificationsActiveIcon from '@mui/icons-material/NotificationsActive';
+import CloseIcon from '@mui/icons-material/Close';
 import Checkbox from '@mui/material/Checkbox';
 import EmojiEventsIcon from '@mui/icons-material/EmojiEvents';
 import { useNavigate } from 'react-router-dom';
@@ -24,6 +25,7 @@ import QuizSystem from "../components/QuizSystem";
 import EmotionDashboardModal from '../components/EmotionDashboardModal';
 import AIAnalysisModal from '../components/AIAnalysisModal';
 import LearningJournalViewModal from '../components/LearningJournalViewModal';
+import { setAnonymousMode as setDatabaseAnonymousMode, getPokemonName, addAnonymousModeListener, getAnonymousMode } from '../utils/anonymousMode';
 
 const LEVELS = [
   '알사탕',
@@ -73,6 +75,7 @@ function formatTimeAgo(ts) {
   return `${d.getFullYear()}-${d.getMonth()+1}-${d.getDate()} ${d.getHours()}:${String(d.getMinutes()).padStart(2,'0')}`;
 }
 
+
 const TeacherPage = () => {
   // 1. 모든 useState, useEffect 등 Hook 선언 (최상단)
   const [studentsSnapshot, loading, firestoreError] = useCollection(collection(db, 'students'));
@@ -88,6 +91,7 @@ const TeacherPage = () => {
   const [rejectReason, setRejectReason] = useState('');
   const [selectedRequest, setSelectedRequest] = useState(null);
   const [alarmTab, setAlarmTab] = useState('message');
+  const [anonymousMode, setAnonymousMode] = useState(false);
   const [questExp, setQuestExp] = useState(10);
   const [questActionStudent, setQuestActionStudent] = useState(null);
   const [questActionQuest, setQuestActionQuest] = useState(null);
@@ -383,6 +387,29 @@ const TeacherPage = () => {
       // 네트워크 오류나 권한 문제 등을 콘솔에 로그하지 않음
     }
   }, [firestoreError]);
+
+  // 익명 모드 데이터베이스 리스너 설정
+  useEffect(() => {
+    console.log('TeacherPage: 익명 모드 리스너 등록');
+    
+    const setupListener = async () => {
+      const removeListener = await addAnonymousModeListener((newMode) => {
+        console.log('TeacherPage: 익명 모드 상태 변경됨:', newMode);
+        setAnonymousMode(newMode);
+      });
+      
+      return removeListener;
+    };
+    
+    let removeListener;
+    setupListener().then(fn => {
+      removeListener = fn;
+    });
+    
+    return () => {
+      if (removeListener) removeListener();
+    };
+  }, []);
 
   // 공지사항 목록 불러오기
   useEffect(() => { fetchNotices(); }, []);
@@ -2113,7 +2140,27 @@ const TeacherPage = () => {
         {showTeacherAlarm && (
           <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(0,0,0,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 3000 }}>
             <div style={{ background: '#fff', padding: '32px 28px 24px 28px', borderRadius: 28, minWidth: 420, maxHeight: 600, overflowY: 'auto', boxShadow: '0 4px 32px #b2ebf240', maxWidth: '90vw' }}>
-              <div style={{ fontWeight: 700, fontSize: '1.25rem', marginBottom: 18, color: '#1976d2', letterSpacing: '-0.5px' }}>학생 요청 알림</div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
+                <div style={{ fontWeight: 700, fontSize: '1.25rem', color: '#1976d2', letterSpacing: '-0.5px' }}>학생 요청 알림</div>
+                <button 
+                  onClick={() => setShowTeacherAlarm(false)}
+                  style={{ 
+                    background: 'none', 
+                    border: 'none', 
+                    cursor: 'pointer', 
+                    padding: '4px',
+                    borderRadius: '50%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    transition: 'background-color 0.2s'
+                  }}
+                  onMouseEnter={(e) => e.target.style.backgroundColor = '#f5f5f5'}
+                  onMouseLeave={(e) => e.target.style.backgroundColor = 'transparent'}
+                >
+                  <CloseIcon style={{ color: '#666', fontSize: 20 }} />
+                </button>
+              </div>
               <div style={{ display: 'flex', gap: 12, marginBottom: 16 }}>
                 <button onClick={() => setAlarmTab('message')} style={{ fontWeight: alarmTab==='message'?700:500, borderRadius: 999, background: alarmTab==='message' ? '#e0f7fa' : '#f7faf7', color: '#1976d2', border: 'none', padding: '7px 18px', fontSize: 15, boxShadow: '0 2px 8px #b2ebf240', cursor: 'pointer', transition: 'all 0.2s' }}>메시지</button>
                 <button onClick={() => setAlarmTab('friendMessages')} style={{ fontWeight: alarmTab==='friendMessages'?700:500, borderRadius: 999, background: alarmTab==='friendMessages' ? '#e0f7fa' : '#f7faf7', color: '#1976d2', border: 'none', padding: '7px 18px', fontSize: 14, boxShadow: '0 2px 8px #b2ebf240', cursor: 'pointer', transition: 'all 0.2s' }}>친구들끼리의 메시지</button>
@@ -2289,7 +2336,50 @@ const TeacherPage = () => {
               )}
               {alarmTab === 'historyPraise' && (
                 <>
-                  <div style={{ fontWeight: 600, marginBottom: 8, color: '#1976d2', textAlign: 'center' }}>모든 학생의 칭찬 내역</div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                    <div style={{ fontWeight: 600, color: '#1976d2' }}>모든 학생의 칭찬 내역</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{ fontSize: 13, color: '#666' }}>익명 모드</span>
+                      <button 
+                        onClick={async () => {
+                          const newMode = !anonymousMode;
+                          console.log('Teacher 페이지 익명 모드 토글 클릭:', anonymousMode, '->', newMode);
+                          try {
+                            await setDatabaseAnonymousMode(newMode);
+                            console.log('데이터베이스 익명 모드 설정 성공:', newMode);
+                          } catch (error) {
+                            console.error('익명 모드 설정 실패:', error);
+                          }
+                        }}
+                        style={{
+                          width: 44,
+                          height: 24,
+                          borderRadius: 12,
+                          border: 'none',
+                          background: anonymousMode ? '#1976d2' : '#ccc',
+                          position: 'relative',
+                          cursor: 'pointer',
+                          transition: 'background-color 0.3s',
+                          pointerEvents: 'auto',
+                          zIndex: 10,
+                          outline: 'none'
+                        }}
+                      >
+                        <div style={{
+                          width: 20,
+                          height: 20,
+                          borderRadius: '50%',
+                          background: '#fff',
+                          position: 'absolute',
+                          top: 2,
+                          left: anonymousMode ? 22 : 2,
+                          transition: 'left 0.3s',
+                          boxShadow: '0 1px 3px rgba(0,0,0,0.3)',
+                          pointerEvents: 'none'
+                        }} />
+                      </button>
+                    </div>
+                  </div>
                   <ul style={{ listStyle: 'none', padding: 0, margin: 0, maxHeight: 350, overflowY: 'auto' }}>
                     {studentsSnapshot && studentsSnapshot.docs.flatMap(doc => {
                       const student = doc.data();
@@ -2367,11 +2457,11 @@ const TeacherPage = () => {
                                 }}>
                                   자기 칭찬
                                 </span>
-                                <span style={{ color: '#1976d2' }}>{p.studentName}</span>
+                                <span style={{ color: '#1976d2' }}>{getPokemonName(p.studentName, anonymousMode)}</span>
                               </>
                             ) : p.type === 'friendPraise' && p.fromName ? (
                               <>
-                                <span style={{ color: '#1976d2' }}>{p.fromName}</span>
+                                <span style={{ color: '#1976d2' }}>{getPokemonName(p.fromName, anonymousMode)}</span>
                                 <span style={{ 
                                   margin: '0 8px', 
                                   color: '#ff9800',
@@ -2390,7 +2480,7 @@ const TeacherPage = () => {
                               </>
                             ) : Array.isArray(p.friends) && p.friends.length > 0 && studentsSnapshot ? (
                               <>
-                                <span style={{ color: '#1976d2' }}>{p.studentName}</span>
+                                <span style={{ color: '#1976d2' }}>{getPokemonName(p.studentName, anonymousMode)}</span>
                                 <span style={{ 
                                   margin: '0 8px', 
                                   color: '#ff9800',
@@ -2427,11 +2517,11 @@ const TeacherPage = () => {
                                 }}>
                                   과거 친구 칭찬
                                 </span>
-                                <span style={{ color: '#1976d2' }}>{p.studentName}</span>
+                                <span style={{ color: '#1976d2' }}>{getPokemonName(p.studentName, anonymousMode)}</span>
                               </>
                             ) : p.type === 'friendPraise' ? (
                               <>
-                                <span style={{ color: '#1976d2' }}>{p.studentName}</span>
+                                <span style={{ color: '#1976d2' }}>{getPokemonName(p.studentName, anonymousMode)}</span>
                                 <span style={{ 
                                   margin: '0 8px', 
                                   color: '#ff9800',
@@ -2449,7 +2539,7 @@ const TeacherPage = () => {
                               </>
                             ) : (
                               <>
-                                <span style={{ color: '#1976d2' }}>{p.studentName}</span>
+                                <span style={{ color: '#1976d2' }}>{getPokemonName(p.studentName, anonymousMode)}</span>
                                 <span style={{ 
                                   background: '#ffebee', 
                                   color: '#d32f2f', 

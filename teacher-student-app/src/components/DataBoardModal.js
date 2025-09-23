@@ -23,6 +23,7 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시' }) => {
   const [recommendations, setRecommendations] = useState({});
   const [cumulativeRecommendations, setCumulativeRecommendations] = useState({});
   const [isAnonymousMode, setIsAnonymousMode] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
   const PERIODS = ['1교시', '2교시', '3교시', '4교시', '5교시', '6교시'];
 
@@ -42,10 +43,21 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시' }) => {
     '/lv12.png', // 잠만보 캔디 세트
   ];
 
-  // 학생별 레벨 아이콘 매핑 (레벨 + 1 규칙 적용)
+  // 학생별 이모지 아이콘 매핑
   const getStudentIcon = (studentName) => {
-    const studentLevel = studentsData[studentName]?.level || 1;
-    return levelImages[studentLevel] || levelImages[1]; // 레벨 6 → lv7.png (인덱스 6)
+    const iconMap = {
+      '김규민': '🧪',
+      '김범준': '🍭',  
+      '김성준': '🎯',
+      '김수겸': '🎮',
+      '김주원': '👑',
+      '김주하': '🌟',
+      '이해원': '🎨',
+      '문기훈': '🚀',
+      '박동하': '🎵',
+      '백주원': '🏆',
+    };
+    return iconMap[studentName] || '🎭';
   };
 
   // 학생 레벨에 따른 이미지 경로 반환
@@ -1068,18 +1080,70 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시' }) => {
               )}
             </div>
 
-            {/* 우측: 추천 순위 리스트 */}
+            {/* 우측: 추천 순위 리스트 (동적 사이드바) */}
             <div style={{
-              width: '320px',
-              padding: '24px',
+              width: isSidebarCollapsed ? '60px' : '320px',
+              padding: isSidebarCollapsed ? '12px' : '24px',
               paddingLeft: '12px',
               borderLeft: '2px solid #f0f0f0',
               backgroundColor: '#fafafa',
-              overflow: 'auto'
+              overflow: 'auto',
+              transition: 'width 0.3s ease, padding 0.3s ease',
+              position: 'relative'
             }}>
+              {/* 사이드바 토글 버튼 - 더 눈에 잘 띄게 개선 */}
+              <button
+                onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+                style={{
+                  position: 'absolute',
+                  top: '50%',
+                  left: '-25px',
+                  width: '50px',
+                  height: '100px',
+                  borderRadius: '25px 0 0 25px',
+                  border: '4px solid #4caf50',
+                  backgroundColor: '#4caf50',
+                  color: 'white',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '20px',
+                  fontWeight: 'bold',
+                  boxShadow: '0 6px 20px rgba(76, 175, 80, 0.5)',
+                  transition: 'all 0.3s ease',
+                  zIndex: 1000,
+                  transform: 'translateY(-50%)',
+                  writingMode: 'vertical-rl',
+                  textOrientation: 'mixed'
+                }}
+                onMouseOver={(e) => {
+                  e.currentTarget.style.backgroundColor = '#45a049';
+                  e.currentTarget.style.transform = 'translateY(-50%) scale(1.05)';
+                  e.currentTarget.style.boxShadow = '0 6px 20px rgba(76, 175, 80, 0.6)';
+                }}
+                onMouseOut={(e) => {
+                  e.currentTarget.style.backgroundColor = '#4caf50';
+                  e.currentTarget.style.transform = 'translateY(-50%) scale(1)';
+                  e.currentTarget.style.boxShadow = '0 4px 16px rgba(76, 175, 80, 0.4)';
+                }}
+                title={isSidebarCollapsed ? '순위 펼치기' : '순위 접기'}
+              >
+                <div style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  gap: '4px'
+                }}>
+                  <span style={{ fontSize: '24px' }}>{isSidebarCollapsed ? '◀' : '▶'}</span>
+                  <span style={{ fontSize: '12px', fontWeight: '700' }}>순위</span>
+                </div>
+              </button>
+
               <div style={{
                 marginBottom: '20px',
-                textAlign: 'center'
+                textAlign: 'center',
+                display: isSidebarCollapsed ? 'none' : 'block'
               }}>
                 <h3 style={{
                   margin: 0,
@@ -1118,15 +1182,16 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시' }) => {
                 </p>
               </div>
 
-              {/* 추천 순위 리스트 */}
+              {/* 추천 순위 리스트 - 전체 학생을 보여주도록 높이 확장 */}
               <div 
                 style={{
-                  display: 'flex',
+                  display: isSidebarCollapsed ? 'none' : 'flex',
                   flexDirection: 'column',
                   gap: '12px',
-                  maxHeight: '600px',
+                  maxHeight: 'calc(100vh - 200px)',
                   overflowY: 'auto',
-                  paddingRight: '8px'
+                  paddingRight: '8px',
+                  minHeight: '500px'
                 }}
                 className="custom-scrollbar"
               >
@@ -1301,6 +1366,74 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시' }) => {
                   });
                 })()}
               </div>
+
+              {/* 접힌 상태일 때의 간소화된 뷰 */}
+              {isSidebarCollapsed && (
+                <div style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  gap: '8px',
+                  marginTop: '20px'
+                }}>
+                  {/* 간소화된 헤더 */}
+                  <div style={{
+                    writing: 'vertical-rl',
+                    textOrientation: 'mixed',
+                    fontSize: '14px',
+                    fontWeight: 'bold',
+                    color: '#666',
+                    marginBottom: '12px'
+                  }}>
+                    순위
+                  </div>
+                  
+                  {/* 상위 3명만 간략히 표시 */}
+                  {(() => {
+                    const allStudentList = Object.keys(studentsData).map(studentName => ({
+                      studentName,
+                      recommendations: cumulativeRecommendations[studentName] || 0,
+                      icon: getStudentIcon(studentName)
+                    }))
+                    .sort((a, b) => b.recommendations - a.recommendations)
+                    .slice(0, 3);
+
+                    return allStudentList.map((item, index) => (
+                      <div
+                        key={item.studentName}
+                        style={{
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          gap: '4px',
+                          padding: '8px 4px',
+                          borderRadius: '8px',
+                          backgroundColor: index === 0 ? '#fff3cd' : index === 1 ? '#f8f9fa' : '#e2e3e5',
+                          border: index === 0 ? '2px solid #ffc107' : '1px solid #dee2e6',
+                          minHeight: '60px',
+                          width: '100%',
+                          maxWidth: '40px'
+                        }}
+                        title={`${item.studentName}: ${item.recommendations}개 추천`}
+                      >
+                        <div style={{ fontSize: '10px', fontWeight: 'bold', color: '#666' }}>
+                          {index + 1}
+                        </div>
+                        <div style={{ fontSize: '16px' }}>
+                          {item.icon}
+                        </div>
+                        <div style={{ 
+                          fontSize: '10px', 
+                          fontWeight: 'bold',
+                          color: index === 0 ? '#856404' : '#495057'
+                        }}>
+                          {item.recommendations}
+                        </div>
+                      </div>
+                    ));
+                  })()}
+                </div>
+              )}
             </div>
           </div>
         </div>

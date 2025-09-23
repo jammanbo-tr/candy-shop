@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Checkbox from '@mui/material/Checkbox';
+import { getPokemonName, addAnonymousModeListener, getAnonymousMode } from '../utils/anonymousMode';
 
 const levelImages = [
   '/lv1.png', // 알사탕
@@ -261,10 +262,22 @@ const cardActionButtonStyle = {
   margin: '0 2px'
 };
 
-const StudentCard = ({ student, selected, onSelect, onOptionClick, expEffect, levelUpEffect, renderCheckbox, onQuestClick, onQuestApprove, onQuestFail }) => {
+const StudentCard = ({ student, selected, onSelect, onOptionClick, expEffect, levelUpEffect, renderCheckbox, onQuestClick, onQuestApprove, onQuestFail, anonymousMode: legacyAnonymousMode, getPokemonName: legacyGetPokemonName }) => {
   // 진행 중인 퀘스트 목록
   const ongoingQuests = Array.isArray(student.quests) ? student.quests.filter(q => q.status === 'ongoing') : [];
   const [showQuestModal, setShowQuestModal] = useState(false);
+  
+  // StudentCard에서 직접 익명 모드 상태 관리
+  const [localAnonymousMode, setLocalAnonymousMode] = useState(false);
+  
+  useEffect(() => {
+    const removeListener = addAnonymousModeListener((newMode) => {
+      console.log('StudentCard 익명 모드 변경:', newMode);
+      setLocalAnonymousMode(newMode);
+    });
+    
+    return removeListener;
+  }, []);
 
   // 레벨업 필요 경험치 계산 함수
   const getRequiredExp = (level) => 150 + level * 10;
@@ -311,7 +324,7 @@ const StudentCard = ({ student, selected, onSelect, onOptionClick, expEffect, le
             style={{ width: 110, height: 110, objectFit: 'contain', display: 'inline-block' }}
           />
         </div>
-        <div style={{ fontWeight: 700, fontSize: 'clamp(1.33rem, 2.8vw, 1.5rem)', marginBottom: 17, color: '#222', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{student.name}</div>
+        <div style={{ fontWeight: 700, fontSize: 'clamp(1.33rem, 2.8vw, 1.5rem)', marginBottom: 17, color: '#222', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{getPokemonName(student.name, localAnonymousMode)}</div>
         <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 7, marginBottom: 7 }}>
           <span style={{ 
             color: '#1976d2', 

@@ -20,6 +20,7 @@ import { useAuthState } from 'react-firebase-hooks/auth';
 import EmotionAttendanceModal from '../components/EmotionAttendanceModal';
 import LearningJournalModal from '../components/LearningJournalModal';
 import DataBoardModal from '../components/DataBoardModal';
+import { getPokemonName, addAnonymousModeListener, getAnonymousMode } from '../utils/anonymousMode';
 
 // CSS 애니메이션 정의 (피버타임용)
 const feverAnimationCSS = `
@@ -2311,6 +2312,34 @@ _무중임_태_중_황태- 황무황---중태
   const [user, authLoading] = useAuthState(auth);
 
   const [showDiaryModal, setShowDiaryModal] = useState(false);
+  
+  // 익명 모드 상태 (초기값을 현재 글로벌 상태로 설정)
+  const [anonymousMode, setAnonymousMode] = useState(() => getAnonymousMode());
+
+  // 익명 모드 상태 변경 리스너 등록
+  useEffect(() => {
+    console.log('StudentPage: 익명 모드 리스너 등록 시작');
+    const setupListener = async () => {
+      const removeListener = await addAnonymousModeListener((newMode) => {
+        console.log('Student 페이지 익명 모드 변경:', newMode);
+        setAnonymousMode(newMode);
+      });
+      return removeListener;
+    };
+    
+    let cleanupFunction;
+    setupListener().then(cleanup => {
+      cleanupFunction = cleanup;
+    }).catch(error => {
+      console.error('StudentPage 익명 모드 리스너 설정 실패:', error);
+    });
+    
+    return () => {
+      if (cleanupFunction) {
+        cleanupFunction();
+      }
+    };
+  }, []);
 
   if (authLoading) return <div>로딩 중...</div>;
 
@@ -2530,7 +2559,15 @@ _무중임_태_중_황태- 황무황---중태
             <Box sx={{ flex: 1, p: '24px 18px 18px 18px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', minHeight: 180 }}>
               <Box sx={{ display: 'flex', flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', mb: 1 }}>
                 <Box>
-                  <Typography variant="h5" fontWeight="bold" sx={{ fontSize: '1.35rem', mb: 0.5 }}>{student.name}</Typography>
+                  <Typography variant="h5" fontWeight="bold" sx={{ fontSize: '1.35rem', mb: 0.5 }}>{(() => {
+                    const displayName = getPokemonName(student.name, anonymousMode);
+                    console.log('StudentPage 이름 표시:', { 
+                      originalName: student.name, 
+                      anonymousMode, 
+                      displayName 
+                    });
+                    return displayName;
+                  })()}</Typography>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5, flexWrap: 'nowrap' }}>
                     <span style={{ color: '#1976d2', fontWeight: 600, fontSize: 16, whiteSpace: 'nowrap' }}>Lv.{student.level}</span>
                     <span style={{ fontSize: 13, color: '#bbb', margin: '0 4px' }}>|</span>
@@ -2936,7 +2973,7 @@ _무중임_태_중_황태- 황무황---중태
                         }}
                       />
                     }
-                    label={friend.name}
+                    label={getPokemonName(friend.name, anonymousMode)}
                   />
                 );
               })}
@@ -3236,7 +3273,7 @@ _무중임_태_중_황태- 황무황---중태
                         gap: 6 
                       }}>
                         <span role="img" aria-label="friend">👥</span>
-                        {msg.fromName}님으로부터
+                        {getPokemonName(msg.fromName, anonymousMode)}님으로부터
                         <span style={{ fontSize: 12, color: '#666', fontWeight: 400 }}>
                           {new Date(msg.timestamp).toLocaleString('ko-KR', { 
                             month: 'short', 
@@ -4929,7 +4966,7 @@ _무중임_태_중_황태- 황무황---중태
                   if (friendId === studentId) return null; // 자기 자신 제외
                   return (
                     <option key={friendId} value={friendId}>
-                      {friend.name}
+                      {getPokemonName(friend.name, anonymousMode)}
                     </option>
                   );
                 })}

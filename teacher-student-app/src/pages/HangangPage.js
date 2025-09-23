@@ -554,12 +554,12 @@ ${responseTexts}
       let text;
       
       try {
-        response = await genAI.getGenerativeModel({ model: "gemini-1.5-flash" }).generateContent(prompt);
+        response = await genAI.getGenerativeModel({ model: "gemini-2.5-pro" }).generateContent(prompt);
         const result = await response.response;
         text = result.text().trim();
       } catch (flashError) {
         try {
-          response = await genAI.getGenerativeModel({ model: "gemini-pro" }).generateContent(prompt);
+          response = await genAI.getGenerativeModel({ model: "gemini-2.5-pro" }).generateContent(prompt);
           const result = await response.response;
           text = result.text().trim();
         } catch (proError) {
@@ -629,12 +629,12 @@ ${responseTexts}
       let text;
       
       try {
-        response = await genAI.getGenerativeModel({ model: "gemini-1.5-flash" }).generateContent(prompt);
+        response = await genAI.getGenerativeModel({ model: "gemini-2.5-pro" }).generateContent(prompt);
         const result = await response.response;
         text = result.text().trim();
       } catch (flashError) {
         try {
-          response = await genAI.getGenerativeModel({ model: "gemini-pro" }).generateContent(prompt);
+          response = await genAI.getGenerativeModel({ model: "gemini-2.5-pro" }).generateContent(prompt);
           const result = await response.response;
           text = result.text().trim();
         } catch (proError) {

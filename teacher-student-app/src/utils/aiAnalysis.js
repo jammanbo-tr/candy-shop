@@ -77,7 +77,7 @@ ${combinedContent}
   try {
     console.log('Gemini AI 분석 시작...');
     
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-latest" });
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-pro" });
     const result = await model.generateContent(prompt);
     const response = await result.response;
     const text = response.text();

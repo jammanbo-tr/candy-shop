@@ -314,15 +314,15 @@ ${allSentences}
       let text;
       
       try {
-        // 1차 시도: gemini-1.5-flash (무료 API에서 주로 지원)
-        response = await genAI.getGenerativeModel({ model: "gemini-1.5-flash" }).generateContent(prompt);
+        // 1차 시도: gemini-2.5-pro (무료 API에서 주로 지원)
+        response = await genAI.getGenerativeModel({ model: "gemini-2.5-pro" }).generateContent(prompt);
         const result = await response.response;
         text = result.text().trim();
       } catch (flashError) {
-        console.log('gemini-1.5-flash 모델 실패, gemini-pro 시도:', flashError);
+        console.log('gemini-2.5-pro 모델 실패, gemini-pro 시도:', flashError);
         try {
           // 2차 시도: gemini-pro
-          response = await genAI.getGenerativeModel({ model: "gemini-pro" }).generateContent(prompt);
+          response = await genAI.getGenerativeModel({ model: "gemini-2.5-pro" }).generateContent(prompt);
           const result = await response.response;
           text = result.text().trim();
         } catch (proError) {
