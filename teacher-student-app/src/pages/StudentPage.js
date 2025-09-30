@@ -255,6 +255,16 @@ const StudentPage = () => {
   const [tokenResetDate, setTokenResetDate] = useState(null);
   const [isSendingMessage, setIsSendingMessage] = useState(false);
   
+  // 비밀번호 관련 상태
+  const [studentPassword, setStudentPassword] = useState(null);
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [inputPassword, setInputPassword] = useState('');
+  const [passwordAuthEnabled, setPasswordAuthEnabled] = useState(true);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [authInput, setAuthInput] = useState('');
+  const [passwordCheckComplete, setPasswordCheckComplete] = useState(false);
+  
   // 역사 데이터 생성 관련 상태
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [historyEntryData, setHistoryEntryData] = useState({
@@ -1835,6 +1845,79 @@ _무중임_태_중_황태- 황무황---중태
     }
   }, [student?.level, studentLoaded]);
 
+  // 학생 비밀번호 체크
+  useEffect(() => {
+    if (!studentId) return;
+    
+    const checkPassword = async () => {
+      try {
+        console.log('비밀번호 체크 시작:', studentId);
+        const passwordDoc = await getDoc(doc(db, 'studentPasswords', studentId));
+        if (passwordDoc.exists()) {
+          const password = passwordDoc.data().password;
+          console.log('비밀번호 발견:', password);
+          setStudentPassword(password);
+        } else {
+          console.log('비밀번호 문서 없음');
+          setStudentPassword(null);
+        }
+        setPasswordCheckComplete(true);
+      } catch (error) {
+        console.error('비밀번호 체크 실패:', error);
+        setPasswordCheckComplete(true);
+      }
+    };
+    
+    checkPassword();
+  }, [studentId]);
+
+  // 비밀번호 인증 설정 확인
+  useEffect(() => {
+    const passwordAuthRef = doc(db, 'settings', 'passwordAuth');
+    const unsubscribe = onSnapshot(passwordAuthRef, (docSnap) => {
+      if (docSnap.exists()) {
+        const enabled = docSnap.data().enabled !== false;
+        console.log('비밀번호 인증 설정:', enabled);
+        setPasswordAuthEnabled(enabled);
+      } else {
+        console.log('비밀번호 인증 설정 문서 없음 - 기본값 true');
+        setPasswordAuthEnabled(true);
+      }
+    });
+    return () => unsubscribe();
+  }, []);
+
+  // 인증 상태 체크 및 모달 표시
+  useEffect(() => {
+    // 비밀번호 체크가 완료되지 않았으면 아직 결정하지 않음
+    if (!passwordCheckComplete) {
+      console.log('비밀번호 체크 대기 중...');
+      return;
+    }
+
+    console.log('인증 상태 체크:', {
+      studentId,
+      studentPassword,
+      passwordAuthEnabled,
+      isAuthenticated,
+      showAuthModal,
+      passwordCheckComplete
+    });
+    
+    // 비밀번호가 있고 인증이 활성화되어 있으며 아직 인증되지 않은 경우
+    if (studentPassword && passwordAuthEnabled && !isAuthenticated) {
+      console.log('비밀번호 인증 모달 표시');
+      setShowAuthModal(true);
+    } 
+    // 인증이 비활성화되었거나 비밀번호가 없는 경우
+    else if (!passwordAuthEnabled || !studentPassword) {
+      console.log('인증 불필요 - 자동 로그인');
+      if (!isAuthenticated) {
+        setIsAuthenticated(true);
+      }
+    }
+  }, [studentPassword, passwordAuthEnabled, passwordCheckComplete]);
+
   // 카드뽑기 모달 트리거 useEffect (최적화)
   useEffect(() => {
     if (!studentLoaded || !student) return;
@@ -1945,6 +2028,57 @@ _무중임_태_중_황태- 황무황---중태
   };
   // 알람 클릭 시 markStudentAlarmAsSeen(a.ts) 호출
   // ... existing code ...
+
+  // 학생 카드 클릭 처리 (비밀번호 설정 모달 열기)
+  const handleCardClick = async (e) => {
+    console.log('카드 클릭됨:', { studentId, studentPassword, hasPassword: !!studentPassword });
+    
+    // 이미 비밀번호가 있으면 아무것도 하지 않음
+    if (studentPassword) {
+      console.log('이미 비밀번호가 설정되어 있음:', studentPassword);
+      return;
+    }
+    
+    e.stopPropagation(); // 이벤트 전파 중단
+    setInputPassword(''); // 입력 필드 초기화
+    setShowPasswordModal(true);
+  };
+
+  // 비밀번호 저장 함수
+  const handleSavePassword = async () => {
+    // 4자리 숫자 검증
+    if (!/^\d{4}$/.test(inputPassword)) {
+      alert('4자리 숫자를 입력해주세요.');
+      return;
+    }
+    
+    try {
+      await setDoc(doc(db, 'studentPasswords', studentId), {
+        password: inputPassword,
+        createdAt: new Date(),
+        studentName: student?.name || 'Unknown'
+      });
+      setStudentPassword(inputPassword);
+      setShowPasswordModal(false);
+      console.log('비밀번호 저장 완료:', inputPassword);
+      alert('비밀번호가 설정되었습니다!');
+    } catch (error) {
+      console.error('비밀번호 저장 실패:', error);
+      alert('비밀번호 설정에 실패했습니다. 다시 시도해주세요.');
+    }
+  };
+
+  // 비밀번호 인증 함수
+  const handleAuthenticate = () => {
+    if (authInput === studentPassword) {
+      setIsAuthenticated(true);
+      setShowAuthModal(false);
+      setAuthInput('');
+    } else {
+      alert('비밀번호가 틀렸습니다.');
+      setAuthInput('');
+    }
+  };
 
   // ... feverTime 상태 useState ...
   const [feverActive, setFeverActive] = useState(false);
@@ -2381,6 +2515,8 @@ _무중임_태_중_황태- 황무황---중태
   }
 
   // 로그인한 경우: 로그아웃 버튼 + 기존 학생 페이지 내용
+  // 인증되지 않은 경우는 모달로 처리하므로 로딩 화면 제거
+
   return (
     <div style={{ 
       minHeight: '100vh', 
@@ -2393,7 +2529,8 @@ _무중임_태_중_황태- 황무황---중태
       backgroundSize: 'cover', 
       backgroundPosition: 'center', 
       paddingBottom: 80,
-      transition: feverBgActive ? 'none' : 'background-image 0.3s ease'
+      transition: feverBgActive ? 'none' : 'background-image 0.3s ease',
+      pointerEvents: showAuthModal ? 'none' : 'auto'
     }}>
       <div style={{ position: 'fixed', top: 24, right: 32, zIndex: 2000, display: 'flex', flexDirection: 'row', gap: 18, alignItems: 'center' }}>
         {/* 피버타임 상태 표시 아이콘 */}
@@ -2513,23 +2650,59 @@ _무중임_태_중_황태- 황무황---중태
         <button onClick={() => setShowBoardModal(true)} style={{ fontWeight: 700, borderRadius: 999, background: '#e0f7fa', color: '#1976d2', border: 'none', padding: '10px 32px', fontSize: 17, boxShadow: '0 2px 8px #b2ebf240', cursor: 'pointer', transition: 'all 0.2s' }}>게시판 입장</button>
       </div>
       <div>
-        <Card sx={{
-          maxWidth: 480,
-          width: 'min(95vw, 480px)',
-          minHeight: 340,
-          mx: 'auto',
-          my: 4,
-          borderRadius: 6,
-          border: '3px solid #a7d7c5',
-          boxShadow: '0 2px 16px #a7d7c540',
-          background: '#fff',
-          position: 'relative',
-          p: 0,
-          overflow: 'visible',
-        }}>
+        <Card 
+          sx={{
+            maxWidth: 480,
+            width: 'min(95vw, 480px)',
+            minHeight: 340,
+            mx: 'auto',
+            my: 4,
+            borderRadius: 6,
+            border: studentPassword ? '3px solid #a7d7c5' : '3px solid #ff9800',
+            boxShadow: studentPassword ? '0 2px 16px #a7d7c540' : '0 2px 16px rgba(255,152,0,0.3)',
+            background: '#fff',
+            position: 'relative',
+            p: 0,
+            overflow: 'visible',
+            transition: 'transform 0.2s, box-shadow 0.2s, border 0.2s'
+          }}>
+          {/* 비밀번호 설정 안내 (아직 설정하지 않은 경우) */}
+          {!studentPassword && (
+            <div 
+              onClick={handleCardClick}
+              style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                right: 0,
+                background: 'linear-gradient(135deg, #ff9800, #ffa726)',
+                color: 'white',
+                padding: '12px 16px',
+                borderRadius: '6px 6px 0 0',
+                textAlign: 'center',
+                fontSize: 14,
+                fontWeight: 600,
+                cursor: 'pointer',
+                zIndex: 10,
+                boxShadow: '0 2px 8px rgba(255,152,0,0.3)',
+                transition: 'all 0.2s'
+              }}
+              onMouseEnter={(e) => {
+                e.target.style.background = 'linear-gradient(135deg, #f57c00, #ff9800)';
+                e.target.style.transform = 'translateY(-1px)';
+              }}
+              onMouseLeave={(e) => {
+                e.target.style.background = 'linear-gradient(135deg, #ff9800, #ffa726)';
+                e.target.style.transform = 'translateY(0)';
+              }}
+            >
+              🔐 클릭하여 비밀번호 설정하기
+            </div>
+          )}
+
           {/* 감정 이모티콘: 카드 오른쪽 상단 */}
 
-          <Box sx={{ display: 'flex', flexDirection: 'row', alignItems: 'stretch', width: '100%', p: 0 }}>
+          <Box sx={{ display: 'flex', flexDirection: 'row', alignItems: 'stretch', width: '100%', p: 0, pt: studentPassword ? 0 : 5 }}>
             <Box sx={{
               width: 140, minWidth: 120, maxWidth: 160, background: '#e3f2fd', borderRadius: '18px 0 0 18px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', py: 4, px: 2, boxShadow: '2px 0 12px #b2ebf220',
             }}>
@@ -5166,6 +5339,250 @@ _무중임_태_중_황태- 황무황---중태
           60% { transform: translateY(-5px); }
         }
       `}</style>
+
+      {/* 비밀번호 설정 모달 */}
+      {showPasswordModal && (
+        <div style={{ 
+          position: 'fixed', 
+          top: 0, 
+          left: 0, 
+          width: '100vw', 
+          height: '100vh', 
+          background: 'rgba(0,0,0,0.5)', 
+          display: 'flex', 
+          alignItems: 'center', 
+          justifyContent: 'center', 
+          zIndex: 9999 
+        }}>
+          <div style={{ 
+            background: '#fff', 
+            borderRadius: 20, 
+            padding: '32px', 
+            maxWidth: 400, 
+            width: '90vw',
+            textAlign: 'center',
+            boxShadow: '0 8px 32px rgba(0,0,0,0.2)',
+            border: '3px solid #ff9800'
+          }}>
+            <div style={{ fontSize: 48, marginBottom: 16 }}>🔐</div>
+            <h2 style={{ 
+              margin: '0 0 16px 0', 
+              color: '#ff9800', 
+              fontWeight: 700,
+              fontSize: 24
+            }}>
+              비밀번호 설정
+            </h2>
+            <p style={{ 
+              margin: '0 0 24px 0', 
+              color: '#666', 
+              fontSize: 16,
+              lineHeight: 1.5
+            }}>
+              앞으로 사용할 4자리 숫자 비밀번호를 입력하세요.
+            </p>
+            <input
+              type="text"
+              value={inputPassword}
+              onChange={(e) => {
+                // 숫자만 입력 가능하고 4자리 제한
+                const value = e.target.value.replace(/\D/g, '').slice(0, 4);
+                setInputPassword(value);
+              }}
+              placeholder="4자리 숫자"
+              maxLength={4}
+              style={{ 
+                background: '#f8f9fa',
+                border: '2px solid #ff9800',
+                borderRadius: 12,
+                padding: '16px',
+                marginBottom: 24,
+                fontSize: 32,
+                fontWeight: 700,
+                color: '#ff9800',
+                fontFamily: 'monospace',
+                letterSpacing: 8,
+                textAlign: 'center',
+                width: '180px',
+                outline: 'none'
+              }}
+              autoFocus
+            />
+            <p style={{ 
+              margin: '0 0 24px 0', 
+              color: '#d32f2f', 
+              fontSize: 14,
+              fontWeight: 600
+            }}>
+              이 비밀번호를 꼭 기억해 주세요!
+            </p>
+            <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
+              <button
+                onClick={() => setShowPasswordModal(false)}
+                style={{
+                  background: '#e0e0e0',
+                  color: '#666',
+                  border: 'none',
+                  borderRadius: 12,
+                  padding: '12px 24px',
+                  fontSize: 16,
+                  fontWeight: 600,
+                  cursor: 'pointer'
+                }}
+              >
+                취소
+              </button>
+              <button
+                onClick={handleSavePassword}
+                disabled={inputPassword.length !== 4}
+                style={{
+                  background: inputPassword.length === 4 ? '#ff9800' : '#ccc',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: 12,
+                  padding: '12px 24px',
+                  fontSize: 16,
+                  fontWeight: 600,
+                  cursor: inputPassword.length === 4 ? 'pointer' : 'not-allowed',
+                  boxShadow: inputPassword.length === 4 ? '0 4px 12px rgba(255,152,0,0.3)' : 'none'
+                }}
+              >
+                설정
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 비밀번호 인증 모달 */}
+      {console.log('showAuthModal 렌더링 체크:', showAuthModal)}
+      {showAuthModal && (
+        <div style={{ 
+          position: 'fixed', 
+          top: 0, 
+          left: 0, 
+          width: '100vw', 
+          height: '100vh', 
+          background: 'rgba(0,0,0,0.95)', 
+          display: 'flex', 
+          alignItems: 'center', 
+          justifyContent: 'center', 
+          zIndex: 99999,
+          backdropFilter: 'blur(10px)'
+        }}>
+          <div style={{ 
+            background: '#fff', 
+            borderRadius: 20, 
+            padding: '40px', 
+            maxWidth: 400, 
+            width: '90vw',
+            textAlign: 'center',
+            boxShadow: '0 12px 48px rgba(0,0,0,0.3)',
+            border: '3px solid #2196f3'
+          }}>
+            <div style={{ fontSize: 64, marginBottom: 24 }}>🔐</div>
+            <h2 style={{ 
+              margin: '0 0 16px 0', 
+              color: '#2196f3', 
+              fontWeight: 700,
+              fontSize: 28
+            }}>
+              비밀번호 입력
+            </h2>
+            <p style={{ 
+              margin: '0 0 32px 0', 
+              color: '#666', 
+              fontSize: 16,
+              lineHeight: 1.5
+            }}>
+              설정한 4자리 비밀번호를 입력하세요.
+            </p>
+            <input
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              value={authInput}
+              onChange={(e) => {
+                const value = e.target.value.replace(/\D/g, '').slice(0, 4);
+                setAuthInput(value);
+              }}
+              onInput={(e) => {
+                const value = e.target.value.replace(/\D/g, '').slice(0, 4);
+                setAuthInput(value);
+              }}
+              placeholder="••••"
+              maxLength={4}
+              style={{ 
+                background: '#f8f9fa',
+                border: '3px solid #2196f3',
+                borderRadius: 16,
+                padding: '20px',
+                marginBottom: 32,
+                fontSize: 36,
+                fontWeight: 700,
+                color: '#2196f3',
+                fontFamily: 'monospace',
+                letterSpacing: 12,
+                textAlign: 'center',
+                width: '200px',
+                outline: 'none',
+                pointerEvents: 'auto',
+                userSelect: 'auto'
+              }}
+              autoFocus
+              autoComplete="off"
+              onKeyPress={(e) => {
+                if (e.key === 'Enter' && authInput.length === 4) {
+                  handleAuthenticate();
+                }
+                // 숫자가 아닌 입력 방지
+                if (!/[0-9]/.test(e.key) && e.key !== 'Backspace' && e.key !== 'Delete' && e.key !== 'Enter') {
+                  e.preventDefault();
+                }
+              }}
+              onFocus={(e) => e.target.select()}
+            />
+            <div style={{ display: 'flex', gap: 16, justifyContent: 'center' }}>
+              <button
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  console.log('입장하기 버튼 클릭됨, authInput:', authInput, 'length:', authInput.length);
+                  if (authInput.length === 4) {
+                    handleAuthenticate();
+                  } else {
+                    alert('4자리 비밀번호를 모두 입력해주세요.');
+                  }
+                }}
+                disabled={authInput.length !== 4}
+                style={{
+                  background: authInput.length === 4 ? '#2196f3' : '#ccc',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: 16,
+                  padding: '16px 32px',
+                  fontSize: 18,
+                  fontWeight: 700,
+                  cursor: authInput.length === 4 ? 'pointer' : 'not-allowed',
+                  boxShadow: authInput.length === 4 ? '0 6px 20px rgba(33,150,243,0.4)' : 'none',
+                  transition: 'all 0.2s',
+                  pointerEvents: 'auto',
+                  userSelect: 'none'
+                }}
+              >
+                입장하기
+              </button>
+            </div>
+            <p style={{ 
+              margin: '24px 0 0 0', 
+              color: '#999', 
+              fontSize: 12
+            }}>
+              비밀번호를 잊어버렸다면 선생님께 문의하세요.
+            </p>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

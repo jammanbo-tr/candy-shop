@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import Checkbox from '@mui/material/Checkbox';
-import { getPokemonName, addAnonymousModeListener, getAnonymousMode } from '../utils/anonymousMode';
+import { getPokemonName } from '../utils/anonymousMode';
+import { doc, onSnapshot } from 'firebase/firestore';
+import { db } from '../firebase';
 
 const levelImages = [
   '/lv1.png', // 알사탕
@@ -267,16 +269,24 @@ const StudentCard = ({ student, selected, onSelect, onOptionClick, expEffect, le
   const ongoingQuests = Array.isArray(student.quests) ? student.quests.filter(q => q.status === 'ongoing') : [];
   const [showQuestModal, setShowQuestModal] = useState(false);
   
-  // StudentCard에서 직접 익명 모드 상태 관리
-  const [localAnonymousMode, setLocalAnonymousMode] = useState(false);
+  // StudentCard에서 포켓몬 모드 상태 관리 (학생 이름 변환용)
+  const [pokemonMode, setPokemonMode] = useState(false);
   
   useEffect(() => {
-    const removeListener = addAnonymousModeListener((newMode) => {
-      console.log('StudentCard 익명 모드 변경:', newMode);
-      setLocalAnonymousMode(newMode);
+    const pokemonModeRef = doc(db, 'settings', 'pokemonMode');
+    const unsubscribe = onSnapshot(pokemonModeRef, (docSnap) => {
+      if (docSnap.exists()) {
+        const newMode = docSnap.data().enabled || false;
+        console.log('StudentCard 포켓몬 모드 변경:', newMode);
+        setPokemonMode(newMode);
+      } else {
+        setPokemonMode(false);
+      }
+    }, (error) => {
+      console.error('포켓몬 모드 상태 구독 실패:', error);
     });
     
-    return removeListener;
+    return () => unsubscribe();
   }, []);
 
   // 레벨업 필요 경험치 계산 함수
@@ -324,7 +334,7 @@ const StudentCard = ({ student, selected, onSelect, onOptionClick, expEffect, le
             style={{ width: 110, height: 110, objectFit: 'contain', display: 'inline-block' }}
           />
         </div>
-        <div style={{ fontWeight: 700, fontSize: 'clamp(1.33rem, 2.8vw, 1.5rem)', marginBottom: 17, color: '#222', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{getPokemonName(student.name, localAnonymousMode)}</div>
+        <div style={{ fontWeight: 700, fontSize: 'clamp(1.33rem, 2.8vw, 1.5rem)', marginBottom: 17, color: '#222', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{getPokemonName(student.name, pokemonMode)}</div>
         <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 7, marginBottom: 7 }}>
           <span style={{ 
             color: '#1976d2', 

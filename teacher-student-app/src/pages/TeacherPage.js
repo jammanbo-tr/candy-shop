@@ -92,6 +92,9 @@ const TeacherPage = () => {
   const [selectedRequest, setSelectedRequest] = useState(null);
   const [alarmTab, setAlarmTab] = useState('message');
   const [anonymousMode, setAnonymousMode] = useState(false);
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [studentPasswords, setStudentPasswords] = useState({});
+  const [passwordAuthEnabled, setPasswordAuthEnabled] = useState(true);
   const [questExp, setQuestExp] = useState(10);
   const [questActionStudent, setQuestActionStudent] = useState(null);
   const [questActionQuest, setQuestActionQuest] = useState(null);
@@ -388,31 +391,59 @@ const TeacherPage = () => {
     }
   }, [firestoreError]);
 
-  // 익명 모드 데이터베이스 리스너 설정
+  // 포켓몬 모드 데이터베이스 리스너 설정 (학생 카드 이름 변환용)
   useEffect(() => {
-    console.log('TeacherPage: 익명 모드 리스너 등록');
+    console.log('TeacherPage: 포켓몬 모드 리스너 등록');
     
-    const setupListener = async () => {
-      const removeListener = await addAnonymousModeListener((newMode) => {
-        console.log('TeacherPage: 익명 모드 상태 변경됨:', newMode);
+    const pokemonModeRef = doc(db, 'settings', 'pokemonMode');
+    const unsubscribe = onSnapshot(pokemonModeRef, (docSnap) => {
+      if (docSnap.exists()) {
+        const newMode = docSnap.data().enabled || false;
+        console.log('TeacherPage: 포켓몬 모드 상태 변경됨:', newMode);
         setAnonymousMode(newMode);
-      });
-      
-      return removeListener;
-    };
-    
-    let removeListener;
-    setupListener().then(fn => {
-      removeListener = fn;
+      } else {
+        setAnonymousMode(false);
+      }
+    }, (error) => {
+      console.error('포켓몬 모드 상태 구독 실패:', error);
     });
     
-    return () => {
-      if (removeListener) removeListener();
-    };
+    return () => unsubscribe();
   }, []);
 
   // 공지사항 목록 불러오기
   useEffect(() => { fetchNotices(); }, []);
+
+  // 학생 비밀번호 목록 불러오기
+  useEffect(() => {
+    const loadStudentPasswords = async () => {
+      try {
+        const passwordsRef = collection(db, 'studentPasswords');
+        const snapshot = await getDocs(passwordsRef);
+        const passwords = {};
+        snapshot.docs.forEach(doc => {
+          passwords[doc.id] = doc.data().password;
+        });
+        setStudentPasswords(passwords);
+      } catch (error) {
+        console.error('학생 비밀번호 로딩 실패:', error);
+      }
+    };
+    loadStudentPasswords();
+  }, []);
+
+  // 비밀번호 인증 설정 불러오기
+  useEffect(() => {
+    const passwordAuthRef = doc(db, 'settings', 'passwordAuth');
+    const unsubscribe = onSnapshot(passwordAuthRef, (docSnap) => {
+      if (docSnap.exists()) {
+        setPasswordAuthEnabled(docSnap.data().enabled !== false); // 기본값은 true
+      } else {
+        setPasswordAuthEnabled(true); // 문서가 없으면 기본값 true
+      }
+    });
+    return () => unsubscribe();
+  }, []);
 
   // 단소급수미션 관련 상수와 함수들
   const RECORDER_STEPS = [
@@ -1448,6 +1479,49 @@ const TeacherPage = () => {
     }
   };
 
+  // 경험치 초과 문제 수정 함수
+  const handleFixExpOverflow = async () => {
+    if (!window.confirm('경험치가 초과된 학생들의 레벨을 자동 조정합니다. 진행할까요?')) return;
+    if (!studentsSnapshot) return;
+    
+    let fixedCount = 0;
+    for (const docSnap of studentsSnapshot.docs) {
+      const student = docSnap.data();
+      let exp = typeof student.exp === 'number' && !isNaN(student.exp) ? student.exp : 0;
+      let level = typeof student.level === 'number' && !isNaN(student.level) ? student.level : 0;
+      let required = getRequiredExp(level);
+      let hasChanged = false;
+      
+      // 경험치가 초과된 경우 레벨업 처리
+      while (exp >= required) {
+        exp -= required;
+        level += 1;
+        required = getRequiredExp(level);
+        hasChanged = true;
+      }
+      
+      // 변경사항이 있는 경우 업데이트
+      if (hasChanged) {
+        const studentRef = doc(db, 'students', docSnap.id);
+        await updateDoc(studentRef, {
+          exp: exp,
+          level: level,
+          expEvents: arrayUnion({
+            type: 'levelUp',
+            amount: 0,
+            ts: Date.now(),
+            text: '경험치 초과 자동 레벨업',
+            result: 'auto-fix'
+          })
+        });
+        fixedCount++;
+        console.log(`${student.name}: 레벨 ${level - Math.floor((student.exp - exp) / required)} → ${level}, 경험치 ${student.exp} → ${exp}`);
+      }
+    }
+    
+    alert(`${fixedCount}명의 학생 레벨이 수정되었습니다.`);
+  };
+
   // 레벨업 이력 마이그레이션 함수 (1개씩 안전하게 추가)
   const handleLevelUpMigration = async () => {
     if (!window.confirm('모든 학생의 과거 레벨업 이력을 분석해 levelUp 이벤트를 추가합니다. 진행할까요?')) return;
@@ -2015,6 +2089,45 @@ const TeacherPage = () => {
             <BarChartIcon style={{ fontSize: 20 }} />
             링크 통계
           </button>
+          <button
+            onClick={handleFixExpOverflow}
+            style={{
+              background: '#f3e5f5',
+              border: '2px solid #9c27b0',
+              color: '#7b1fa2',
+              fontWeight: 'bold',
+              borderRadius: 12,
+              boxShadow: '0 2px 8px #ce93d830',
+              padding: '8px 18px',
+              fontSize: 14,
+              minWidth: 70,
+              transition: 'all 0.2s',
+              cursor: 'pointer',
+              opacity: 1
+            }}
+          >경험치 수정</button>
+          <button
+            onClick={() => setShowSettingsModal(true)}
+            style={{
+              background: '#f3e5f5',
+              border: '2px solid #9c27b0',
+              color: '#7b1fa2',
+              fontWeight: 'bold',
+              borderRadius: 12,
+              boxShadow: '0 2px 8px #ce93d830',
+              padding: '8px 18px',
+              fontSize: 14,
+              minWidth: 70,
+              transition: 'all 0.2s',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8
+            }}
+          >
+            <span style={{ fontSize: 16 }}>⚙️</span>
+            설정
+          </button>
         </div>
         {alertMsg && (
           <div style={{position:'fixed',top:24,left:'50%',transform:'translateX(-50%)',background:'#ffebee',color:'#c62828',padding:'12px 32px',borderRadius:12,fontWeight:600,fontSize:16,zIndex:9999,boxShadow:'0 2px 8px #c6282820'}}
@@ -2338,47 +2451,6 @@ const TeacherPage = () => {
                 <>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                     <div style={{ fontWeight: 600, color: '#1976d2' }}>모든 학생의 칭찬 내역</div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <span style={{ fontSize: 13, color: '#666' }}>익명 모드</span>
-                      <button 
-                        onClick={async () => {
-                          const newMode = !anonymousMode;
-                          console.log('Teacher 페이지 익명 모드 토글 클릭:', anonymousMode, '->', newMode);
-                          try {
-                            await setDatabaseAnonymousMode(newMode);
-                            console.log('데이터베이스 익명 모드 설정 성공:', newMode);
-                          } catch (error) {
-                            console.error('익명 모드 설정 실패:', error);
-                          }
-                        }}
-                        style={{
-                          width: 44,
-                          height: 24,
-                          borderRadius: 12,
-                          border: 'none',
-                          background: anonymousMode ? '#1976d2' : '#ccc',
-                          position: 'relative',
-                          cursor: 'pointer',
-                          transition: 'background-color 0.3s',
-                          pointerEvents: 'auto',
-                          zIndex: 10,
-                          outline: 'none'
-                        }}
-                      >
-                        <div style={{
-                          width: 20,
-                          height: 20,
-                          borderRadius: '50%',
-                          background: '#fff',
-                          position: 'absolute',
-                          top: 2,
-                          left: anonymousMode ? 22 : 2,
-                          transition: 'left 0.3s',
-                          boxShadow: '0 1px 3px rgba(0,0,0,0.3)',
-                          pointerEvents: 'none'
-                        }} />
-                      </button>
-                    </div>
                   </div>
                   <ul style={{ listStyle: 'none', padding: 0, margin: 0, maxHeight: 350, overflowY: 'auto' }}>
                     {studentsSnapshot && studentsSnapshot.docs.flatMap(doc => {
@@ -4467,6 +4539,212 @@ const TeacherPage = () => {
         isOpen={showLearningJournalModal}
         onClose={() => setShowLearningJournalModal(false)}
       />
+
+      {/* 설정 모달 */}
+      {showSettingsModal && (
+        <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 }}>
+          <div style={{ background: '#fff', padding: '32px', borderRadius: 20, maxWidth: 600, width: '90vw', maxHeight: '80vh', overflowY: 'auto', boxShadow: '0 8px 32px rgba(0,0,0,0.2)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+              <h2 style={{ margin: 0, color: '#1976d2', fontWeight: 700 }}>⚙️ 교사 설정</h2>
+              <button 
+                onClick={() => setShowSettingsModal(false)}
+                style={{ background: 'none', border: 'none', fontSize: '24px', cursor: 'pointer', color: '#666' }}
+              >×</button>
+            </div>
+
+            {/* 포켓몬 모드 설정 */}
+            <div style={{ marginBottom: 32, padding: '20px', border: '2px solid #e3f2fd', borderRadius: 12, background: '#fafafa' }}>
+              <h3 style={{ margin: '0 0 16px 0', color: '#1976d2', fontWeight: 600 }}>🎮 포켓몬 모드</h3>
+              <p style={{ margin: '0 0 16px 0', color: '#666', fontSize: 14 }}>학생 카드에서 이름을 포켓몬 이름으로 표시합니다.</p>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <span style={{ fontSize: 14, color: '#666' }}>포켓몬 모드</span>
+                <button 
+                  onClick={async () => {
+                    const newMode = !anonymousMode;
+                    try {
+                      await setDoc(doc(db, 'settings', 'pokemonMode'), {
+                        enabled: newMode,
+                        updatedAt: new Date(),
+                        updatedBy: 'teacher'
+                      });
+                    } catch (error) {
+                      console.error('포켓몬 모드 설정 실패:', error);
+                    }
+                  }}
+                  style={{
+                    width: 50,
+                    height: 28,
+                    borderRadius: 14,
+                    border: 'none',
+                    background: anonymousMode ? '#4caf50' : '#ccc',
+                    position: 'relative',
+                    cursor: 'pointer',
+                    transition: 'background-color 0.3s',
+                    outline: 'none'
+                  }}
+                >
+                  <div style={{
+                    width: 24,
+                    height: 24,
+                    borderRadius: '50%',
+                    background: '#fff',
+                    position: 'absolute',
+                    top: 2,
+                    left: anonymousMode ? 24 : 2,
+                    transition: 'left 0.3s',
+                    boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
+                  }} />
+                </button>
+                <span style={{ fontSize: 14, fontWeight: 600, color: anonymousMode ? '#4caf50' : '#666' }}>
+                  {anonymousMode ? '활성화됨' : '비활성화됨'}
+                </span>
+              </div>
+            </div>
+
+            {/* 비밀번호 인증 설정 */}
+            <div style={{ marginBottom: 32, padding: '20px', border: '2px solid #e8f5e8', borderRadius: 12, background: '#fafafa' }}>
+              <h3 style={{ margin: '0 0 16px 0', color: '#2e7d32', fontWeight: 600 }}>🔒 비밀번호 인증 설정</h3>
+              <p style={{ margin: '0 0 16px 0', color: '#666', fontSize: 14 }}>학생들이 페이지 접속 시 비밀번호 입력을 요구할지 설정합니다.</p>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <span style={{ fontSize: 14, color: '#666' }}>비밀번호 인증</span>
+                <button 
+                  onClick={async () => {
+                    const newEnabled = !passwordAuthEnabled;
+                    try {
+                      await setDoc(doc(db, 'settings', 'passwordAuth'), {
+                        enabled: newEnabled,
+                        updatedAt: new Date(),
+                        updatedBy: 'teacher'
+                      });
+                    } catch (error) {
+                      console.error('비밀번호 인증 설정 실패:', error);
+                    }
+                  }}
+                  style={{
+                    width: 50,
+                    height: 28,
+                    borderRadius: 14,
+                    border: 'none',
+                    background: passwordAuthEnabled ? '#4caf50' : '#ccc',
+                    position: 'relative',
+                    cursor: 'pointer',
+                    transition: 'background-color 0.3s',
+                    outline: 'none'
+                  }}
+                >
+                  <div style={{
+                    width: 24,
+                    height: 24,
+                    borderRadius: '50%',
+                    background: '#fff',
+                    position: 'absolute',
+                    top: 2,
+                    left: passwordAuthEnabled ? 24 : 2,
+                    transition: 'left 0.3s',
+                    boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
+                  }} />
+                </button>
+                <span style={{ fontSize: 14, fontWeight: 600, color: passwordAuthEnabled ? '#4caf50' : '#666' }}>
+                  {passwordAuthEnabled ? '활성화됨' : '비활성화됨'}
+                </span>
+              </div>
+              <p style={{ margin: '12px 0 0 0', color: '#999', fontSize: 12 }}>
+                비활성화하면 모든 학생이 비밀번호 없이 접속할 수 있습니다.
+              </p>
+            </div>
+
+            {/* 학생 비밀번호 관리 */}
+            <div style={{ padding: '20px', border: '2px solid #fff3e0', borderRadius: 12, background: '#fafafa' }}>
+              <h3 style={{ margin: '0 0 16px 0', color: '#e65100', fontWeight: 600 }}>🔐 학생 비밀번호 관리</h3>
+              <p style={{ margin: '0 0 16px 0', color: '#666', fontSize: 14 }}>학생들이 설정한 4자리 비밀번호를 관리할 수 있습니다.</p>
+              
+              <div style={{ maxHeight: 300, overflowY: 'auto', border: '1px solid #e0e0e0', borderRadius: 8, background: '#fff' }}>
+                {studentsSnapshot && studentsSnapshot.docs.length > 0 ? (
+                  studentsSnapshot.docs.map(doc => {
+                    const student = doc.data();
+                    const studentId = doc.id;
+                    const password = studentPasswords[studentId] || '미설정';
+                    
+                    return (
+                      <div key={studentId} style={{ 
+                        display: 'flex', 
+                        justifyContent: 'space-between', 
+                        alignItems: 'center', 
+                        padding: '12px 16px', 
+                        borderBottom: '1px solid #f0f0f0' 
+                      }}>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontWeight: 600, color: '#333' }}>{student.name}</div>
+                          <div style={{ fontSize: 12, color: '#666' }}>레벨 {student.level || 1}</div>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                          <span style={{ 
+                            fontFamily: 'monospace', 
+                            fontSize: 16, 
+                            fontWeight: 600, 
+                            color: password === '미설정' ? '#ccc' : '#333',
+                            minWidth: 60,
+                            textAlign: 'center'
+                          }}>
+                            {password}
+                          </span>
+                          {password !== '미설정' && (
+                            <button
+                              onClick={async () => {
+                                try {
+                                  await setDoc(doc(db, 'studentPasswords', studentId), { password: '0000' });
+                                  setStudentPasswords(prev => ({ ...prev, [studentId]: '0000' }));
+                                } catch (error) {
+                                  console.error('비밀번호 초기화 실패:', error);
+                                }
+                              }}
+                              style={{
+                                background: '#ffebee',
+                                border: '1px solid #f44336',
+                                color: '#d32f2f',
+                                borderRadius: 6,
+                                padding: '4px 8px',
+                                fontSize: 12,
+                                cursor: 'pointer',
+                                fontWeight: 600
+                              }}
+                            >
+                              초기화
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })
+                ) : (
+                  <div style={{ padding: '16px', textAlign: 'center', color: '#666' }}>
+                    학생이 없습니다.
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'center', marginTop: 24 }}>
+              <button 
+                onClick={() => setShowSettingsModal(false)}
+                style={{
+                  background: '#1976d2',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: 12,
+                  padding: '12px 32px',
+                  fontSize: 16,
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  boxShadow: '0 4px 12px rgba(25,118,210,0.3)'
+                }}
+              >
+                닫기
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </React.Fragment>
   );
 }

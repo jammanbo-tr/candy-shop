@@ -189,18 +189,18 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시' }) => {
     }
   };
 
-  // Firebase 익명 모드 상태 구독
+  // 데이터보드 전용 익명 모드 상태 구독
   useEffect(() => {
     if (!isOpen) return;
 
-    const unsubscribe = onSnapshot(doc(db, 'settings', 'anonymousMode'), (docSnap) => {
+    const unsubscribe = onSnapshot(doc(db, 'settings', 'dataBoardAnonymousMode'), (docSnap) => {
       if (docSnap.exists()) {
         setIsAnonymousMode(docSnap.data().enabled || false);
       } else {
         setIsAnonymousMode(false);
       }
     }, (error) => {
-      console.error('익명 모드 상태 구독 실패:', error);
+      console.error('데이터보드 익명 모드 상태 구독 실패:', error);
     });
 
     return () => unsubscribe();

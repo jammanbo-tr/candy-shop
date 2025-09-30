@@ -55,7 +55,7 @@ const LearningJournalViewModal = ({ isOpen, onClose, selectedDate, refreshData }
   const [pendingMove, setPendingMove] = useState(null);
   const [showImageViewer, setShowImageViewer] = useState(false);
   const [selectedImageData, setSelectedImageData] = useState(null);
-  const [isAnonymousMode, setIsAnonymousMode] = useState(false);
+  const [dataBoardAnonymousMode, setDataBoardAnonymousMode] = useState(false);
 
   const getScoreColor = (score, type) => {
     const numScore = parseFloat(score) || 0;
@@ -441,33 +441,33 @@ const LearningJournalViewModal = ({ isOpen, onClose, selectedDate, refreshData }
     }
   };
 
-  // 익명 모드 Firebase 동기화
+  // 데이터보드 전용 익명 모드 Firebase 동기화
   const toggleAnonymousMode = async () => {
-    const newMode = !isAnonymousMode;
-    setIsAnonymousMode(newMode);
+    const newMode = !dataBoardAnonymousMode;
+    setDataBoardAnonymousMode(newMode);
     
     try {
-      await setDoc(doc(db, 'settings', 'anonymousMode'), {
+      await setDoc(doc(db, 'settings', 'dataBoardAnonymousMode'), {
         enabled: newMode,
         updatedAt: new Date(),
         updatedBy: 'teacher'
       });
     } catch (error) {
-      console.error('익명 모드 설정 저장 실패:', error);
+      console.error('데이터보드 익명 모드 설정 저장 실패:', error);
     }
   };
 
-  // 익명 모드 상태 실시간 구독
+  // 데이터보드 전용 익명 모드 상태 실시간 구독
   useEffect(() => {
     if (!isOpen) return;
 
-    const anonymousModeRef = doc(db, 'settings', 'anonymousMode');
-    const unsubscribe = onSnapshot(anonymousModeRef, (doc) => {
+    const dataBoardAnonymousModeRef = doc(db, 'settings', 'dataBoardAnonymousMode');
+    const unsubscribe = onSnapshot(dataBoardAnonymousModeRef, (doc) => {
       if (doc.exists()) {
-        setIsAnonymousMode(doc.data().enabled || false);
+        setDataBoardAnonymousMode(doc.data().enabled || false);
       }
     }, (error) => {
-      console.error('익명 모드 상태 구독 실패:', error);
+      console.error('데이터보드 익명 모드 상태 구독 실패:', error);
     });
 
     return unsubscribe;
@@ -739,8 +739,8 @@ const LearningJournalViewModal = ({ isOpen, onClose, selectedDate, refreshData }
                 alignItems: 'center',
                 gap: '8px',
                 padding: '8px 12px',
-                backgroundColor: isAnonymousMode ? '#fff3e0' : '#f8f9fa',
-                border: isAnonymousMode ? '2px solid #ff9800' : '2px solid #e0e0e0',
+                backgroundColor: dataBoardAnonymousMode ? '#fff3e0' : '#f8f9fa',
+                border: dataBoardAnonymousMode ? '2px solid #ff9800' : '2px solid #e0e0e0',
                 borderRadius: '8px',
                 cursor: 'pointer',
                 transition: 'all 0.2s ease'
@@ -751,7 +751,7 @@ const LearningJournalViewModal = ({ isOpen, onClose, selectedDate, refreshData }
                 <div style={{
                   width: '40px',
                   height: '20px',
-                  backgroundColor: isAnonymousMode ? '#ff9800' : '#e0e0e0',
+                  backgroundColor: dataBoardAnonymousMode ? '#ff9800' : '#e0e0e0',
                   borderRadius: '10px',
                   position: 'relative',
                   transition: 'all 0.2s ease'
@@ -763,7 +763,7 @@ const LearningJournalViewModal = ({ isOpen, onClose, selectedDate, refreshData }
                     borderRadius: '50%',
                     position: 'absolute',
                     top: '2px',
-                    left: isAnonymousMode ? '22px' : '2px',
+                    left: dataBoardAnonymousMode ? '22px' : '2px',
                     transition: 'all 0.2s ease',
                     boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
                   }} />
@@ -771,10 +771,10 @@ const LearningJournalViewModal = ({ isOpen, onClose, selectedDate, refreshData }
                 <span style={{
                   fontSize: '12px',
                   fontWeight: '600',
-                  color: isAnonymousMode ? '#e65100' : '#666',
+                  color: dataBoardAnonymousMode ? '#e65100' : '#666',
                   minWidth: '70px'
                 }}>
-                  학생 익명모드
+                  데이터 익명모드
                 </span>
               </div>
             </div>
