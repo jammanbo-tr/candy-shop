@@ -95,6 +95,7 @@ const TeacherPage = () => {
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [studentPasswords, setStudentPasswords] = useState({});
   const [passwordAuthEnabled, setPasswordAuthEnabled] = useState(true);
+  const [dataBoardAnonymousMode, setDataBoardAnonymousMode] = useState(false);
   const [questExp, setQuestExp] = useState(10);
   const [questActionStudent, setQuestActionStudent] = useState(null);
   const [questActionQuest, setQuestActionQuest] = useState(null);
@@ -440,6 +441,19 @@ const TeacherPage = () => {
         setPasswordAuthEnabled(docSnap.data().enabled !== false); // 기본값은 true
       } else {
         setPasswordAuthEnabled(true); // 문서가 없으면 기본값 true
+      }
+    });
+    return () => unsubscribe();
+  }, []);
+
+  // 데이터보드 익명모드 설정 불러오기
+  useEffect(() => {
+    const dataBoardAnonymousRef = doc(db, 'settings', 'dataBoardAnonymousMode');
+    const unsubscribe = onSnapshot(dataBoardAnonymousRef, (docSnap) => {
+      if (docSnap.exists()) {
+        setDataBoardAnonymousMode(docSnap.data().enabled || false);
+      } else {
+        setDataBoardAnonymousMode(false); // 문서가 없으면 기본값 false
       }
     });
     return () => unsubscribe();
@@ -2090,23 +2104,6 @@ const TeacherPage = () => {
             링크 통계
           </button>
           <button
-            onClick={handleFixExpOverflow}
-            style={{
-              background: '#f3e5f5',
-              border: '2px solid #9c27b0',
-              color: '#7b1fa2',
-              fontWeight: 'bold',
-              borderRadius: 12,
-              boxShadow: '0 2px 8px #ce93d830',
-              padding: '8px 18px',
-              fontSize: 14,
-              minWidth: 70,
-              transition: 'all 0.2s',
-              cursor: 'pointer',
-              opacity: 1
-            }}
-          >경험치 수정</button>
-          <button
             onClick={() => setShowSettingsModal(true)}
             style={{
               background: '#f3e5f5',
@@ -2187,11 +2184,11 @@ const TeacherPage = () => {
         </div>
         {/* 종(알림) 버튼 UI */}
         <div style={{ position: 'fixed', top: 24, right: 32, zIndex: 2000, display: 'flex', flexDirection: 'row', gap: 18, alignItems: 'center' }}>
-          {/* AI 분석 아이콘 버튼 */}
-          <div style={{ width: 40, height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', position: 'relative' }} title="AI 학습일지 분석" onClick={() => setShowAIAnalysisModal(true)}>
+          {/* 설정 아이콘 버튼 */}
+          <div style={{ width: 40, height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', position: 'relative' }} title="교사 설정" onClick={() => setShowSettingsModal(true)}>
             <svg width="30.36" height="30.36" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M12 2C13.1 2 14 2.9 14 4C14 5.1 13.1 6 12 6C10.9 6 10 5.1 10 4C10 2.9 10.9 2 12 2ZM21 9V7L15 1H5C3.89 1 3 1.89 3 3V21C3 22.11 3.89 23 5 23H19C20.11 23 21 22.11 21 21V9ZM19 21H5V3H13V9H19V21Z" fill="#1976d2"/>
-              <path d="M7 12H17V14H7V12ZM7 16H13V18H7V16Z" fill="#1976d2"/>
+              <path d="M12 15.5C13.933 15.5 15.5 13.933 15.5 12C15.5 10.067 13.933 8.5 12 8.5C10.067 8.5 8.5 10.067 8.5 12C8.5 13.933 10.067 15.5 12 15.5Z" fill="#1976d2"/>
+              <path d="M19.14 12.94C19.18 12.64 19.2 12.33 19.2 12C19.2 11.67 19.18 11.36 19.14 11.06L21.16 9.48C21.34 9.34 21.39 9.07 21.28 8.87L19.36 5.55C19.24 5.33 18.99 5.26 18.77 5.33L16.38 6.29C15.88 5.91 15.35 5.59 14.76 5.35L14.4 2.81C14.36 2.57 14.16 2.4 13.92 2.4H10.08C9.84 2.4 9.64 2.57 9.6 2.81L9.24 5.35C8.65 5.59 8.12 5.92 7.62 6.29L5.23 5.33C5.01 5.25 4.76 5.33 4.64 5.55L2.72 8.87C2.61 9.08 2.66 9.34 2.84 9.48L4.86 11.06C4.82 11.36 4.8 11.67 4.8 12C4.8 12.33 4.82 12.64 4.86 12.94L2.84 14.52C2.66 14.66 2.61 14.93 2.72 15.13L4.64 18.45C4.76 18.67 5.01 18.74 5.23 18.67L7.62 17.71C8.12 18.09 8.65 18.41 9.24 18.65L9.6 21.19C9.64 21.43 9.84 21.6 10.08 21.6H13.92C14.16 21.6 14.36 21.43 14.4 21.19L14.76 18.65C15.35 18.41 15.88 18.09 16.38 17.71L18.77 18.67C18.99 18.75 19.24 18.67 19.36 18.45L21.28 15.13C21.39 14.93 21.34 14.66 21.16 14.52L19.14 12.94ZM12 15.6C10.02 15.6 8.4 13.98 8.4 12C8.4 10.02 10.02 8.4 12 8.4C13.98 8.4 15.6 10.02 15.6 12C15.6 13.98 13.98 15.6 12 15.6Z" fill="#1976d2"/>
             </svg>
           </div>
           
@@ -4601,6 +4598,58 @@ const TeacherPage = () => {
               </div>
             </div>
 
+            {/* 데이터 전광판 익명모드 설정 */}
+            <div style={{ marginBottom: 32, padding: '20px', border: '2px solid #fff3e0', borderRadius: 12, background: '#fafafa' }}>
+              <h3 style={{ margin: '0 0 16px 0', color: '#f57c00', fontWeight: 600 }}>📊 데이터 전광판 익명모드</h3>
+              <p style={{ margin: '0 0 16px 0', color: '#666', fontSize: 14 }}>학습일지 조회 시 학생 이름을 익명으로 표시합니다.</p>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <span style={{ fontSize: 14, color: '#666' }}>데이터보드 익명모드</span>
+                <button 
+                  onClick={async () => {
+                    const newMode = !dataBoardAnonymousMode;
+                    try {
+                      await setDoc(doc(db, 'settings', 'dataBoardAnonymousMode'), {
+                        enabled: newMode,
+                        updatedAt: new Date(),
+                        updatedBy: 'teacher'
+                      });
+                    } catch (error) {
+                      console.error('데이터보드 익명모드 설정 실패:', error);
+                    }
+                  }}
+                  style={{
+                    width: 50,
+                    height: 28,
+                    borderRadius: 14,
+                    border: 'none',
+                    background: dataBoardAnonymousMode ? '#4caf50' : '#ccc',
+                    position: 'relative',
+                    cursor: 'pointer',
+                    transition: 'background-color 0.3s',
+                    outline: 'none'
+                  }}
+                >
+                  <div style={{
+                    width: 24,
+                    height: 24,
+                    borderRadius: '50%',
+                    background: '#fff',
+                    position: 'absolute',
+                    top: 2,
+                    left: dataBoardAnonymousMode ? 24 : 2,
+                    transition: 'left 0.3s',
+                    boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
+                  }} />
+                </button>
+                <span style={{ fontSize: 14, fontWeight: 600, color: dataBoardAnonymousMode ? '#4caf50' : '#666' }}>
+                  {dataBoardAnonymousMode ? '활성화됨' : '비활성화됨'}
+                </span>
+              </div>
+              <p style={{ margin: '12px 0 0 0', color: '#999', fontSize: 12 }}>
+                활성화하면 학습일지 조회 시 학생 이름이 익명으로 표시됩니다.
+              </p>
+            </div>
+
             {/* 비밀번호 인증 설정 */}
             <div style={{ marginBottom: 32, padding: '20px', border: '2px solid #e8f5e8', borderRadius: 12, background: '#fafafa' }}>
               <h3 style={{ margin: '0 0 16px 0', color: '#2e7d32', fontWeight: 600 }}>🔒 비밀번호 인증 설정</h3>
@@ -4690,12 +4739,35 @@ const TeacherPage = () => {
                           </span>
                           {password !== '미설정' && (
                             <button
-                              onClick={async () => {
+                              onClick={async (e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
                                 try {
-                                  await setDoc(doc(db, 'studentPasswords', studentId), { password: '0000' });
-                                  setStudentPasswords(prev => ({ ...prev, [studentId]: '0000' }));
+                                  // 먼저 문서가 존재하는지 확인
+                                  const passwordDocRef = doc(db, 'studentPasswords', studentId);
+                                  const docSnap = await getDoc(passwordDocRef);
+                                  
+                                  if (docSnap.exists()) {
+                                    // 문서가 존재하면 삭제
+                                    await deleteDoc(passwordDocRef);
+                                    console.log('비밀번호 문서 삭제 완료:', studentId);
+                                  } else {
+                                    console.log('비밀번호 문서가 존재하지 않음:', studentId);
+                                  }
+                                  
+                                  // 로컬 상태에서 제거 (문서 존재 여부와 관계없이)
+                                  setStudentPasswords(prev => {
+                                    const newPasswords = { ...prev };
+                                    delete newPasswords[studentId];
+                                    return newPasswords;
+                                  });
+                                  
+                                  console.log('비밀번호 초기화 완료:', studentId);
+                                  alert('비밀번호가 성공적으로 초기화되었습니다.');
                                 } catch (error) {
                                   console.error('비밀번호 초기화 실패:', error);
+                                  console.error('Error details:', error.code, error.message);
+                                  alert(`비밀번호 초기화에 실패했습니다. 오류: ${error.message}`);
                                 }
                               }}
                               style={{
