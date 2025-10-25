@@ -76,11 +76,52 @@ ${combinedContent}
 
   try {
     console.log('Gemini AI 분석 시작...');
-    
-    const model = genAI.getGenerativeModel({ model: "gemini-2.5-pro" });
-    const result = await model.generateContent(prompt);
-    const response = await result.response;
-    const text = response.text();
+
+    // 재시도 로직 추가 (최대 3번 시도)
+    let lastError = null;
+    let text = null;
+
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        console.log(`Gemini AI 분석 시도 ${attempt}/3...`);
+
+        // gemini-2.5-flash: 안정적으로 작동하는 모델
+        const model = genAI.getGenerativeModel({
+          model: "gemini-2.5-flash",
+          generationConfig: {
+            temperature: 0.7,
+            topK: 64,
+            topP: 0.95,
+            maxOutputTokens: 65536,
+          }
+        });
+        const result = await model.generateContent(prompt);
+        const response = await result.response;
+        text = response.text();
+
+        console.log('Gemini AI 응답 성공');
+        break; // 성공하면 루프 종료
+      } catch (err) {
+        lastError = err;
+        console.error(`시도 ${attempt} 실패:`, err.message);
+
+        // 503 에러(과부하)이면 2초 대기 후 재시도
+        if (err.message?.includes('503') || err.message?.includes('overloaded')) {
+          if (attempt < 3) {
+            console.log('2초 후 재시도...');
+            await new Promise(resolve => setTimeout(resolve, 2000));
+          }
+        } else {
+          // 다른 에러면 즉시 중단
+          throw err;
+        }
+      }
+    }
+
+    // 모든 시도 실패 시
+    if (!text) {
+      throw lastError || new Error('Gemini AI 응답 실패');
+    }
 
     console.log('Gemini AI 응답:', text);
 

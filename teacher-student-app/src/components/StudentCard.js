@@ -3,6 +3,7 @@ import Checkbox from '@mui/material/Checkbox';
 import { getPokemonName } from '../utils/anonymousMode';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { db } from '../firebase';
+import AvatarDisplay from './AvatarDisplay';
 
 const levelImages = [
   '/lv1.png', // 알사탕
@@ -327,12 +328,19 @@ const StudentCard = ({ student, selected, onSelect, onOptionClick, expEffect, le
         />
       )}
       <div style={{ width: '100%', marginTop: 6 }}>
-        <div style={{ marginBottom: 10 }}>
-          <img
-            src={levelImages[student.level] || levelImages[0]}
-            alt={levelNames[student.level] || '사탕'}
-            style={{ width: 110, height: 110, objectFit: 'contain', display: 'inline-block' }}
-          />
+        <div style={{ marginBottom: 10, position: 'relative' }}>
+          {/* 아바타가 있으면 아바타 표시, 없으면 레벨 이미지 표시 */}
+          {student.avatar && Object.values(student.avatar).some(v => v) ? (
+            <div style={{ display: 'inline-block' }}>
+              <AvatarDisplay avatar={student.avatar} size={110} showBorder={true} />
+            </div>
+          ) : (
+            <img
+              src={levelImages[student.level] || levelImages[0]}
+              alt={levelNames[student.level] || '사탕'}
+              style={{ width: 110, height: 110, objectFit: 'contain', display: 'inline-block' }}
+            />
+          )}
         </div>
         <div style={{ fontWeight: 700, fontSize: 'clamp(1.33rem, 2.8vw, 1.5rem)', marginBottom: 17, color: '#222', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{getPokemonName(student.name, pokemonMode)}</div>
         <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 7, marginBottom: 7 }}>

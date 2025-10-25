@@ -415,6 +415,31 @@ const TeacherPage = () => {
   // 공지사항 목록 불러오기
   useEffect(() => { fetchNotices(); }, []);
 
+  // 간단한 비밀번호 초기화 함수
+  const resetStudentPassword = async (studentId) => {
+    try {
+      console.log('비밀번호 초기화 시작:', studentId);
+      
+      // 1. DB에서 해당 학생의 비밀번호 문서 삭제
+      const passwordDocRef = doc(db, 'studentPasswords', studentId);
+      await deleteDoc(passwordDocRef);
+      
+      // 2. 로컬 상태에서도 제거 (최초 1회 상태로 되돌림)
+      setStudentPasswords(prev => {
+        const newPasswords = { ...prev };
+        delete newPasswords[studentId];
+        return newPasswords;
+      });
+      
+      console.log('비밀번호 초기화 완료:', studentId);
+      alert('비밀번호가 초기화되었습니다. 학생이 다시 설정할 수 있습니다.');
+      
+    } catch (error) {
+      console.error('비밀번호 초기화 실패:', error);
+      alert('초기화에 실패했습니다: ' + error.message);
+    }
+  };
+
   // 학생 비밀번호 목록 불러오기
   useEffect(() => {
     const loadStudentPasswords = async () => {
@@ -4739,37 +4764,7 @@ const TeacherPage = () => {
                           </span>
                           {password !== '미설정' && (
                             <button
-                              onClick={async (e) => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                try {
-                                  // 먼저 문서가 존재하는지 확인
-                                  const passwordDocRef = doc(db, 'studentPasswords', studentId);
-                                  const docSnap = await getDoc(passwordDocRef);
-                                  
-                                  if (docSnap.exists()) {
-                                    // 문서가 존재하면 삭제
-                                    await deleteDoc(passwordDocRef);
-                                    console.log('비밀번호 문서 삭제 완료:', studentId);
-                                  } else {
-                                    console.log('비밀번호 문서가 존재하지 않음:', studentId);
-                                  }
-                                  
-                                  // 로컬 상태에서 제거 (문서 존재 여부와 관계없이)
-                                  setStudentPasswords(prev => {
-                                    const newPasswords = { ...prev };
-                                    delete newPasswords[studentId];
-                                    return newPasswords;
-                                  });
-                                  
-                                  console.log('비밀번호 초기화 완료:', studentId);
-                                  alert('비밀번호가 성공적으로 초기화되었습니다.');
-                                } catch (error) {
-                                  console.error('비밀번호 초기화 실패:', error);
-                                  console.error('Error details:', error.code, error.message);
-                                  alert(`비밀번호 초기화에 실패했습니다. 오류: ${error.message}`);
-                                }
-                              }}
+                              onClick={() => resetStudentPassword(studentId)}
                               style={{
                                 background: '#ffebee',
                                 border: '1px solid #f44336',
