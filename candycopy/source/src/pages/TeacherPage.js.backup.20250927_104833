@@ -1,0 +1,1382 @@
+import React, { useState, useEffect, useMemo } from 'react';
+import { useCollection } from 'react-firebase-hooks/firestore';
+import { collection, doc, updateDoc, arrayUnion, setDoc, getDocs, query, orderBy, deleteDoc, getDoc, addDoc, limit, onSnapshot, writeBatch } from 'firebase/firestore';
+import { db } from '../firebase';
+import StudentCard from '../components/StudentCard';
+import NotificationsActiveIcon from '@mui/icons-material/NotificationsActive';
+import CloseIcon from '@mui/icons-material/Close';
+import Checkbox from '@mui/material/Checkbox';
+import EmojiEventsIcon from '@mui/icons-material/EmojiEvents';
+import { useNavigate } from 'react-router-dom';
+import StorefrontIcon from '@mui/icons-material/Storefront';
+import SportsEsportsIcon from '@mui/icons-material/SportsEsports';
+import CampaignIcon from '@mui/icons-material/Campaign';
+import TextField from '@mui/material/TextField';
+import AccessTimeIcon from '@mui/icons-material/AccessTime';
+import AssessmentIcon from '@mui/icons-material/Assessment';
+import CardDrawModal from '../components/CardDrawModal';
+import { useAuth } from '../hooks/useAuth';
+import Button from '@mui/material/Button';
+import LinkIcon from '@mui/icons-material/Link';
+import BarChartIcon from '@mui/icons-material/BarChart';
+import MusicNoteIcon from '@mui/icons-material/MusicNote';
+import HistoryIcon from '@mui/icons-material/History';
+import QuizSystem from "../components/QuizSystem";
+import EmotionDashboardModal from '../components/EmotionDashboardModal';
+import AIAnalysisModal from '../components/AIAnalysisModal';
+import LearningJournalViewModal from '../components/LearningJournalViewModal';
+
+const LEVELS = [
+  '알사탕',
+  '새콤한 사탕',
+  '막대사탕',
+  '롤리팝',
+  '수제 사탕',
+  '사탕 마스터',
+];
+
+const STUDENT_ORDER = [
+  '김규민','김범준','김성준','김수겸','김주원','문기훈','박동하','백주원','백지원','손정환','이도윤','이예준','임재희','조은빈','조찬희','최서윤','최서현','한서우','황리아','하지수','테스트'
+];
+
+const REACTION_COLORS = [
+  { name: '빨강', code: '#e53935' },
+  { name: '주황', code: '#fb8c00' },
+  { name: '노랑', code: '#fbc02d' },
+  { name: '초록', code: '#43a047' },
+  { name: '파랑', code: '#1e88e5' },
+  { name: '남색', code: '#3949ab' },
+  { name: '보라', code: '#8e24aa' },
+];
+
+// 버튼 스타일 공통 객체
+const buttonStyle = {
+  fontSize: 13,
+  minWidth: 72,
+  padding: '7px 14px',
+  whiteSpace: 'nowrap',
+  borderRadius: 12,
+  fontWeight: 'bold',
+  boxShadow: '0 2px 8px #b2ebf240',
+  transition: 'all 0.2s',
+  cursor: 'pointer',
+};
+
+// 시간 포맷 함수 (몇 분 전, 오늘, 날짜)
+function formatTimeAgo(ts) {
+  const now = Date.now();
+  const diff = Math.floor((now - ts) / 1000);
+  if (diff < 60) return `${diff}초 전`;
+  if (diff < 3600) return `${Math.floor(diff/60)}분 전`;
+  const d = new Date(ts);
+  const today = new Date();
+  if (d.toDateString() === today.toDateString()) return `${d.getHours()}:${String(d.getMinutes()).padStart(2,'0')}`;
+  return `${d.getFullYear()}-${d.getMonth()+1}-${d.getDate()} ${d.getHours()}:${String(d.getMinutes()).padStart(2,'0')}`;
+}
+
+
+const TeacherPage = () => {
+  // 1. 모든 useState, useEffect 등 Hook 선언 (최상단)
+  const [studentsSnapshot, loading, firestoreError] = useCollection(collection(db, 'students'));
+  const [selectedIds, setSelectedIds] = useState([]);
+  const [showMessageModal, setShowMessageModal] = useState(false);
+  const [showQuestModal, setShowQuestModal] = useState(false);
+  const [messageText, setMessageText] = useState('');
+  const [questText, setQuestText] = useState('');
+  const [expEffectIds, setExpEffectIds] = useState([]);
+  const [levelUpEffectIds, setLevelUpEffectIds] = useState([]);
+  const [showTeacherAlarm, setShowTeacherAlarm] = useState(false);
+  const [pendingRequests, setPendingRequests] = useState([]);
+  const [rejectReason, setRejectReason] = useState('');
+  const [selectedRequest, setSelectedRequest] = useState(null);
+  const [alarmTab, setAlarmTab] = useState('message');
+  const [questExp, setQuestExp] = useState(10);
+  const [questActionStudent, setQuestActionStudent] = useState(null);
+  const [questActionQuest, setQuestActionQuest] = useState(null);
+  const [questResultEffect, setQuestResultEffect] = useState('');
+  const [showJarModal, setShowJarModal] = useState(false);
+  const [showBoardModal, setShowBoardModal] = useState(false);
+  const [showCreateBoardModal, setShowCreateBoardModal] = useState(false);
+  const [newBoardTitle, setNewBoardTitle] = useState('');
+  const [showBoardChoiceModal, setShowBoardChoiceModal] = useState(false);
+  const [showBoardCodeModal, setShowBoardCodeModal] = useState(false);
+  const [generatedBoardCode, setGeneratedBoardCode] = useState('');
+  const [showQuizModal, setShowQuizModal] = useState(false);
+  const [selectedIds_, setSelectedIds_] = useState([]);
+  const [showEmojiModal, setShowEmojiModal] = useState(false);
+  const [emojiText, setEmojiText] = useState('');
+  const [showEmotionDashboard, setShowEmotionDashboard] = useState(false);
+  const [showAIAnalysisModal, setShowAIAnalysisModal] = useState(false);
+  const [showJournalViewModal, setShowJournalViewModal] = useState(false);
+  const [selectedStudent, setSelectedStudent] = useState(null);
+  const [cardDrawResults, setCardDrawResults] = useState({});
+  const [showCardDrawModal, setShowCardDrawModal] = useState(false);
+  const [cardDrawStudentIds, setCardDrawStudentIds] = useState([]);
+  const { user } = useAuth();
+  const navigate = useNavigate();
+  
+  // 2. useMemo로 students 처리
+  const students = useMemo(() => {
+    if (!studentsSnapshot) return [];
+    return studentsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+  }, [studentsSnapshot]);
+
+  // 3. useEffect들 모두 여기에
+  useEffect(() => {
+    if (expEffectIds.length > 0) {
+      const timer = setTimeout(() => setExpEffectIds([]), 1500);
+      return () => clearTimeout(timer);
+    }
+  }, [expEffectIds]);
+
+  useEffect(() => {
+    if (levelUpEffectIds.length > 0) {
+      const timer = setTimeout(() => setLevelUpEffectIds([]), 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [levelUpEffectIds]);
+
+  useEffect(() => {
+    const loadPendingRequests = async () => {
+      try {
+        const questCollection = collection(db, 'quests');
+        const q = query(questCollection, orderBy('createdAt', 'desc'));
+        const snapshot = await getDocs(q);
+        
+        const pendingQuests = snapshot.docs
+          .map(doc => ({ id: doc.id, ...doc.data() }))
+          .filter(quest => quest.status === 'pending');
+        
+        setPendingRequests(pendingQuests);
+      } catch (error) {
+        console.error('퀘스트 로딩 오류:', error);
+      }
+    };
+
+    loadPendingRequests();
+  }, [questResultEffect]);
+
+  useEffect(() => {
+    if (questResultEffect) {
+      const timer = setTimeout(() => setQuestResultEffect(''), 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [questResultEffect]);
+
+
+  // 카드 뽑기 상태 확인
+  useEffect(() => {
+    const checkCardDrawStatus = async () => {
+      if (!user) return;
+      
+      try {
+        const today = new Date().toISOString().split('T')[0];
+        const cardDrawRef = doc(db, 'cardDrawStatus', `${user.uid}_${today}`);
+        const cardDrawDoc = await getDoc(cardDrawRef);
+        
+        if (cardDrawDoc.exists()) {
+          const data = cardDrawDoc.data();
+          setCardDrawResults(data.results || {});
+        }
+      } catch (error) {
+        console.error('카드 뽑기 상태 확인 오류:', error);
+      }
+    };
+
+    checkCardDrawStatus();
+  }, [user]);
+
+  // 4. 모든 함수들
+  const handleSelectAll = () => {
+    if (selectedIds.length === students.length) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(students.map(s => s.id));
+    }
+  };
+
+  // 친구 메시지 토큰 변경 핸들러
+  const handleTokenChange = async (studentId, delta) => {
+    try {
+      const studentRef = doc(db, 'students', studentId);
+      const studentDoc = await getDoc(studentRef);
+      
+      if (studentDoc.exists()) {
+        const currentTokens = studentDoc.data().friendTokens || 10;
+        const newTokens = Math.max(0, Math.min(10, currentTokens + delta));
+        
+        await updateDoc(studentRef, {
+          friendTokens: newTokens
+        });
+      }
+    } catch (error) {
+      console.error('토큰 업데이트 오류:', error);
+    }
+  };
+
+  const handleMessageSend = async () => {
+    if (!messageText.trim() || selectedIds.length === 0) return;
+
+    try {
+      const messageData = {
+        text: messageText,
+        timestamp: Date.now(),
+        type: 'teacher_message',
+        sender: 'teacher'
+      };
+
+      for (const studentId of selectedIds) {
+        const studentRef = doc(db, 'students', studentId);
+        await updateDoc(studentRef, {
+          messages: arrayUnion(messageData)
+        });
+      }
+
+      setMessageText('');
+      setSelectedIds([]);
+      setShowMessageModal(false);
+    } catch (error) {
+      console.error('메시지 전송 오류:', error);
+    }
+  };
+
+  const handleQuestSend = async () => {
+    if (!questText.trim() || selectedIds.length === 0) return;
+
+    try {
+      for (const studentId of selectedIds) {
+        const questData = {
+          id: Date.now() + Math.random(),
+          text: questText,
+          studentId: studentId,
+          status: 'pending',
+          createdAt: Date.now(),
+          exp: questExp
+        };
+
+        await addDoc(collection(db, 'quests'), questData);
+      }
+
+      setQuestText('');
+      setSelectedIds([]);
+      setShowQuestModal(false);
+    } catch (error) {
+      console.error('퀘스트 전송 오류:', error);
+    }
+  };
+
+  const handleExpGive = async (amount) => {
+    if (selectedIds.length === 0) return;
+
+    try {
+      const newExpEffectIds = [];
+      const newLevelUpEffectIds = [];
+
+      for (const studentId of selectedIds) {
+        const student = students.find(s => s.id === studentId);
+        if (!student) continue;
+
+        const newExp = (student.exp || 0) + amount;
+        const currentLevel = student.level || 1;
+        const newLevel = Math.min(Math.floor(newExp / 100) + 1, 6);
+
+        newExpEffectIds.push(studentId);
+        if (newLevel > currentLevel) {
+          newLevelUpEffectIds.push(studentId);
+        }
+
+        const studentRef = doc(db, 'students', studentId);
+        await updateDoc(studentRef, {
+          exp: newExp,
+          level: newLevel
+        });
+      }
+
+      setExpEffectIds(newExpEffectIds);
+      if (newLevelUpEffectIds.length > 0) {
+        setLevelUpEffectIds(newLevelUpEffectIds);
+      }
+
+      setSelectedIds([]);
+    } catch (error) {
+      console.error('경험치 지급 오류:', error);
+    }
+  };
+
+  const handleQuestAction = async (questId, action, student, quest) => {
+    try {
+      const questRef = doc(db, 'quests', questId);
+
+      if (action === 'approve') {
+        // 퀘스트 승인
+        await updateDoc(questRef, { status: 'approved' });
+
+        // 학생에게 경험치 지급
+        const studentRef = doc(db, 'students', quest.studentId);
+        const studentSnapshot = await getDoc(studentRef);
+        
+        if (studentSnapshot.exists()) {
+          const studentData = studentSnapshot.data();
+          const newExp = (studentData.exp || 0) + (quest.exp || 10);
+          const currentLevel = studentData.level || 1;
+          const newLevel = Math.min(Math.floor(newExp / 100) + 1, 6);
+
+          await updateDoc(studentRef, {
+            exp: newExp,
+            level: newLevel
+          });
+
+          // 시각 효과 설정
+          setQuestActionStudent(student.name);
+          setQuestActionQuest(quest.text);
+          setExpEffectIds([quest.studentId]);
+          
+          if (newLevel > currentLevel) {
+            setLevelUpEffectIds([quest.studentId]);
+          }
+
+          setQuestResultEffect('승인됨');
+        }
+      } else if (action === 'reject') {
+        // 퀘스트 거절
+        await updateDoc(questRef, { 
+          status: 'rejected',
+          rejectReason: rejectReason 
+        });
+
+        setQuestActionStudent(student.name);
+        setQuestActionQuest(quest.text);
+        setQuestResultEffect('거절됨');
+        setRejectReason('');
+      }
+
+      // 대기 중인 요청 목록 새로고침
+      const questCollection = collection(db, 'quests');
+      const q = query(questCollection, orderBy('createdAt', 'desc'));
+      const snapshot = await getDocs(q);
+      
+      const pendingQuests = snapshot.docs
+        .map(doc => ({ id: doc.id, ...doc.data() }))
+        .filter(quest => quest.status === 'pending');
+      
+      setPendingRequests(pendingQuests);
+      setSelectedRequest(null);
+
+    } catch (error) {
+      console.error('퀘스트 처리 오류:', error);
+    }
+  };
+
+  const handleCreateBoard = async () => {
+    if (!newBoardTitle.trim()) return;
+
+    try {
+      const boardCode = Math.random().toString(36).substring(2, 8).toUpperCase();
+      const boardData = {
+        title: newBoardTitle,
+        code: boardCode,
+        createdAt: Date.now(),
+        posts: []
+      };
+
+      await setDoc(doc(db, 'boards', boardCode), boardData);
+      setGeneratedBoardCode(boardCode);
+      setNewBoardTitle('');
+      setShowCreateBoardModal(false);
+      setShowBoardCodeModal(true);
+    } catch (error) {
+      console.error('게시판 생성 오류:', error);
+    }
+  };
+
+  const handleEmojiSend = async () => {
+    if (!emojiText.trim() || selectedIds.length === 0) return;
+
+    try {
+      const emojiData = {
+        emoji: emojiText,
+        timestamp: Date.now(),
+        type: 'teacher_emoji',
+        sender: 'teacher'
+      };
+
+      for (const studentId of selectedIds) {
+        const studentRef = doc(db, 'students', studentId);
+        await updateDoc(studentRef, {
+          messages: arrayUnion(emojiData)
+        });
+      }
+
+      setEmojiText('');
+      setSelectedIds([]);
+      setShowEmojiModal(false);
+    } catch (error) {
+      console.error('이모지 전송 오류:', error);
+    }
+  };
+
+  const handleJournalView = (student) => {
+    setSelectedStudent(student);
+    setShowJournalViewModal(true);
+  };
+
+  const handleCardDraw = () => {
+    setCardDrawStudentIds(selectedIds);
+    setShowCardDrawModal(true);
+  };
+
+  const handleCardDrawComplete = (results) => {
+    setCardDrawResults(prev => ({ ...prev, ...results }));
+    setSelectedIds([]);
+  };
+
+
+  // 정렬된 학생 목록
+  const sortedStudents = useMemo(() => {
+    return [...students].sort((a, b) => {
+      const aIndex = STUDENT_ORDER.indexOf(a.name);
+      const bIndex = STUDENT_ORDER.indexOf(b.name);
+      
+      if (aIndex === -1 && bIndex === -1) return 0;
+      if (aIndex === -1) return 1;
+      if (bIndex === -1) return -1;
+      return aIndex - bIndex;
+    });
+  }, [students]);
+
+  if (loading) return <div>로딩중...</div>;
+  if (firestoreError) return <div>오류: {firestoreError.message}</div>;
+
+  return (
+    <div style={{
+      minHeight: '100vh',
+      background: 'linear-gradient(135deg, #e0f7fa 0%, #e3f2fd 100%)',
+      padding: '20px'
+    }}>
+      {/* 헤더 */}
+      <div style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: '30px',
+        flexWrap: 'wrap',
+        gap: '20px'
+      }}>
+        <div>
+          <h1 style={{
+            fontSize: '42px',
+            fontWeight: '700',
+            color: '#333',
+            margin: '0 0 8px 0',
+            background: 'linear-gradient(45deg, #1976d2, #42a5f5)',
+            WebkitBackgroundClip: 'text',
+            WebkitTextFillColor: 'transparent',
+            backgroundClip: 'text'
+          }}>
+            JAMMANBO<br/>CANDY SHOP
+          </h1>
+        </div>
+
+        <div style={{ display: 'flex', gap: '15px', alignItems: 'center', flexWrap: 'wrap' }}>
+          {/* 알림 버튼 */}
+          <Button
+            variant="contained"
+            onClick={() => setShowTeacherAlarm(true)}
+            style={{
+              ...buttonStyle,
+              background: pendingRequests.length > 0 ? '#ff9800' : '#42a5f5',
+              color: 'white',
+              position: 'relative'
+            }}
+            startIcon={<NotificationsActiveIcon />}
+          >
+            알림
+            {pendingRequests.length > 0 && (
+              <span style={{
+                position: 'absolute',
+                top: '-8px',
+                right: '-8px',
+                background: '#f44336',
+                color: 'white',
+                borderRadius: '50%',
+                width: '20px',
+                height: '20px',
+                fontSize: '12px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}>
+                {pendingRequests.length}
+              </span>
+            )}
+          </Button>
+
+          {/* 학습일지 버튼 */}
+          <Button
+            variant="contained"
+            onClick={() => setShowJournalViewModal(true)}
+            style={{
+              ...buttonStyle,
+              background: '#9c27b0',
+              color: 'white'
+            }}
+            startIcon={<AssessmentIcon />}
+          >
+            학습일지
+          </Button>
+
+        </div>
+      </div>
+
+      {/* 상단 버튼 그룹 */}
+      <div style={{
+        display: 'flex',
+        gap: '12px',
+        marginBottom: '30px',
+        flexWrap: 'wrap',
+        justifyContent: 'center'
+      }}>
+        <Button
+          variant="contained"
+          onClick={() => setShowMessageModal(true)}
+          disabled={selectedIds.length === 0}
+          style={{
+            ...buttonStyle,
+            background: selectedIds.length > 0 ? '#42a5f5' : '#ccc',
+            color: 'white'
+          }}
+          startIcon={<CampaignIcon />}
+        >
+          전체 선택메세지
+        </Button>
+
+        <Button
+          variant="contained"
+          onClick={() => setShowQuestModal(true)}
+          disabled={selectedIds.length === 0}
+          style={{
+            ...buttonStyle,
+            background: selectedIds.length > 0 ? '#4caf50' : '#ccc',
+            color: 'white'
+          }}
+          startIcon={<AssessmentIcon />}
+        >
+          이번달 정원/실 지킴
+        </Button>
+
+        <Button
+          variant="contained"
+          onClick={() => setShowEmojiModal(true)}
+          disabled={selectedIds.length === 0}
+          style={{
+            ...buttonStyle,
+            background: selectedIds.length > 0 ? '#ff9800' : '#ccc',
+            color: 'white'
+          }}
+          startIcon={<EmojiEventsIcon />}
+        >
+          푸른 이달의
+        </Button>
+
+        <Button
+          variant="contained"
+          onClick={() => setShowBoardChoiceModal(true)}
+          style={{
+            ...buttonStyle,
+            background: '#9c27b0',
+            color: 'white'
+          }}
+          startIcon={<CampaignIcon />}
+        >
+          메세지 보내기
+        </Button>
+
+        <Button
+          variant="contained"
+          onClick={() => navigate('/tetris')}
+          style={{
+            ...buttonStyle,
+            background: '#ff5722',
+            color: 'white'
+          }}
+          startIcon={<SportsEsportsIcon />}
+        >
+          테트리스 주기
+        </Button>
+
+        <Button
+          variant="contained"
+          onClick={() => setShowQuizModal(true)}
+          style={{
+            ...buttonStyle,
+            background: '#795548',
+            color: 'white'
+          }}
+          startIcon={<SportsEsportsIcon />}
+        >
+          클래스 주기
+        </Button>
+
+        <Button
+          variant="contained"
+          onClick={() => navigate('/form')}
+          style={{
+            ...buttonStyle,
+            background: '#607d8b',
+            color: 'white'
+          }}
+          startIcon={<AccessTimeIcon />}
+        >
+          자치 생각
+        </Button>
+
+        <Button
+          variant="contained"
+          onClick={() => navigate('/chase')}
+          style={{
+            ...buttonStyle,
+            background: '#e91e63',
+            color: 'white'
+          }}
+          startIcon={<SportsEsportsIcon />}
+        >
+          한국 제품
+        </Button>
+
+        <Button
+          variant="contained"
+          onClick={() => setShowEmotionDashboard(true)}
+          style={{
+            ...buttonStyle,
+            background: '#00bcd4',
+            color: 'white'
+          }}
+          startIcon={<BarChartIcon />}
+        >
+          역사학급
+        </Button>
+
+        <Button
+          variant="contained"
+          onClick={() => setShowAIAnalysisModal(true)}
+          style={{
+            ...buttonStyle,
+            background: '#4caf50',
+            color: 'white'
+          }}
+          startIcon={<AssessmentIcon />}
+        >
+          현지식
+        </Button>
+
+        <Button
+          variant="contained"
+          onClick={() => navigate('/history')}
+          style={{
+            ...buttonStyle,
+            background: '#ff9800',
+            color: 'white'
+          }}
+          startIcon={<HistoryIcon />}
+        >
+          일반 홍보
+        </Button>
+      </div>
+
+      {/* 선택/경험치 버튼 그룹 */}
+      <div style={{
+        display: 'flex',
+        gap: '12px',
+        marginBottom: '20px',
+        alignItems: 'center',
+        flexWrap: 'wrap'
+      }}>
+        <Button
+          variant="outlined"
+          onClick={handleSelectAll}
+          style={{
+            ...buttonStyle,
+            border: '2px solid #42a5f5',
+            color: '#42a5f5',
+            background: 'white'
+          }}
+        >
+          {selectedIds.length === students.length ? '선택 해제' : '전체 선택'}
+        </Button>
+
+        <div style={{ color: '#666', fontSize: '14px' }}>
+          선택된 학생: {selectedIds.length}명
+        </div>
+
+        <div style={{
+          display: 'flex',
+          gap: '8px',
+          alignItems: 'center'
+        }}>
+          <span style={{ color: '#666', fontSize: '14px' }}>경험치:</span>
+          {[5, 10, 20, 50].map(amount => (
+            <Button
+              key={amount}
+              variant="contained"
+              onClick={() => handleExpGive(amount)}
+              disabled={selectedIds.length === 0}
+              style={{
+                ...buttonStyle,
+                fontSize: '12px',
+                minWidth: '50px',
+                padding: '5px 10px',
+                background: selectedIds.length > 0 ? '#4caf50' : '#ccc',
+                color: 'white'
+              }}
+            >
+              +{amount}
+            </Button>
+          ))}
+        </div>
+
+        <Button
+          variant="contained"
+          onClick={handleCardDraw}
+          disabled={selectedIds.length === 0}
+          style={{
+            ...buttonStyle,
+            background: selectedIds.length > 0 ? '#ff5722' : '#ccc',
+            color: 'white'
+          }}
+          startIcon={<EmojiEventsIcon />}
+        >
+          카드 뽑기
+        </Button>
+      </div>
+
+      {/* 학생 카드 그리드 */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
+        gap: '20px',
+        marginBottom: '30px'
+      }}>
+        {sortedStudents.map(student => (
+          <StudentCard 
+            key={student.id}
+            student={{
+              ...student,
+              name: student.name
+            }}
+            isSelected={selectedIds.includes(student.id)}
+            onSelect={(id) => {
+              setSelectedIds(prev => 
+                prev.includes(id) 
+                  ? prev.filter(sid => sid !== id)
+                  : [...prev, id]
+              );
+            }}
+            showExpEffect={expEffectIds.includes(student.id)}
+            showLevelUpEffect={levelUpEffectIds.includes(student.id)}
+            cardDrawResult={cardDrawResults[student.id]}
+            onJournalView={() => handleJournalView(student)}
+            onTokenChange={handleTokenChange}
+          />
+        ))}
+      </div>
+
+      {/* 알림 모달 */}
+      {showTeacherAlarm && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0,0,0,0.5)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000
+        }}>
+          <div style={{
+            background: 'white',
+            borderRadius: '20px',
+            padding: '30px',
+            maxWidth: '800px',
+            maxHeight: '80vh',
+            overflow: 'auto',
+            position: 'relative'
+          }}>
+            <CloseIcon 
+              onClick={() => setShowTeacherAlarm(false)}
+              style={{
+                position: 'absolute',
+                top: '15px',
+                right: '15px',
+                cursor: 'pointer',
+                color: '#666'
+              }}
+            />
+
+            <h2 style={{ marginBottom: '20px', color: '#333' }}>교사 알림센터</h2>
+
+            {/* 탭 */}
+            <div style={{
+              display: 'flex',
+              gap: '10px',
+              marginBottom: '20px',
+              borderBottom: '1px solid #eee'
+            }}>
+              <button
+                onClick={() => setAlarmTab('message')}
+                style={{
+                  padding: '10px 20px',
+                  border: 'none',
+                  background: alarmTab === 'message' ? '#42a5f5' : 'transparent',
+                  color: alarmTab === 'message' ? 'white' : '#666',
+                  borderRadius: '10px 10px 0 0',
+                  cursor: 'pointer'
+                }}
+              >
+                퀘스트 요청 ({pendingRequests.length})
+              </button>
+            </div>
+
+            {/* 퀘스트 요청 목록 */}
+            {alarmTab === 'message' && (
+              <div>
+                {pendingRequests.length === 0 ? (
+                  <p style={{ color: '#666', textAlign: 'center', padding: '20px' }}>
+                    대기 중인 퀘스트 요청이 없습니다.
+                  </p>
+                ) : (
+                  <div style={{ maxHeight: '400px', overflow: 'auto' }}>
+                    {pendingRequests.map(quest => {
+                      const student = students.find(s => s.id === quest.studentId);
+                      const displayName = student?.name || '알 수 없음';
+                      
+                      return (
+                        <div key={quest.id} style={{
+                          border: '1px solid #ddd',
+                          borderRadius: '10px',
+                          padding: '15px',
+                          marginBottom: '10px',
+                          background: '#f9f9f9'
+                        }}>
+                          <div style={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'flex-start',
+                            marginBottom: '10px'
+                          }}>
+                            <div>
+                              <strong>{displayName}</strong>
+                              <span style={{ color: '#666', fontSize: '12px', marginLeft: '10px' }}>
+                                {formatTimeAgo(quest.createdAt)}
+                              </span>
+                            </div>
+                            <span style={{
+                              background: '#ff9800',
+                              color: 'white',
+                              padding: '2px 8px',
+                              borderRadius: '10px',
+                              fontSize: '12px'
+                            }}>
+                              {quest.exp || 10} XP
+                            </span>
+                          </div>
+                          
+                          <p style={{ margin: '10px 0', color: '#333' }}>
+                            {quest.text}
+                          </p>
+
+                          <div style={{ display: 'flex', gap: '10px', marginTop: '15px' }}>
+                            <Button
+                              variant="contained"
+                              onClick={() => handleQuestAction(quest.id, 'approve', student, quest)}
+                              style={{
+                                ...buttonStyle,
+                                background: '#4caf50',
+                                color: 'white'
+                              }}
+                            >
+                              승인
+                            </Button>
+                            <Button
+                              variant="outlined"
+                              onClick={() => setSelectedRequest(quest)}
+                              style={{
+                                ...buttonStyle,
+                                border: '1px solid #f44336',
+                                color: '#f44336'
+                              }}
+                            >
+                              거절
+                            </Button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* 퀘스트 거절 모달 */}
+      {selectedRequest && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0,0,0,0.5)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1001
+        }}>
+          <div style={{
+            background: 'white',
+            borderRadius: '20px',
+            padding: '30px',
+            minWidth: '400px'
+          }}>
+            <h3>퀘스트 거절</h3>
+            <p>거절 사유를 입력해주세요:</p>
+            <TextField
+              fullWidth
+              multiline
+              rows={3}
+              value={rejectReason}
+              onChange={(e) => setRejectReason(e.target.value)}
+              placeholder="거절 사유를 입력하세요..."
+              style={{ marginBottom: '20px' }}
+            />
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+              <Button onClick={() => setSelectedRequest(null)}>
+                취소
+              </Button>
+              <Button
+                variant="contained"
+                onClick={() => handleQuestAction(selectedRequest.id, 'reject', students.find(s => s.id === selectedRequest.studentId), selectedRequest)}
+                style={{ background: '#f44336', color: 'white' }}
+              >
+                거절
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 메시지 모달 */}
+      {showMessageModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0,0,0,0.5)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000
+        }}>
+          <div style={{
+            background: 'white',
+            borderRadius: '20px',
+            padding: '30px',
+            minWidth: '500px'
+          }}>
+            <h3>선택한 학생들에게 메시지 보내기</h3>
+            <p>선택된 학생: {selectedIds.length}명</p>
+            <TextField
+              fullWidth
+              multiline
+              rows={4}
+              value={messageText}
+              onChange={(e) => setMessageText(e.target.value)}
+              placeholder="메시지를 입력하세요..."
+              style={{ marginBottom: '20px' }}
+            />
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+              <Button onClick={() => setShowMessageModal(false)}>
+                취소
+              </Button>
+              <Button
+                variant="contained"
+                onClick={handleMessageSend}
+                disabled={!messageText.trim()}
+                style={{ background: '#42a5f5', color: 'white' }}
+              >
+                전송
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 퀘스트 모달 */}
+      {showQuestModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0,0,0,0.5)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000
+        }}>
+          <div style={{
+            background: 'white',
+            borderRadius: '20px',
+            padding: '30px',
+            minWidth: '500px'
+          }}>
+            <h3>선택한 학생들에게 퀘스트 주기</h3>
+            <p>선택된 학생: {selectedIds.length}명</p>
+            
+            <div style={{ marginBottom: '20px' }}>
+              <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>
+                경험치 설정:
+              </label>
+              <input
+                type="number"
+                value={questExp}
+                onChange={(e) => setQuestExp(Number(e.target.value))}
+                min="1"
+                max="100"
+                style={{
+                  padding: '5px 10px',
+                  border: '1px solid #ddd',
+                  borderRadius: '5px',
+                  width: '100px'
+                }}
+              />
+            </div>
+
+            <TextField
+              fullWidth
+              multiline
+              rows={4}
+              value={questText}
+              onChange={(e) => setQuestText(e.target.value)}
+              placeholder="퀘스트 내용을 입력하세요..."
+              style={{ marginBottom: '20px' }}
+            />
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+              <Button onClick={() => setShowQuestModal(false)}>
+                취소
+              </Button>
+              <Button
+                variant="contained"
+                onClick={handleQuestSend}
+                disabled={!questText.trim()}
+                style={{ background: '#4caf50', color: 'white' }}
+              >
+                퀘스트 부여
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 이모지 모달 */}
+      {showEmojiModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0,0,0,0.5)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000
+        }}>
+          <div style={{
+            background: 'white',
+            borderRadius: '20px',
+            padding: '30px',
+            minWidth: '500px'
+          }}>
+            <h3>선택한 학생들에게 이모지 보내기</h3>
+            <p>선택된 학생: {selectedIds.length}명</p>
+
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(6, 1fr)',
+              gap: '10px',
+              marginBottom: '20px'
+            }}>
+              {['😊', '👏', '💯', '🎉', '⭐', '🏆', '💪', '🔥', '👍', '❤️', '🌟', '🚀'].map(emoji => (
+                <button
+                  key={emoji}
+                  onClick={() => setEmojiText(emoji)}
+                  style={{
+                    padding: '15px',
+                    border: emojiText === emoji ? '2px solid #42a5f5' : '1px solid #ddd',
+                    borderRadius: '10px',
+                    background: emojiText === emoji ? '#e3f2fd' : 'white',
+                    fontSize: '24px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  {emoji}
+                </button>
+              ))}
+            </div>
+
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+              <Button onClick={() => setShowEmojiModal(false)}>
+                취소
+              </Button>
+              <Button
+                variant="contained"
+                onClick={handleEmojiSend}
+                disabled={!emojiText}
+                style={{ background: '#ff9800', color: 'white' }}
+              >
+                이모지 전송
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 게시판 선택 모달 */}
+      {showBoardChoiceModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0,0,0,0.5)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000
+        }}>
+          <div style={{
+            background: 'white',
+            borderRadius: '20px',
+            padding: '30px',
+            minWidth: '400px'
+          }}>
+            <h3>게시판 옵션</h3>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '15px', marginTop: '20px' }}>
+              <Button
+                variant="contained"
+                onClick={() => {
+                  setShowBoardChoiceModal(false);
+                  setShowCreateBoardModal(true);
+                }}
+                style={{ background: '#4caf50', color: 'white', padding: '15px' }}
+              >
+                새 게시판 만들기
+              </Button>
+              <Button
+                variant="outlined"
+                onClick={() => {
+                  setShowBoardChoiceModal(false);
+                  navigate('/boards');
+                }}
+                style={{ padding: '15px' }}
+              >
+                기존 게시판 보기
+              </Button>
+              <Button
+                onClick={() => setShowBoardChoiceModal(false)}
+                style={{ padding: '15px' }}
+              >
+                취소
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 새 게시판 생성 모달 */}
+      {showCreateBoardModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0,0,0,0.5)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000
+        }}>
+          <div style={{
+            background: 'white',
+            borderRadius: '20px',
+            padding: '30px',
+            minWidth: '500px'
+          }}>
+            <h3>새 게시판 만들기</h3>
+            <TextField
+              fullWidth
+              value={newBoardTitle}
+              onChange={(e) => setNewBoardTitle(e.target.value)}
+              placeholder="게시판 제목을 입력하세요..."
+              style={{ margin: '20px 0' }}
+            />
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+              <Button onClick={() => setShowCreateBoardModal(false)}>
+                취소
+              </Button>
+              <Button
+                variant="contained"
+                onClick={handleCreateBoard}
+                disabled={!newBoardTitle.trim()}
+                style={{ background: '#4caf50', color: 'white' }}
+              >
+                생성
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 게시판 코드 모달 */}
+      {showBoardCodeModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0,0,0,0.5)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000
+        }}>
+          <div style={{
+            background: 'white',
+            borderRadius: '20px',
+            padding: '30px',
+            minWidth: '400px',
+            textAlign: 'center'
+          }}>
+            <h3>게시판이 생성되었습니다!</h3>
+            <p>게시판 코드:</p>
+            <div style={{
+              background: '#f5f5f5',
+              padding: '20px',
+              borderRadius: '10px',
+              fontSize: '24px',
+              fontWeight: 'bold',
+              color: '#42a5f5',
+              margin: '20px 0'
+            }}>
+              {generatedBoardCode}
+            </div>
+            <p style={{ color: '#666', fontSize: '14px' }}>
+              이 코드를 학생들에게 알려주세요.
+            </p>
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', marginTop: '20px' }}>
+              <Button
+                variant="contained"
+                onClick={() => navigate(`/board/${generatedBoardCode}`)}
+                style={{ background: '#42a5f5', color: 'white' }}
+              >
+                게시판 보기
+              </Button>
+              <Button onClick={() => setShowBoardCodeModal(false)}>
+                닫기
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 퀘스트 액션 결과 효과 */}
+      {questResultEffect && (
+        <div style={{
+          position: 'fixed',
+          top: '50%',
+          left: '50%',
+          transform: 'translate(-50%, -50%)',
+          background: questResultEffect === '승인됨' ? 'linear-gradient(45deg, #4caf50, #81c784)' : 'linear-gradient(45deg, #f44336, #e57373)',
+          color: 'white',
+          padding: '30px 60px',
+          borderRadius: '20px',
+          fontSize: '24px',
+          fontWeight: 'bold',
+          zIndex: 2000,
+          boxShadow: '0 8px 32px rgba(0,0,0,0.3)',
+          animation: 'bounce 0.6s ease-out'
+        }}>
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: '32px', marginBottom: '10px' }}>
+              {questResultEffect === '승인됨' ? '✅' : '❌'}
+            </div>
+            <div>{questActionStudent}의 퀘스트</div>
+            <div style={{ fontSize: '18px', opacity: 0.9 }}>"{questActionQuest}"</div>
+            <div style={{ fontSize: '20px', marginTop: '10px' }}>
+              {questResultEffect}!
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 퀴즈 모달 */}
+      {showQuizModal && (
+        <QuizSystem 
+          onClose={() => setShowQuizModal(false)}
+          collectionPrefix="teacher"
+        />
+      )}
+
+      {/* 감정 대시보드 모달 */}
+      {showEmotionDashboard && (
+        <EmotionDashboardModal 
+          onClose={() => setShowEmotionDashboard(false)}
+        />
+      )}
+
+      {/* AI 분석 모달 */}
+      {showAIAnalysisModal && (
+        <AIAnalysisModal 
+          onClose={() => setShowAIAnalysisModal(false)}
+        />
+      )}
+
+      {/* 학습일지 보기 모달 */}
+      {showJournalViewModal && (
+        <LearningJournalViewModal 
+          student={selectedStudent}
+          onClose={() => setShowJournalViewModal(false)}
+        />
+      )}
+
+      {/* 카드 뽑기 모달 */}
+      {showCardDrawModal && (
+        <CardDrawModal 
+          studentIds={cardDrawStudentIds}
+          onClose={() => setShowCardDrawModal(false)}
+          onComplete={handleCardDrawComplete}
+        />
+      )}
+
+      <style jsx>{`
+        @keyframes bounce {
+          0%, 20%, 50%, 80%, 100% { transform: translate(-50%, -50%) translateY(0); }
+          40% { transform: translate(-50%, -50%) translateY(-30px); }
+          60% { transform: translate(-50%, -50%) translateY(-15px); }
+        }
+      `}</style>
+    </div>
+  );
+};
+
+export default TeacherPage;

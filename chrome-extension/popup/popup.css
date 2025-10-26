@@ -1,0 +1,310 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  min-width: 380px;
+  background: #f5f5f5;
+  color: #212121;
+}
+
+#app {
+  padding: 16px;
+}
+
+header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+h1 {
+  font-size: 18px;
+  margin: 0;
+}
+
+section.card {
+  background: white;
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 12px;
+  box-shadow: 0 2px 8px rgba(33, 33, 33, 0.08);
+}
+
+.hidden {
+  display: none !important;
+}
+
+.tabs {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.tab-button {
+  border: none;
+  padding: 8px 0;
+  border-radius: 8px;
+  background: #ede7f6;
+  color: #512da8;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.tab-button.active {
+  background: #512da8;
+  color: white;
+}
+
+form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+form.inline-form {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px;
+}
+
+label {
+  display: flex;
+  flex-direction: column;
+  font-size: 12px;
+  color: #5f6368;
+  gap: 4px;
+}
+
+input[type="text"],
+input[type="email"],
+input[type="password"] {
+  padding: 8px;
+  border-radius: 8px;
+  border: 1px solid #c5cae9;
+  font-size: 14px;
+}
+
+button {
+  border: none;
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: #512da8;
+  color: white;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+button:disabled {
+  background: #ccc;
+  cursor: not-allowed;
+}
+
+.code-list,
+.status-list {
+  list-style: none;
+  padding: 0;
+  margin: 12px 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 140px;
+  overflow-y: auto;
+}
+
+.code-item,
+.status-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px;
+  border-radius: 8px;
+  background: #ede7f6;
+  gap: 8px;
+}
+
+.code-value {
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.code-meta {
+  font-size: 12px;
+  color: #5f6368;
+}
+
+.teacher-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.session-controls {
+  display: flex;
+  gap: 8px;
+}
+
+.chat {
+  border-top: 1px solid #e0e0e0;
+  padding-top: 12px;
+  margin-top: 12px;
+}
+
+.chat-messages {
+  max-height: 160px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  background: #f3f2fd;
+  border-radius: 8px;
+}
+
+.message {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 8px;
+  background: white;
+  border-radius: 6px;
+  box-shadow: 0 1px 4px rgba(33, 33, 33, 0.1);
+}
+
+.message.me {
+  background: #d1c4e9;
+  align-self: flex-end;
+}
+
+.message .sender {
+  font-weight: 600;
+  font-size: 12px;
+}
+
+.message .body {
+  font-size: 13px;
+}
+
+.message .timestamp {
+  font-size: 11px;
+  color: #777;
+  align-self: flex-end;
+}
+
+footer {
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* 역할 선택 화면 */
+.role-selection {
+  text-align: center;
+  padding: 20px 0;
+}
+
+.role-selection h2 {
+  font-size: 20px;
+  margin-bottom: 8px;
+  color: #333;
+}
+
+.subtitle {
+  font-size: 14px;
+  color: #666;
+  margin-bottom: 24px;
+}
+
+.role-buttons {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+
+.role-button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 20px 12px;
+  border: 2px solid #e0e0e0;
+  border-radius: 12px;
+  background: white;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.role-button:hover {
+  border-color: #667eea;
+  background: #f8f9ff;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.2);
+}
+
+.role-icon {
+  font-size: 32px;
+  margin-bottom: 8px;
+}
+
+.role-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: #333;
+}
+
+/* 뒤로 버튼 */
+.back-button {
+  border: none;
+  background: transparent;
+  color: #667eea;
+  font-size: 14px;
+  padding: 8px 0;
+  margin-bottom: 12px;
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+}
+
+.back-button:hover {
+  color: #5568d3;
+}
+
+/* 탭 스타일 개선 */
+.tabs {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+/* 폼 스타일 */
+.register-form label {
+  display: block;
+  margin-bottom: 12px;
+}
+
+.submit-button {
+  width: 100%;
+  padding: 12px;
+  border: none;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.2s;
+}
+
+.submit-button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+}
+
+.submit-button:active {
+  transform: translateY(0);
+}

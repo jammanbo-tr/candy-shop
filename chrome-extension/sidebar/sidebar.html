@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Candy Shop 교실</title>
+  <link rel="stylesheet" href="sidebar.css">
+</head>
+<body>
+  <div id="app">
+    <!-- 로그인 필요 화면 -->
+    <section id="not-logged-in" class="section hidden">
+      <div class="info-box">
+        <h2>🍬 Candy Shop 교실</h2>
+        <p>확장 프로그램 아이콘을 클릭하여 로그인하세요.</p>
+      </div>
+    </section>
+
+    <!-- 학생용 사이드바 -->
+    <section id="student-sidebar" class="section hidden">
+      <header class="sidebar-header">
+        <h2>📚 수업 참여</h2>
+        <div id="session-status" class="status-badge">대기 중</div>
+      </header>
+
+      <div class="content-area">
+        <!-- 채팅 영역 -->
+        <div id="chat-container" class="chat-container">
+          <div id="messages" class="messages"></div>
+        </div>
+
+        <!-- 입력 영역 -->
+        <form id="message-form" class="input-area">
+          <input
+            type="text"
+            id="message-input"
+            placeholder="메시지를 입력하세요..."
+            autocomplete="off"
+            disabled
+          />
+          <button type="submit" id="send-button" disabled>전송</button>
+        </form>
+      </div>
+
+      <div id="info-text" class="info-text">
+        선생님이 수업을 시작하면 채팅이 활성화됩니다.
+      </div>
+    </section>
+
+    <!-- 교사용 사이드바 -->
+    <section id="teacher-sidebar" class="section hidden">
+      <header class="sidebar-header">
+        <h2>👨‍🏫 교실 관리</h2>
+        <div class="session-controls">
+          <button id="start-session-btn" class="btn btn-primary">수업 시작</button>
+          <button id="end-session-btn" class="btn btn-danger" disabled>수업 종료</button>
+        </div>
+      </header>
+
+      <div class="content-area">
+        <!-- 학생 목록 -->
+        <div class="students-section">
+          <h3>접속 학생 (<span id="student-count">0</span>)</h3>
+          <ul id="students-list" class="students-list"></ul>
+        </div>
+
+        <!-- 채팅 영역 -->
+        <div id="teacher-chat-container" class="chat-container">
+          <h3>실시간 채팅</h3>
+          <div id="teacher-messages" class="messages"></div>
+        </div>
+
+        <!-- 링크 공유 영역 -->
+        <div class="link-share-section">
+          <h3>링크 공유</h3>
+          <form id="link-form" class="link-form">
+            <input
+              type="url"
+              id="link-input"
+              placeholder="공유할 링크를 입력하세요"
+              required
+            />
+            <button type="submit" class="btn btn-secondary">공유</button>
+          </form>
+        </div>
+
+        <!-- 입력 영역 -->
+        <form id="teacher-message-form" class="input-area">
+          <input
+            type="text"
+            id="teacher-message-input"
+            placeholder="메시지를 입력하세요..."
+            autocomplete="off"
+            disabled
+          />
+          <button type="submit" id="teacher-send-button" disabled>전송</button>
+        </form>
+      </div>
+    </section>
+
+    <!-- 관리자용 사이드바 -->
+    <section id="admin-sidebar" class="section hidden">
+      <header class="sidebar-header">
+        <h2>⚙️ 관리자</h2>
+      </header>
+      <div class="content-area">
+        <div class="info-box">
+          <p>관리자는 확장 프로그램 팝업에서 교사 초대 코드를 관리할 수 있습니다.</p>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <!-- 메시지 템플릿 -->
+  <template id="message-template">
+    <div class="message">
+      <div class="message-header">
+        <span class="sender-name"></span>
+        <span class="timestamp"></span>
+      </div>
+      <div class="message-body"></div>
+    </div>
+  </template>
+
+  <!-- 링크 메시지 템플릿 -->
+  <template id="link-template">
+    <div class="message message-link">
+      <div class="message-header">
+        <span class="sender-name">🔗 링크 공유</span>
+        <span class="timestamp"></span>
+      </div>
+      <div class="message-body">
+        <a href="" target="_blank" class="shared-link"></a>
+      </div>
+    </div>
+  </template>
+
+  <!-- 학생 목록 아이템 템플릿 -->
+  <template id="student-template">
+    <li class="student-item">
+      <span class="student-name"></span>
+      <span class="online-indicator">●</span>
+    </li>
+  </template>
+
+  <script type="module" src="sidebar.js"></script>
+</body>
+</html>

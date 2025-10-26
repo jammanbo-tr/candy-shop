@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <title>Classroom Relay</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <div id="app">
+      <header>
+        <h1>Classroom Relay</h1>
+        <div id="current-user"></div>
+      </header>
+
+      <section id="config-warning" class="card hidden">
+        <p>Firebase 설정이 필요합니다. 옵션 페이지에서 프로젝트 설정을 저장하세요.</p>
+        <button id="open-options">옵션 열기</button>
+      </section>
+
+      <section id="auth-section" class="card">
+        <!-- 역할 선택 화면 -->
+        <div id="role-selection" class="role-selection">
+          <h2>로그인 또는 회원가입</h2>
+          <p class="subtitle">역할을 선택해주세요</p>
+
+          <div class="role-buttons">
+            <button class="role-button" data-role="admin">
+              <span class="role-icon">⚙️</span>
+              <span class="role-name">관리자</span>
+            </button>
+            <button class="role-button" data-role="teacher">
+              <span class="role-icon">👨‍🏫</span>
+              <span class="role-name">교사</span>
+            </button>
+            <button class="role-button" data-role="student">
+              <span class="role-icon">👨‍🎓</span>
+              <span class="role-name">학생</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- 로그인/가입 폼 -->
+        <div id="auth-form-container" class="hidden">
+          <button id="back-to-role" class="back-button">← 뒤로</button>
+
+          <div class="tabs">
+            <button class="tab-button active" data-tab="login-tab">로그인</button>
+            <button class="tab-button" data-tab="register-tab">회원가입</button>
+          </div>
+
+          <!-- 로그인 탭 -->
+          <div id="login-tab" class="tab-content active">
+            <form id="login-form">
+              <label>
+                이메일
+                <input type="email" name="email" required placeholder="example@email.com" />
+              </label>
+              <label>
+                비밀번호
+                <input type="password" name="password" required />
+              </label>
+              <button type="submit" class="submit-button">로그인</button>
+            </form>
+          </div>
+
+          <!-- 회원가입 탭 -->
+          <div id="register-tab" class="tab-content">
+            <!-- 관리자 가입 -->
+            <form id="admin-register-form" class="register-form hidden">
+              <label>
+                이름
+                <input type="text" name="displayName" required placeholder="홍길동" />
+              </label>
+              <label>
+                이메일
+                <input type="email" name="email" required placeholder="admin@example.com" />
+              </label>
+              <label>
+                비밀번호 (8자 이상)
+                <input type="password" name="password" minlength="8" required />
+              </label>
+              <button type="submit" class="submit-button">관리자 계정 생성</button>
+            </form>
+
+            <!-- 교사 가입 -->
+            <form id="teacher-register-form" class="register-form hidden">
+              <label>
+                이름
+                <input type="text" name="displayName" required placeholder="김선생" />
+              </label>
+              <label>
+                이메일
+                <input type="email" name="email" required placeholder="teacher@example.com" />
+              </label>
+              <label>
+                비밀번호 (8자 이상)
+                <input type="password" name="password" minlength="8" required />
+              </label>
+              <label>
+                관리자 초대코드
+                <input type="text" name="inviteCode" required placeholder="예: 행복한강아지" />
+              </label>
+              <button type="submit" class="submit-button">교사 계정 생성</button>
+            </form>
+
+            <!-- 학생 가입 -->
+            <form id="student-register-form" class="register-form hidden">
+              <label>
+                이름
+                <input type="text" name="displayName" required placeholder="박학생" />
+              </label>
+              <label>
+                이메일
+                <input type="email" name="email" required placeholder="student@example.com" />
+              </label>
+              <label>
+                비밀번호 (8자 이상)
+                <input type="password" name="password" minlength="8" required />
+              </label>
+              <label>
+                교사 초대코드
+                <input type="text" name="inviteCode" required placeholder="예: 빨간고양이" />
+              </label>
+              <button type="submit" class="submit-button">학생 계정 생성</button>
+            </form>
+          </div>
+        </div>
+      </section>
+
+      <section id="admin-section" class="card hidden">
+        <h2>관리자 초대코드 관리</h2>
+        <form id="create-teacher-code-form" class="inline-form">
+          <label>
+            메모 (선택)
+            <input type="text" name="note" placeholder="예: 2학년 담당" />
+          </label>
+          <button type="submit">교사 초대코드 발급</button>
+        </form>
+        <ul id="teacher-code-list" class="code-list"></ul>
+      </section>
+
+      <section id="teacher-section" class="card hidden">
+        <h2>교사 대시보드</h2>
+        <div class="teacher-actions">
+          <form id="create-student-code-form" class="inline-form">
+            <label>
+              메모 (선택)
+              <input type="text" name="note" placeholder="예: A조 학생" />
+            </label>
+            <button type="submit">학생 초대코드 발급</button>
+          </form>
+          <div class="session-controls">
+            <button id="start-class-button">클래스 시작</button>
+            <button id="end-class-button" disabled>클래스 종료</button>
+          </div>
+        </div>
+        <div>
+          <h3>학생 초대코드</h3>
+          <ul id="student-code-list" class="code-list"></ul>
+        </div>
+        <div>
+          <h3>학생 접속 상태</h3>
+          <ul id="student-status-list" class="status-list"></ul>
+        </div>
+        <div id="teacher-chat" class="chat hidden">
+          <h3>실시간 채팅</h3>
+          <div id="chat-messages" class="chat-messages"></div>
+          <form id="chat-form" class="chat-form">
+            <input type="text" id="chat-input" placeholder="메시지를 입력하세요" required />
+            <button type="submit">전송</button>
+          </form>
+        </div>
+      </section>
+
+      <section id="student-section" class="card hidden">
+        <h2>수업 참여</h2>
+        <p id="student-session-status">선생님이 수업을 시작하면 자동으로 채팅이 열립니다.</p>
+        <div id="student-chat" class="chat hidden">
+          <h3>실시간 채팅</h3>
+          <div id="student-chat-messages" class="chat-messages"></div>
+          <form id="student-chat-form" class="chat-form">
+            <input type="text" id="student-chat-input" placeholder="메시지를 입력하세요" required />
+            <button type="submit">전송</button>
+          </form>
+        </div>
+      </section>
+
+      <footer>
+        <button id="sign-out" class="hidden">로그아웃</button>
+      </footer>
+    </div>
+
+    <template id="code-item-template">
+      <li class="code-item">
+        <div class="code-body">
+          <span class="code-value"></span>
+          <span class="code-meta"></span>
+        </div>
+        <button class="copy-button" type="button">복사</button>
+      </li>
+    </template>
+
+    <template id="student-item-template">
+      <li class="status-item">
+        <div class="status-info">
+          <span class="student-name"></span>
+          <span class="student-email"></span>
+        </div>
+        <span class="student-status"></span>
+      </li>
+    </template>
+
+    <template id="chat-message-template">
+      <div class="message">
+        <span class="sender"></span>
+        <span class="body"></span>
+        <span class="timestamp"></span>
+      </div>
+    </template>
+
+    <script type="module" src="popup.js"></script>
+  </body>
+</html>

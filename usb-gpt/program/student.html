@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>학생 시연 화면 - 우리 반 소통채널</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Jua&family=Gowun+Dodum&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            color-scheme: light only;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            font-family: 'Gowun Dodum', 'Jua', sans-serif;
+            background: linear-gradient(135deg, rgba(236, 253, 245, 0.95), rgba(227, 253, 245, 0.85)), url('../media/image/TR_bg.png') center/cover no-repeat;
+            min-height: 100vh;
+            color: #20423d;
+        }
+
+        header {
+            padding: 1.8rem clamp(1.2rem, 5vw, 3rem);
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: space-between;
+            align-items: center;
+            gap: 1.5rem;
+        }
+
+        .profile-card {
+            flex: 1 1 320px;
+            background: rgba(255, 255, 255, 0.9);
+            border-radius: 30px;
+            padding: 1.4rem 1.6rem;
+            display: flex;
+            align-items: center;
+            gap: 1.2rem;
+            box-shadow: 0 22px 36px rgba(38, 166, 154, 0.18);
+            border: 1px solid rgba(129, 199, 132, 0.35);
+        }
+
+        .profile-card img {
+            width: clamp(84px, 12vw, 120px);
+            height: clamp(84px, 12vw, 120px);
+            border-radius: 28px;
+            object-fit: cover;
+            background: linear-gradient(135deg, rgba(129, 199, 132, 0.4), rgba(38, 166, 154, 0.35));
+            padding: 0.7rem;
+        }
+
+        .profile-info h1 {
+            margin: 0;
+            font-size: clamp(1.4rem, 3.4vw, 2.2rem);
+            color: #00796b;
+        }
+
+        .profile-info p {
+            margin: 0.35rem 0;
+            font-size: 0.98rem;
+            color: #315b55;
+        }
+
+        .status-badges {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.55rem;
+            margin-top: 0.6rem;
+        }
+
+        .status-badges span {
+            background: rgba(76, 175, 80, 0.18);
+            color: #1b5e20;
+            font-weight: 700;
+            font-size: 0.9rem;
+            padding: 0.4rem 0.9rem;
+            border-radius: 999px;
+        }
+
+        .xp-summary {
+            flex: 1 1 280px;
+            background: rgba(255, 255, 255, 0.92);
+            border-radius: 30px;
+            padding: 1.6rem;
+            box-shadow: 0 22px 36px rgba(0, 150, 136, 0.16);
+            border: 1px solid rgba(38, 166, 154, 0.28);
+        }
+
+        .xp-progress {
+            height: 20px;
+            border-radius: 999px;
+            background: rgba(224, 247, 250, 0.9);
+            overflow: hidden;
+            margin-bottom: 0.9rem;
+        }
+
+        .xp-fill {
+            height: 100%;
+            background: linear-gradient(120deg, #26a69a, #64ffda);
+            transition: width 0.35s ease;
+        }
+
+        .xp-rows {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 0.95rem;
+            color: #004d40;
+        }
+
+        .xp-rows strong {
+            font-size: 1.2rem;
+            color: #00796b;
+        }
+
+        .main-content {
+            padding: 0  clamp(1.2rem, 5vw, 3rem) 4rem;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 1.6rem;
+        }
+
+        .panel {
+            background: rgba(255, 255, 255, 0.93);
+            border-radius: 26px;
+            padding: 1.4rem 1.6rem;
+            box-shadow: 0 18px 32px rgba(0, 121, 107, 0.14);
+            border: 1px solid rgba(129, 199, 132, 0.3);
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .panel h2 {
+            margin: 0;
+            font-size: 1.25rem;
+            color: #00695c;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .mission-list,
+        .emotion-tracker,
+        .inventory {
+            display: flex;
+            flex-direction: column;
+            gap: 0.7rem;
+        }
+
+        .mission {
+            background: rgba(38, 166, 154, 0.12);
+            border-radius: 16px;
+            padding: 0.8rem 1rem;
+            display: flex;
+            gap: 0.75rem;
+            align-items: center;
+        }
+
+        .mission input {
+            width: 18px;
+            height: 18px;
+            accent-color: #26a69a;
+        }
+
+        .mission label {
+            flex: 1;
+            cursor: pointer;
+            color: #27544f;
+        }
+
+        .mission small {
+            display: block;
+            font-size: 0.78rem;
+            color: #4f7d76;
+            margin-top: 0.2rem;
+        }
+
+        .emotion-entry {
+            background: rgba(239, 247, 255, 0.9);
+            padding: 0.9rem 1rem;
+            border-radius: 18px;
+            color: #395b7d;
+        }
+
+        .emotion-entry strong {
+            color: #1a4d80;
+        }
+
+        .inventory-item {
+            display: flex;
+            align-items: center;
+            gap: 0.85rem;
+            background: rgba(178, 235, 242, 0.25);
+            padding: 0.8rem 1rem;
+            border-radius: 16px;
+            color: #1a4f4a;
+        }
+
+        .inventory-item img {
+            width: 52px;
+            height: 52px;
+            object-fit: contain;
+        }
+
+        .inventory-item button {
+            margin-left: auto;
+            border: none;
+            border-radius: 999px;
+            padding: 0.4rem 0.9rem;
+            background: rgba(0, 150, 136, 0.16);
+            color: #004d40;
+            cursor: pointer;
+            font-weight: 600;
+        }
+
+        .quick-links {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+        }
+
+        .link-card {
+            padding: 1rem 1.2rem;
+            border-radius: 18px;
+            background: rgba(0, 188, 212, 0.14);
+            color: #006064;
+            font-weight: 600;
+            text-decoration: none;
+            box-shadow: inset 0 0 0 1px rgba(0, 151, 167, 0.2);
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+        }
+
+        .link-card:hover {
+            background: rgba(0, 188, 212, 0.24);
+        }
+
+        footer {
+            margin: 2.6rem auto 2rem;
+            width: calc(100% - 2.4rem);
+            max-width: 960px;
+            text-align: center;
+            font-size: 0.88rem;
+            color: rgba(0, 77, 64, 0.7);
+        }
+
+        .floating-checkin {
+            position: fixed;
+            right: 22px;
+            bottom: 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 0.65rem;
+        }
+
+        .floating-checkin button {
+            border: none;
+            border-radius: 999px;
+            padding: 0.75rem 1.1rem;
+            background: linear-gradient(140deg, #26a69a, #00897b);
+            color: #fff;
+            font-weight: 700;
+            cursor: pointer;
+            box-shadow: 0 16px 28px rgba(0, 121, 107, 0.35);
+        }
+
+        .floating-checkin button.secondary {
+            background: rgba(224, 242, 241, 0.95);
+            color: #00796b;
+            box-shadow: 0 12px 24px rgba(0, 150, 136, 0.22);
+        }
+
+        .toast {
+            position: fixed;
+            left: 50%;
+            bottom: 90px;
+            transform: translate(-50%, 30px);
+            background: rgba(0, 150, 136, 0.95);
+            color: #fff;
+            padding: 0.7rem 1.2rem;
+            border-radius: 999px;
+            box-shadow: 0 16px 30px rgba(0, 121, 107, 0.3);
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.25s ease, transform 0.25s ease;
+            font-size: 0.9rem;
+        }
+
+        .toast.show {
+            opacity: 1;
+            transform: translate(-50%, 0);
+        }
+
+        @media (max-width: 640px) {
+            header {
+                padding-bottom: 1rem;
+            }
+            .floating-checkin {
+                right: 12px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <section class="profile-card">
+            <img src="../media/image/villian.png" alt="학생 아바타">
+            <div class="profile-info">
+                <h1>김수겸 학생</h1>
+                <p>오늘의 목표: 수제 사탕 레시피 테스트 완수하기</p>
+                <p>현재 진행 중인 퀘스트: 팀 프로젝트 문서 정리</p>
+                <div class="status-badges">
+                    <span>🌟 주간 MVP</span>
+                    <span>🍬 사탕 42개</span>
+                    <span>💬 감정 기록 완료</span>
+                </div>
+            </div>
+        </section>
+
+        <section class="xp-summary">
+            <h2 style="margin-top:0; color:#004d40;">내 경험치 한눈에 보기</h2>
+            <div class="xp-progress" role="progressbar" aria-valuemin="0" aria-valuemax="190" aria-valuenow="145">
+                <div class="xp-fill" style="width: 76.3%"></div>
+            </div>
+            <div class="xp-rows">
+                <div>
+                    <strong>Lv.4</strong>
+                    <div>XP 145 / 190</div>
+                </div>
+                <button type="button" class="link-card" data-toast="다음 레벨까지 45 XP 남았어요!" style="margin:0; padding:0.6rem 1rem; font-size:0.9rem;">🔍 레벨 업 가이드</button>
+            </div>
+        </section>
+    </header>
+
+    <main class="main-content">
+        <section class="panel">
+            <h2>🎯 오늘의 학습 플랜</h2>
+            <div class="mission-list">
+                <label class="mission">
+                    <input type="checkbox" data-mission>
+                    <div>
+                        캐릭터 소개 발표 준비하기
+                        <small>발표 경험치 +5 · 제출 기한: 오늘 4교시 전</small>
+                    </div>
+                </label>
+                <label class="mission">
+                    <input type="checkbox" data-mission>
+                    <div>
+                        감정 저널 작성 & 캔디샵 업로드
+                        <small>감정 퀘스트 · 사진 1장 첨부</small>
+                    </div>
+                </label>
+                <label class="mission">
+                    <input type="checkbox" data-mission>
+                    <div>
+                        팀 프로젝트 피드백 남기기
+                        <small>팀원 2명 이상에게 응원 댓글 작성</small>
+                    </div>
+                </label>
+            </div>
+        </section>
+
+        <section class="panel">
+            <h2>💚 감정 리포트</h2>
+            <div class="emotion-tracker">
+                <div class="emotion-entry">
+                    <strong>오늘의 느낌: 설렘 80%</strong>
+                    <p>신 맛 사탕 실험이 성공적이었어요! 선생님 칭찬 메모도 받았답니다.</p>
+                </div>
+                <div class="emotion-entry">
+                    <strong>어제의 느낌: 집중 60%</strong>
+                    <p>프로젝트 협력이 잘 되었지만, 발표 준비 시간이 조금 아쉬웠어요.</p>
+                </div>
+            </div>
+            <button type="button" class="inventory-item" data-toast="감정 기록이 전송되었습니다" style="justify-content:center; gap:0.6rem;">
+                💌 감정 카드 보내기
+            </button>
+        </section>
+
+        <section class="panel">
+            <h2>🧺 캔디 장바구니</h2>
+            <div class="inventory">
+                <div class="inventory-item">
+                    <img src="../media/image/jar.png" alt="수제 사탕 세트">
+                    <div>
+                        수제 사탕 세트
+                        <small style="display:block; color:#2c5d57;">필요 경험치: 150 XP · 캔디 20개 사용</small>
+                    </div>
+                    <button type="button" data-toast="수제 사탕 세트를 장바구니에서 꺼냈어요">해제</button>
+                </div>
+                <div class="inventory-item">
+                    <img src="../media/image/melon6.png" alt="롤리팝 연구 키트">
+                    <div>
+                        롤리팝 연구 키트
+                        <small style="display:block; color:#2c5d57;">필요 경험치: 180 XP · 캔디 35개 사용</small>
+                    </div>
+                    <button type="button" data-toast="롤리팝 키트를 예약했습니다">예약</button>
+                </div>
+            </div>
+        </section>
+
+        <section class="panel" style="grid-column: 1 / -1;">
+            <h2>🔗 빠른 이동</h2>
+            <div class="quick-links">
+                <a class="link-card" href="javascript:void(0)" data-toast="선생님께 메시지를 보낼 수 있어요">📨 선생님께 메시지 보내기</a>
+                <a class="link-card" href="javascript:void(0)" data-toast="오늘의 캔디 미션으로 이동합니다">🎲 오늘의 캔디 미션</a>
+                <a class="link-card" href="javascript:void(0)" data-toast="프로젝트 협업 공간을 열었어요">🤝 협업 공간</a>
+                <a class="link-card" href="javascript:void(0)" data-toast="학습 자료실이 열렸어요">📚 학습 자료실</a>
+            </div>
+        </section>
+    </main>
+
+    <footer>
+        학생 버전은 Google 계정 로그인 없이 사용 가능한 시연용으로 제작되었습니다. 체크박스와 버튼은 미리 정의된 데이터를 기반으로 동작하며 네트워크 연결이 필요하지 않습니다.
+    </footer>
+
+    <div class="floating-checkin">
+        <button type="button" data-toast="출석 체크 완료! 오늘도 화이팅!">✅ 오늘 출석 체크</button>
+        <button type="button" class="secondary" data-toast="학습 타이머(25분)를 시작했어요">⏱️ 학습 타이머 시작</button>
+    </div>
+
+    <div class="toast" role="status" aria-live="polite"></div>
+
+    <script>
+        const toastEl = document.querySelector('.toast');
+        let toastTimer;
+
+        function showToast(message) {
+            if (!toastEl) return;
+            toastEl.textContent = message;
+            toastEl.classList.add('show');
+            clearTimeout(toastTimer);
+            toastTimer = setTimeout(() => toastEl.classList.remove('show'), 2200);
+        }
+
+        document.querySelectorAll('[data-toast]').forEach((node) => {
+            node.addEventListener('click', () => showToast(node.dataset.toast));
+        });
+
+        document.querySelectorAll('[data-mission]').forEach((checkbox) => {
+            checkbox.addEventListener('change', (event) => {
+                const label = event.currentTarget.closest('.mission');
+                label.style.background = event.currentTarget.checked
+                    ? 'rgba(129, 199, 132, 0.28)'
+                    : 'rgba(38, 166, 154, 0.12)';
+                showToast(event.currentTarget.checked ? '미션 완료! 경험치가 추가됩니다.' : '미션을 다시 준비해 주세요.');
+            });
+        });
+    </script>
+</body>
+</html>

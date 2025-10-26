@@ -1196,15 +1196,15 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시', isTeacher 
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                     <div style={{ fontSize: '13px', color: '#666' }}>
-                      총 학습일지: <strong style={{ color: '#1976d2' }}>{journalData.length}개</strong>
+                      총 학습일지: <strong style={{ color: '#1976d2' }}>{journalData?.length || 0}개</strong>
                     </div>
                     <div style={{ fontSize: '13px', color: '#666' }}>
-                      총 추천수: <strong style={{ color: '#f57c00' }}>{Object.values(recommendations).reduce((sum, count) => sum + count, 0)}회</strong>
+                      총 추천수: <strong style={{ color: '#f57c00' }}>{recommendations ? Object.values(recommendations).reduce((sum, count) => sum + count, 0) : 0}회</strong>
                     </div>
                     <div style={{ fontSize: '13px', color: '#666' }}>
-                      현재까지: <strong style={{ color: '#2e7d32' }}>{Object.values(recommendations).length > 0 ? Math.max(...Object.values(recommendations)) : 0}번째 추천</strong>
+                      현재까지: <strong style={{ color: '#2e7d32' }}>{recommendations && Object.values(recommendations).length > 0 ? Math.max(...Object.values(recommendations)) : 0}번째 추천</strong>
                     </div>
-                    {Object.values(recommendations).some(count => count >= eventThreshold) && (
+                    {recommendations && Object.values(recommendations).some(count => count >= eventThreshold) && (
                       <div style={{
                         fontSize: '13px',
                         color: '#d32f2f',

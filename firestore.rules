@@ -1,8 +1,106 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /{document=**} {
-      allow read, write: if true;
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function roleData(uid) {
+      return get(/databases/$(database)/documents/roles/$(uid)).data;
+    }
+
+    function hasRole(role) {
+      return isSignedIn() && roleData(request.auth.uid).role == role;
+    }
+
+    function assignedTeacher(uid) {
+      return roleData(uid).teacherId;
+    }
+
+    match /roles/{uid} {
+      allow read: if isSignedIn() && request.auth.uid == uid;
+      allow create, update: if isSignedIn() && request.auth.uid == uid;
+      allow delete: if false;
+    }
+
+    match /admins/{uid} {
+      allow read, write: if isSignedIn() && request.auth.uid == uid;
+      allow delete: if false;
+    }
+
+    match /teachers/{uid} {
+      allow read: if isSignedIn() && (request.auth.uid == uid || hasRole("admin"));
+      allow create, update: if isSignedIn() && request.auth.uid == uid;
+      allow delete: if false;
+    }
+
+    match /teachers/{teacherId}/students/{studentUid} {
+      allow read: if isSignedIn() && (request.auth.uid == teacherId || request.auth.uid == studentUid);
+      allow create, update: if isSignedIn() && request.auth.uid == studentUid;
+      allow delete: if false;
+    }
+
+    match /students/{uid} {
+      allow read: if isSignedIn() && (request.auth.uid == uid || hasRole("teacher") || hasRole("admin"));
+      allow create, update: if isSignedIn() && request.auth.uid == uid;
+      allow delete: if false;
+    }
+
+    match /status/{uid} {
+      allow read: if isSignedIn() && (request.auth.uid == uid || hasRole("admin"));
+      allow create, update: if isSignedIn() && request.auth.uid == uid;
+      allow delete: if false;
+    }
+
+    match /inviteCodes/{code} {
+      allow get: if resource.data.publicLookup == true;
+      allow create: if isSignedIn()
+        && (
+          (hasRole("admin")
+            && request.resource.data.type == "teacher"
+            && request.resource.data.adminId == request.auth.uid)
+          ||
+          (hasRole("teacher")
+            && request.resource.data.type == "student"
+            && request.resource.data.teacherId == request.auth.uid)
+        );
+      allow update: if isSignedIn()
+        && (
+          (hasRole("admin") && resource.data.adminId == request.auth.uid)
+          ||
+          (hasRole("teacher") && resource.data.teacherId == request.auth.uid)
+          ||
+          (request.auth.uid == request.resource.data.consumedBy)
+        );
+      allow delete: if false;
+    }
+
+    match /classSessions/{teacherId} {
+      allow read: if isSignedIn()
+        && (
+          request.auth.uid == teacherId
+          || assignedTeacher(request.auth.uid) == teacherId
+          || hasRole("admin")
+        );
+      allow create, update: if isSignedIn() && request.auth.uid == teacherId;
+      allow delete: if false;
+
+      match /messages/{messageId} {
+        allow read: if isSignedIn()
+          && (
+            request.auth.uid == teacherId
+            || assignedTeacher(request.auth.uid) == teacherId
+            || hasRole("admin")
+          );
+        allow create: if isSignedIn()
+          && (
+            request.auth.uid == teacherId
+            || assignedTeacher(request.auth.uid) == teacherId
+          )
+          && request.resource.data.senderId == request.auth.uid;
+        allow update: if false;
+        allow delete: if false;
+      }
     }
   }
-} 
+}

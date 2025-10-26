@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <title>Classroom Relay 설정</title>
+    <link rel="stylesheet" href="options.css" />
+  </head>
+  <body>
+    <main>
+      <h1>Firebase 설정</h1>
+      <p class="description">
+        Firebase 콘솔에서 웹 앱 구성 정보를 복사해 아래 항목에 입력한 뒤 저장하세요.
+      </p>
+      <form id="config-form">
+        <label>
+          apiKey
+          <input type="text" name="apiKey" required />
+        </label>
+        <label>
+          authDomain
+          <input type="text" name="authDomain" required />
+        </label>
+        <label>
+          projectId
+          <input type="text" name="projectId" required />
+        </label>
+        <label>
+          storageBucket
+          <input type="text" name="storageBucket" />
+        </label>
+        <label>
+          messagingSenderId
+          <input type="text" name="messagingSenderId" required />
+        </label>
+        <label>
+          appId
+          <input type="text" name="appId" required />
+        </label>
+        <label>
+          measurementId
+          <input type="text" name="measurementId" />
+        </label>
+        <div class="actions">
+          <button type="submit">저장</button>
+          <button type="button" id="reset-button" class="secondary">초기화</button>
+        </div>
+      </form>
+      <div id="status" class="status-message"></div>
+    </main>
+    <script type="module" src="options.js"></script>
+  </body>
+</html>

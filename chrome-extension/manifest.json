@@ -1,0 +1,49 @@
+{
+  "manifest_version": 3,
+  "name": "Classroom Relay",
+  "description": "Role-based classroom management extension with Firebase-authenticated experiences for admins, teachers, and students.",
+  "version": "1.0.0",
+  "background": {
+    "service_worker": "background/service-worker.js",
+    "type": "module"
+  },
+  "action": {
+    "default_title": "Classroom Relay",
+    "default_popup": "popup/popup.html"
+  },
+  "options_page": "options/options.html",
+  "side_panel": {
+    "default_path": "sidebar/sidebar.html"
+  },
+  "permissions": [
+    "storage",
+    "notifications",
+    "identity",
+    "sidePanel"
+  ],
+  "host_permissions": [
+    "https://*.firebaseio.com/*",
+    "https://*.firebasedatabase.app/*",
+    "https://*.firestore.googleapis.com/*",
+    "https://securetoken.googleapis.com/*",
+    "https://identitytoolkit.googleapis.com/*"
+  ],
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'"
+  },
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "shared/*.js"
+      ],
+      "matches": [
+        "<all_urls>"
+      ]
+    }
+  ]
+}
