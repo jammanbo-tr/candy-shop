@@ -85,40 +85,23 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시', isTeacher 
     return `${year}-${month}-${day}`;
   };
 
-  // 스크롤 위치 저장 (컨테이너 + 카드 내부)
+  // 스크롤 위치 저장 (컨테이너만)
   const saveScrollPosition = useCallback(() => {
     // 전체 컨테이너 스크롤 저장
     if (scrollContainerRef.current) {
       savedScrollPosition.current = scrollContainerRef.current.scrollTop;
     }
-
-    // 각 카드의 학습 내용 스크롤 저장
-    Object.keys(cardContentScrollRefs.current).forEach(journalId => {
-      const element = cardContentScrollRefs.current[journalId];
-      if (element) {
-        cardScrollPositions.current[journalId] = element.scrollTop;
-      }
-    });
+    // 카드 내부 스크롤은 onScroll 이벤트와 ref 콜백에서 자동 처리
   }, []);
 
-  // 스크롤 위치 복원 (컨테이너 + 카드 내부)
+  // 스크롤 위치 복원 (컨테이너만)
   const restoreScrollPosition = useCallback(() => {
     requestAnimationFrame(() => {
       // 전체 컨테이너 스크롤 복원
       if (scrollContainerRef.current && savedScrollPosition.current > 0) {
         scrollContainerRef.current.scrollTop = savedScrollPosition.current;
       }
-
-      // 각 카드의 학습 내용 스크롤 복원
-      requestAnimationFrame(() => {
-        Object.keys(cardScrollPositions.current).forEach(journalId => {
-          const element = cardContentScrollRefs.current[journalId];
-          const scrollPos = cardScrollPositions.current[journalId];
-          if (element && scrollPos > 0) {
-            element.scrollTop = scrollPos;
-          }
-        });
-      });
+      // 카드 내부 스크롤은 ref 콜백에서 자동 복원
     });
   }, []);
 
@@ -850,7 +833,16 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시', isTeacher 
                 ref={(el) => {
                   if (el) {
                     cardContentScrollRefs.current[journal.id] = el;
+                    // 저장된 스크롤 위치가 있으면 복원
+                    const savedPos = cardScrollPositions.current[journal.id];
+                    if (savedPos > 0) {
+                      el.scrollTop = savedPos;
+                    }
                   }
+                }}
+                onScroll={(e) => {
+                  // 스크롤할 때마다 위치 저장
+                  cardScrollPositions.current[journal.id] = e.target.scrollTop;
                 }}
                 style={{
                   margin: 0,
