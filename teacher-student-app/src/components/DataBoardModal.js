@@ -128,7 +128,7 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시', isTeacher 
 
     try {
       // 현재 추천수 데이터를 가져와서 순위 계산
-      const rankedData = Object.entries(recommendations)
+      const rankedData = recommendations ? Object.entries(recommendations)
         .map(([journalId, count]) => {
           const journal = journalData.find(j => j.id === journalId);
           return {
@@ -140,14 +140,14 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시', isTeacher 
           };
         })
         .sort((a, b) => b.count - a.count)
-        .map((item, index) => ({ ...item, rank: index + 1 }));
+        .map((item, index) => ({ ...item, rank: index + 1 })) : [];
 
       // 저장용 문서 생성
       const archiveRef = doc(db, `recommendationArchives/${selectedDate}_${Date.now()}`);
       await setDoc(archiveRef, {
         date: selectedDate,
         archivedAt: new Date().toISOString(),
-        totalRecommendations: Object.values(recommendations).reduce((sum, count) => sum + count, 0),
+        totalRecommendations: recommendations ? Object.values(recommendations).reduce((sum, count) => sum + count, 0) : 0,
         rankings: rankedData
       });
 
@@ -1193,7 +1193,7 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시', isTeacher 
           </div>
 
           {/* 교사용 관리 패널 */}
-          {isTeacher && showManagementPanel && (
+          {isTeacher && showManagementPanel && recommendations && (
             <div style={{
               background: 'linear-gradient(135deg, #fff3e0 0%, #ffe0b2 100%)',
               padding: '24px',
