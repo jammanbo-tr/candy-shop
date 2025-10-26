@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { db } from '../firebase';
-import { collection, query, where, onSnapshot, doc, getDoc, setDoc, updateDoc, arrayUnion, arrayRemove, getDocs } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, doc, getDoc, setDoc, updateDoc, arrayUnion, arrayRemove, getDocs, orderBy, limit } from 'firebase/firestore';
 
 const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시', isTeacher = false }) => {
   // 한국 시간으로 오늘 날짜 계산
@@ -26,6 +26,8 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시', isTeacher 
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [showManagementPanel, setShowManagementPanel] = useState(false);
   const [eventThreshold, setEventThreshold] = useState(50);
+  const [showArchiveModal, setShowArchiveModal] = useState(false);
+  const [archives, setArchives] = useState([]);
 
   // 스크롤 위치 저장을 위한 ref
   const scrollContainerRef = useRef(null);
@@ -120,6 +122,29 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시', isTeacher 
     }, 100);
   };
 
+  // 저장된 아카이브 불러오기
+  const loadArchives = async () => {
+    try {
+      const archivesRef = collection(db, 'recommendationArchives');
+      const q = query(archivesRef, orderBy('archivedAt', 'desc'), limit(20));
+      const querySnapshot = await getDocs(q);
+
+      const archiveList = [];
+      querySnapshot.forEach((doc) => {
+        archiveList.push({
+          id: doc.id,
+          ...doc.data()
+        });
+      });
+
+      setArchives(archiveList);
+      setShowArchiveModal(true);
+    } catch (error) {
+      console.error('아카이브 불러오기 실패:', error);
+      alert('저장된 기록을 불러오는데 실패했습니다.');
+    }
+  };
+
   // 추천수 초기화 및 DB 저장 함수
   const handleResetRecommendations = async () => {
     if (!window.confirm('주간 추천수를 초기화하고 현재 데이터를 저장하시겠습니까?')) {
@@ -142,20 +167,28 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시', isTeacher 
         .sort((a, b) => b.count - a.count)
         .map((item, index) => ({ ...item, rank: index + 1 })) : [];
 
-      // 저장용 문서 생성
-      const archiveRef = doc(db, `recommendationArchives/${selectedDate}_${Date.now()}`);
+      // 저장용 문서 생성 (초기화 일자와 순위 데이터 보관)
+      const now = new Date();
+      const archiveId = `${selectedDate}_${now.getTime()}`;
+      const archiveRef = doc(db, 'recommendationArchives', archiveId);
+
       await setDoc(archiveRef, {
-        date: selectedDate,
-        archivedAt: new Date().toISOString(),
+        resetDate: selectedDate, // 초기화 일자
+        archivedAt: now.toISOString(), // 실제 저장 시각
+        period: selectedPeriod, // 교시
         totalRecommendations: recommendations ? Object.values(recommendations).reduce((sum, count) => sum + count, 0) : 0,
-        rankings: rankedData
+        rankings: rankedData, // 학생/추천수/등수 배열
+        studentCount: rankedData.length
       });
 
-      // 현재 추천수 초기화
-      const recommendationsRef = doc(db, `recommendations/${selectedDate}`);
-      await setDoc(recommendationsRef, {});
+      // Firestore의 현재 추천수를 0으로 초기화
+      const recommendationsRef = doc(db, 'recommendations', selectedDate);
+      await setDoc(recommendationsRef, {}, { merge: false });
 
-      alert(`추천수가 초기화되고 ${rankedData.length}개의 데이터가 저장되었습니다.`);
+      // 로컬 state도 초기화
+      setRecommendations({});
+
+      alert(`✅ 추천수 초기화 완료!\n\n📅 초기화 일자: ${selectedDate}\n👥 학생 수: ${rankedData.length}명\n🏆 1위: ${rankedData[0]?.studentName || '-'} (${rankedData[0]?.count || 0}회)\n\n데이터가 안전하게 저장되었습니다.`);
     } catch (error) {
       console.error('추천수 초기화 실패:', error);
       alert('초기화 중 오류가 발생했습니다.');
@@ -1286,6 +1319,33 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시', isTeacher 
                   >
                     주간 추천수 초기화 & 저장
                   </button>
+                  <button
+                    onClick={loadArchives}
+                    style={{
+                      width: '100%',
+                      background: '#4caf50',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '12px',
+                      padding: '10px 20px',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      fontSize: '13px',
+                      transition: 'all 0.2s',
+                      boxShadow: '0 2px 8px rgba(76, 175, 80, 0.3)',
+                      marginTop: '12px'
+                    }}
+                    onMouseOver={(e) => {
+                      e.currentTarget.style.transform = 'translateY(-2px)';
+                      e.currentTarget.style.boxShadow = '0 4px 16px rgba(76, 175, 80, 0.4)';
+                    }}
+                    onMouseOut={(e) => {
+                      e.currentTarget.style.transform = 'translateY(0)';
+                      e.currentTarget.style.boxShadow = '0 2px 8px rgba(76, 175, 80, 0.3)';
+                    }}
+                  >
+                    📋 저장된 기록 보기
+                  </button>
                   <div style={{ fontSize: '11px', color: '#999', marginTop: '8px', textAlign: 'center' }}>
                     초기화 시 현재 데이터가 자동 저장됩니다
                   </div>
@@ -1773,6 +1833,171 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시', isTeacher 
           </div>
         </div>
       </div>
+
+      {/* 아카이브 보기 모달 */}
+      {showArchiveModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0,0,0,0.7)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 10000
+        }}>
+          <div style={{
+            background: 'white',
+            borderRadius: '20px',
+            width: '90%',
+            maxWidth: '900px',
+            maxHeight: '80vh',
+            overflow: 'hidden',
+            boxShadow: '0 20px 60px rgba(0,0,0,0.3)'
+          }}>
+            {/* 헤더 */}
+            <div style={{
+              background: 'linear-gradient(135deg, #ff9800 0%, #f57c00 100%)',
+              padding: '20px 30px',
+              color: 'white',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center'
+            }}>
+              <h2 style={{ margin: 0, fontSize: '24px', fontWeight: 700 }}>📋 저장된 추천수 기록</h2>
+              <button
+                onClick={() => setShowArchiveModal(false)}
+                style={{
+                  background: 'rgba(255,255,255,0.2)',
+                  border: 'none',
+                  borderRadius: '50%',
+                  width: '40px',
+                  height: '40px',
+                  color: 'white',
+                  fontSize: '24px',
+                  cursor: 'pointer',
+                  transition: 'background 0.2s'
+                }}
+                onMouseOver={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.3)'}
+                onMouseOut={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.2)'}
+              >
+                ×
+              </button>
+            </div>
+
+            {/* 내용 */}
+            <div style={{
+              padding: '30px',
+              maxHeight: 'calc(80vh - 80px)',
+              overflow: 'auto'
+            }}>
+              {archives.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '40px', color: '#999' }}>
+                  <div style={{ fontSize: '48px', marginBottom: '20px' }}>📭</div>
+                  <div style={{ fontSize: '18px' }}>저장된 기록이 없습니다</div>
+                </div>
+              ) : (
+                <div style={{ display: 'grid', gap: '20px' }}>
+                  {archives.map((archive, index) => (
+                    <div key={archive.id} style={{
+                      border: '2px solid #e0e0e0',
+                      borderRadius: '16px',
+                      padding: '20px',
+                      background: 'linear-gradient(135deg, #fff9f0 0%, #ffffff 100%)',
+                      boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+                    }}>
+                      {/* 헤더 */}
+                      <div style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        marginBottom: '16px',
+                        paddingBottom: '12px',
+                        borderBottom: '2px solid #ffb74d'
+                      }}>
+                        <div>
+                          <div style={{ fontSize: '18px', fontWeight: 700, color: '#f57c00' }}>
+                            📅 {archive.resetDate} {archive.period || ''}
+                          </div>
+                          <div style={{ fontSize: '12px', color: '#999', marginTop: '4px' }}>
+                            저장일시: {new Date(archive.archivedAt).toLocaleString('ko-KR')}
+                          </div>
+                        </div>
+                        <div style={{
+                          background: '#ff9800',
+                          color: 'white',
+                          padding: '8px 16px',
+                          borderRadius: '20px',
+                          fontSize: '14px',
+                          fontWeight: 700
+                        }}>
+                          총 {archive.totalRecommendations}회
+                        </div>
+                      </div>
+
+                      {/* 순위 표시 */}
+                      <div style={{ display: 'grid', gap: '8px' }}>
+                        {archive.rankings && archive.rankings.slice(0, 10).map((rank) => (
+                          <div key={rank.journalId} style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            padding: '10px 16px',
+                            background: rank.rank <= 3 ? '#fff3e0' : '#fafafa',
+                            borderRadius: '10px',
+                            border: rank.rank <= 3 ? '2px solid #ffb74d' : '1px solid #e0e0e0'
+                          }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                              <div style={{
+                                width: '32px',
+                                height: '32px',
+                                borderRadius: '50%',
+                                background: rank.rank === 1 ? '#ffd700' : rank.rank === 2 ? '#c0c0c0' : rank.rank === 3 ? '#cd7f32' : '#e0e0e0',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                fontWeight: 700,
+                                fontSize: '14px',
+                                color: rank.rank <= 3 ? '#fff' : '#666'
+                              }}>
+                                {rank.rank}
+                              </div>
+                              <div>
+                                <div style={{ fontWeight: 600, fontSize: '15px' }}>{rank.studentName}</div>
+                                <div style={{ fontSize: '12px', color: '#999' }}>{rank.period}</div>
+                              </div>
+                            </div>
+                            <div style={{
+                              fontSize: '18px',
+                              fontWeight: 700,
+                              color: '#f57c00'
+                            }}>
+                              👍 {rank.count}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
+                      {archive.rankings && archive.rankings.length > 10 && (
+                        <div style={{
+                          textAlign: 'center',
+                          color: '#999',
+                          fontSize: '13px',
+                          marginTop: '12px'
+                        }}>
+                          외 {archive.rankings.length - 10}명
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 };
