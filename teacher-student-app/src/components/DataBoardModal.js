@@ -30,6 +30,7 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시', isTeacher 
   // 스크롤 위치 저장을 위한 ref
   const scrollContainerRef = useRef(null);
   const savedScrollPosition = useRef(0);
+  const cardContentScrollRefs = useRef({}); // 카드별 학습 내용 스크롤 위치 저장
 
   const PERIODS = ['1교시', '2교시', '3교시', '4교시', '5교시', '6교시'];
 
@@ -83,20 +84,38 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시', isTeacher 
     return `${year}-${month}-${day}`;
   };
 
-  // 스크롤 위치 저장
+  // 스크롤 위치 저장 (컨테이너 + 카드 내부)
   const saveScrollPosition = useCallback(() => {
+    // 전체 컨테이너 스크롤 저장
     if (scrollContainerRef.current) {
       savedScrollPosition.current = scrollContainerRef.current.scrollTop;
     }
+
+    // 각 카드의 학습 내용 스크롤 저장
+    Object.keys(cardContentScrollRefs.current).forEach(journalId => {
+      const element = cardContentScrollRefs.current[journalId];
+      if (element && element.scrollTop > 0) {
+        element.dataset.savedScroll = element.scrollTop;
+      }
+    });
   }, []);
 
-  // 스크롤 위치 복원
+  // 스크롤 위치 복원 (컨테이너 + 카드 내부)
   const restoreScrollPosition = useCallback(() => {
-    if (scrollContainerRef.current && savedScrollPosition.current > 0) {
-      requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      // 전체 컨테이너 스크롤 복원
+      if (scrollContainerRef.current && savedScrollPosition.current > 0) {
         scrollContainerRef.current.scrollTop = savedScrollPosition.current;
+      }
+
+      // 각 카드의 학습 내용 스크롤 복원
+      Object.keys(cardContentScrollRefs.current).forEach(journalId => {
+        const element = cardContentScrollRefs.current[journalId];
+        if (element && element.dataset.savedScroll) {
+          element.scrollTop = parseInt(element.dataset.savedScroll, 10);
+        }
       });
-    }
+    });
   }, []);
 
   // 새로고침 함수
@@ -823,15 +842,22 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시', isTeacher 
               }}>
                 📚 학습 내용
               </h4>
-              <p style={{
-                margin: 0,
-                fontSize: '14px',
-                color: '#37474f',
-                lineHeight: '1.3',
-                wordBreak: 'keep-all',
-                overflow: 'auto',
-                maxHeight: '120px'
-              }}>
+              <p
+                ref={(el) => {
+                  if (el) {
+                    cardContentScrollRefs.current[journal.id] = el;
+                  }
+                }}
+                style={{
+                  margin: 0,
+                  fontSize: '14px',
+                  color: '#37474f',
+                  lineHeight: '1.3',
+                  wordBreak: 'keep-all',
+                  overflow: 'auto',
+                  maxHeight: '120px'
+                }}
+              >
                 {journal.content}
               </p>
             </div>
