@@ -25,6 +25,8 @@ import QuizSystem from "../components/QuizSystem";
 import EmotionDashboardModal from '../components/EmotionDashboardModal';
 import AIAnalysisModal from '../components/AIAnalysisModal';
 import LearningJournalViewModal from '../components/LearningJournalViewModal';
+import LearningJournalModal from '../components/LearningJournalModal';
+import DataBoardModal from '../components/DataBoardModal';
 import { setAnonymousMode as setDatabaseAnonymousMode, getPokemonName, addAnonymousModeListener, getAnonymousMode } from '../utils/anonymousMode';
 
 const LEVELS = [
@@ -157,6 +159,8 @@ const TeacherPage = () => {
   const [isClickable, setIsClickable] = useState(false);
   const [showLearningJournalModal, setShowLearningJournalModal] = useState(false);
   const [studentName, setStudentName] = useState('');
+  const [showDataBoardModal, setShowDataBoardModal] = useState(false);
+  const [eventRecommendationCount, setEventRecommendationCount] = useState(50);
   // 공지사항 상태 추가
   const [showNoticeModal, setShowNoticeModal] = useState(false);
   const [notices, setNotices] = useState([]);
@@ -4561,6 +4565,15 @@ const TeacherPage = () => {
         isOpen={showLearningJournalModal}
         onClose={() => setShowLearningJournalModal(false)}
       />
+
+      {/* 데이터 전광판 모달 */}
+      {showDataBoardModal && (
+        <DataBoardModal
+          isOpen={showDataBoardModal}
+          onClose={() => setShowDataBoardModal(false)}
+          isTeacher={true}
+        />
+      )}
 
       {/* 설정 모달 */}
       {showSettingsModal && (

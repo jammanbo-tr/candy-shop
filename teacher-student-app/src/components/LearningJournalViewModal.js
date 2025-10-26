@@ -4,6 +4,7 @@ import { db } from '../firebase';
 import ImageViewerModal from './ImageViewerModal';
 import { analyzeDataWithGemini, getDemoAnalysisResult, analyzeDataLocally } from '../utils/aiAnalysis';
 import WordCloud from './WordCloud';
+import DataBoardModal from './DataBoardModal';
 
 const PERIODS = ['1교시', '2교시', '3교시', '4교시', '5교시', '6교시'];
 
@@ -56,6 +57,7 @@ const LearningJournalViewModal = ({ isOpen, onClose, selectedDate, refreshData }
   const [showImageViewer, setShowImageViewer] = useState(false);
   const [selectedImageData, setSelectedImageData] = useState(null);
   const [dataBoardAnonymousMode, setDataBoardAnonymousMode] = useState(false);
+  const [showDataBoardModal, setShowDataBoardModal] = useState(false);
 
   const getScoreColor = (score, type) => {
     const numScore = parseFloat(score) || 0;
@@ -778,19 +780,52 @@ const LearningJournalViewModal = ({ isOpen, onClose, selectedDate, refreshData }
                 </span>
               </div>
             </div>
-            
-            <button
-              onClick={onClose}
-              style={{
-                background: 'none',
-                border: 'none',
-                fontSize: '24px',
-                cursor: 'pointer',
-                color: '#666'
-              }}
-            >
-              ✕
-            </button>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <button
+                onClick={() => setShowDataBoardModal(true)}
+                style={{
+                  background: '#fffde7',
+                  border: 'none',
+                  borderRadius: 999,
+                  padding: '8px 18px',
+                  boxShadow: '0 2px 8px #b2ebf240',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  fontWeight: 700,
+                  color: '#1976d2',
+                  fontSize: 16,
+                  transition: 'all 0.2s ease'
+                }}
+                title="데이터 전광판"
+                onMouseOver={(e) => {
+                  e.currentTarget.style.transform = 'translateY(-2px)';
+                  e.currentTarget.style.boxShadow = '0 4px 12px #b2ebf280';
+                }}
+                onMouseOut={(e) => {
+                  e.currentTarget.style.transform = 'translateY(0)';
+                  e.currentTarget.style.boxShadow = '0 2px 8px #b2ebf240';
+                }}
+              >
+                <span style={{ fontSize: 20 }}>📊</span>
+                <span>데이터 전광판</span>
+              </button>
+
+              <button
+                onClick={onClose}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  fontSize: '24px',
+                  cursor: 'pointer',
+                  color: '#666'
+                }}
+              >
+                ✕
+              </button>
+            </div>
           </div>
 
           {/* 컨텐츠 영역 */}
@@ -2339,6 +2374,15 @@ const LearningJournalViewModal = ({ isOpen, onClose, selectedDate, refreshData }
         period={selectedImageData?.period}
         date={selectedImageData?.date}
       />
+
+      {/* 데이터 전광판 모달 */}
+      {showDataBoardModal && (
+        <DataBoardModal
+          isOpen={showDataBoardModal}
+          onClose={() => setShowDataBoardModal(false)}
+          isTeacher={true}
+        />
+      )}
     </>
   );
 };

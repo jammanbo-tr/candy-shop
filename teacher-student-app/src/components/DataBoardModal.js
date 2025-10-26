@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { db } from '../firebase';
 import { collection, query, where, onSnapshot, doc, getDoc, setDoc, updateDoc, arrayUnion, arrayRemove, getDocs } from 'firebase/firestore';
 
-const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시' }) => {
+const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시', isTeacher = false }) => {
   // 한국 시간으로 오늘 날짜 계산
   const getTodayKorea = () => {
     const now = new Date();
@@ -24,6 +24,12 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시' }) => {
   const [cumulativeRecommendations, setCumulativeRecommendations] = useState({});
   const [isAnonymousMode, setIsAnonymousMode] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [showManagementPanel, setShowManagementPanel] = useState(false);
+  const [eventThreshold, setEventThreshold] = useState(50);
+
+  // 스크롤 위치 저장을 위한 ref
+  const scrollContainerRef = useRef(null);
+  const savedScrollPosition = useRef(0);
 
   const PERIODS = ['1교시', '2교시', '3교시', '4교시', '5교시', '6교시'];
 
@@ -83,7 +89,7 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시' }) => {
     setJournalData([]);
     setCardPositions({});
     setRecommendations({});
-    
+
     // 데이터를 강제로 다시 로드하기 위해 selectedPeriod를 재설정
     const currentPeriod = selectedPeriod;
     setSelectedPeriod('');
@@ -92,12 +98,83 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시' }) => {
     }, 100);
   };
 
+  // 추천수 초기화 및 DB 저장 함수
+  const handleResetRecommendations = async () => {
+    if (!window.confirm('주간 추천수를 초기화하고 현재 데이터를 저장하시겠습니까?')) {
+      return;
+    }
+
+    try {
+      // 현재 추천수 데이터를 가져와서 순위 계산
+      const rankedData = Object.entries(recommendations)
+        .map(([journalId, count]) => {
+          const journal = journalData.find(j => j.id === journalId);
+          return {
+            journalId,
+            studentName: journal?.studentName || '알 수 없음',
+            count,
+            period: journal?.period || '',
+            date: selectedDate
+          };
+        })
+        .sort((a, b) => b.count - a.count)
+        .map((item, index) => ({ ...item, rank: index + 1 }));
+
+      // 저장용 문서 생성
+      const archiveRef = doc(db, `recommendationArchives/${selectedDate}_${Date.now()}`);
+      await setDoc(archiveRef, {
+        date: selectedDate,
+        archivedAt: new Date().toISOString(),
+        totalRecommendations: Object.values(recommendations).reduce((sum, count) => sum + count, 0),
+        rankings: rankedData
+      });
+
+      // 현재 추천수 초기화
+      const recommendationsRef = doc(db, `recommendations/${selectedDate}`);
+      await setDoc(recommendationsRef, {});
+
+      alert(`추천수가 초기화되고 ${rankedData.length}개의 데이터가 저장되었습니다.`);
+    } catch (error) {
+      console.error('추천수 초기화 실패:', error);
+      alert('초기화 중 오류가 발생했습니다.');
+    }
+  };
+
+  // 이벤트 임계값 저장 함수
+  const handleSaveEventThreshold = async () => {
+    try {
+      const settingsRef = doc(db, 'settings', 'dataBoardEventThreshold');
+      await setDoc(settingsRef, { threshold: eventThreshold });
+      alert(`이벤트 임계값이 ${eventThreshold}번으로 설정되었습니다.`);
+    } catch (error) {
+      console.error('이벤트 임계값 저장 실패:', error);
+      alert('저장 중 오류가 발생했습니다.');
+    }
+  };
+
+  // 이벤트 임계값 불러오기
+  useEffect(() => {
+    if (!isOpen || !isTeacher) return;
+
+    const settingsRef = doc(db, 'settings', 'dataBoardEventThreshold');
+    const unsubscribe = onSnapshot(settingsRef, (docSnap) => {
+      if (docSnap.exists()) {
+        setEventThreshold(docSnap.data().threshold || 50);
+      }
+    });
+
+    return () => unsubscribe();
+  }, [isOpen, isTeacher]);
+
   // 학생 데이터 실시간 업데이트 (레벨 변경 감지)
   useEffect(() => {
     if (!isOpen) return;
 
     const studentsRef = collection(db, 'students');
     const unsubscribe = onSnapshot(studentsRef, (querySnapshot) => {
+      // 스크롤 위치 저장
+      saveScrollPosition();
+
       const newStudentsData = {};
       querySnapshot.forEach((doc) => {
         const data = doc.data();
@@ -106,15 +183,18 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시' }) => {
           level: data.level || 1
         };
       });
-      
+
       setStudentsData(newStudentsData);
       console.log('Students data updated:', newStudentsData);
+
+      // 스크롤 위치 복원
+      setTimeout(() => restoreScrollPosition(), 0);
     }, (error) => {
       console.error('Error listening to students data:', error);
     });
 
     return () => unsubscribe();
-  }, [isOpen]);
+  }, [isOpen, saveScrollPosition, restoreScrollPosition]);
 
   // 자동 새로고침 (30초마다)
   useEffect(() => {
@@ -166,45 +246,57 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시' }) => {
   };
 
   // 추천 데이터 로딩 (실시간 업데이트 보장)
-  const loadRecommendations = async () => {
+  const loadRecommendations = useCallback(async () => {
     if (!isOpen) return;
-    
+
     try {
       const recommendationsRef = doc(db, `recommendations/${selectedDate}`);
       const unsubscribe = onSnapshot(recommendationsRef, (docSnap) => {
+        // 스크롤 위치 저장
+        saveScrollPosition();
+
         console.log('Recommendations updated:', docSnap.data());
         if (docSnap.exists()) {
           setRecommendations(docSnap.data() || {});
         } else {
           setRecommendations({});
         }
+
+        // 스크롤 위치 복원
+        setTimeout(() => restoreScrollPosition(), 0);
       }, (error) => {
         console.error('Error in recommendations listener:', error);
       });
-      
+
       return unsubscribe;
     } catch (error) {
       console.error('Error loading recommendations:', error);
       return () => {};
     }
-  };
+  }, [isOpen, selectedDate, saveScrollPosition, restoreScrollPosition]);
 
   // 데이터보드 전용 익명 모드 상태 구독
   useEffect(() => {
     if (!isOpen) return;
 
     const unsubscribe = onSnapshot(doc(db, 'settings', 'dataBoardAnonymousMode'), (docSnap) => {
+      // 스크롤 위치 저장
+      saveScrollPosition();
+
       if (docSnap.exists()) {
         setIsAnonymousMode(docSnap.data().enabled || false);
       } else {
         setIsAnonymousMode(false);
       }
+
+      // 스크롤 위치 복원
+      setTimeout(() => restoreScrollPosition(), 0);
     }, (error) => {
       console.error('데이터보드 익명 모드 상태 구독 실패:', error);
     });
 
     return () => unsubscribe();
-  }, [isOpen]);
+  }, [isOpen, saveScrollPosition, restoreScrollPosition]);
 
   // 전체 누적 추천 데이터 로딩 (모든 날짜의 데이터를 통합)
   const loadAllRecommendations = async () => {
@@ -344,6 +436,22 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시' }) => {
     }
   };
 
+  // 스크롤 위치 저장
+  const saveScrollPosition = useCallback(() => {
+    if (scrollContainerRef.current) {
+      savedScrollPosition.current = scrollContainerRef.current.scrollTop;
+    }
+  }, []);
+
+  // 스크롤 위치 복원
+  const restoreScrollPosition = useCallback(() => {
+    if (scrollContainerRef.current && savedScrollPosition.current > 0) {
+      requestAnimationFrame(() => {
+        scrollContainerRef.current.scrollTop = savedScrollPosition.current;
+      });
+    }
+  }, []);
+
   // 학습일지 데이터 실시간 로딩
   useEffect(() => {
     if (!isOpen) return;
@@ -352,19 +460,22 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시' }) => {
     const q = query(journalsRef, where('period', '==', selectedPeriod));
 
     const unsubscribeJournals = onSnapshot(q, async (querySnapshot) => {
+      // 스크롤 위치 저장
+      saveScrollPosition();
+
       const data = [];
       const promises = [];
-      
+
       querySnapshot.forEach((doc) => {
         const journalData = { id: doc.id, ...doc.data() };
         data.push(journalData);
         // 각 학생의 데이터도 미리 로드
         promises.push(loadStudentData(journalData.studentName));
       });
-      
+
       await Promise.all(promises);
       setJournalData(data);
-      
+
       // 카드 위치 초기화
       const newPositions = {};
       data.forEach((journal, index) => {
@@ -375,8 +486,11 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시' }) => {
       if (Object.keys(newPositions).length > 0) {
         setCardPositions(prev => ({ ...prev, ...newPositions }));
       }
-      
+
       setLoading(false);
+
+      // 스크롤 위치 복원 (다음 렌더링 사이클에서)
+      setTimeout(() => restoreScrollPosition(), 0);
     });
     
     // 추천 데이터도 로딩
@@ -929,42 +1043,78 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시' }) => {
                 ))}
               </select>
               
-              {/* 새로고침 버튼 */}
-              <button
-                onClick={refreshData}
-                style={{
-                  background: '#e8f5e8',
-                  border: 'none',
-                  borderRadius: 999,
-                  padding: '8px 18px',
-                  boxShadow: '0 2px 8px #b2ebf240',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 8,
-                  fontWeight: 700,
-                  color: '#2e7d32',
-                  fontSize: 16,
-                  transition: 'all 0.2s ease'
-                }}
-                title="데이터 새로고침"
-                onMouseOver={(e) => {
-                  e.currentTarget.style.transform = 'scale(1.05)';
-                  e.currentTarget.style.boxShadow = '0 4px 12px #b2ebf280';
-                }}
-                onMouseOut={(e) => {
-                  e.currentTarget.style.transform = 'scale(1)';
-                  e.currentTarget.style.boxShadow = '0 2px 8px #b2ebf240';
-                }}
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" style={{ color: '#2e7d32', fontSize: 20, width: 20, height: 20 }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
-                <span>새로고침</span>
-              </button>
+              {/* 새로고침 버튼 (학생용만) */}
+              {!isTeacher && (
+                <button
+                  onClick={refreshData}
+                  style={{
+                    background: '#e8f5e8',
+                    border: 'none',
+                    borderRadius: 999,
+                    padding: '8px 18px',
+                    boxShadow: '0 2px 8px #b2ebf240',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    fontWeight: 700,
+                    color: '#2e7d32',
+                    fontSize: 16,
+                    transition: 'all 0.2s ease'
+                  }}
+                  title="데이터 새로고침"
+                  onMouseOver={(e) => {
+                    e.currentTarget.style.transform = 'scale(1.05)';
+                    e.currentTarget.style.boxShadow = '0 4px 12px #b2ebf280';
+                  }}
+                  onMouseOut={(e) => {
+                    e.currentTarget.style.transform = 'scale(1)';
+                    e.currentTarget.style.boxShadow = '0 2px 8px #b2ebf240';
+                  }}
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" style={{ color: '#2e7d32', fontSize: 20, width: 20, height: 20 }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                  <span>새로고침</span>
+                </button>
+              )}
 
-              {/* 익명 모드 상태 표시 (읽기 전용) */}
-              {isAnonymousMode && (
+              {/* 교사용 관리 버튼 */}
+              {isTeacher && (
+                <button
+                  onClick={() => setShowManagementPanel(!showManagementPanel)}
+                  style={{
+                    background: showManagementPanel ? '#e3f2fd' : '#fffde7',
+                    border: 'none',
+                    borderRadius: 999,
+                    padding: '8px 18px',
+                    boxShadow: '0 2px 8px #b2ebf240',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    fontWeight: 700,
+                    color: showManagementPanel ? '#1976d2' : '#f57c00',
+                    fontSize: 16,
+                    transition: 'all 0.2s ease'
+                  }}
+                  title="관리 기능"
+                  onMouseOver={(e) => {
+                    e.currentTarget.style.transform = 'scale(1.05)';
+                    e.currentTarget.style.boxShadow = '0 4px 12px #b2ebf280';
+                  }}
+                  onMouseOut={(e) => {
+                    e.currentTarget.style.transform = 'scale(1)';
+                    e.currentTarget.style.boxShadow = '0 2px 8px #b2ebf240';
+                  }}
+                >
+                  <span style={{ fontSize: 20 }}>⚙️</span>
+                  <span>관리</span>
+                </button>
+              )}
+
+              {/* 익명 모드 상태 표시 (학생용만) */}
+              {!isTeacher && isAnonymousMode && (
                 <div style={{
                   display: 'flex',
                   alignItems: 'center',
@@ -1020,20 +1170,183 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시' }) => {
             </div>
           </div>
 
+          {/* 교사용 관리 패널 */}
+          {isTeacher && showManagementPanel && (
+            <div style={{
+              background: 'linear-gradient(135deg, #fff3e0 0%, #ffe0b2 100%)',
+              padding: '24px',
+              borderBottom: '3px solid #ffb74d',
+              boxShadow: '0 2px 8px rgba(255, 152, 0, 0.15)'
+            }}>
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+                gap: '20px'
+              }}>
+                {/* 실시간 통계 박스 */}
+                <div style={{
+                  background: 'white',
+                  padding: '20px',
+                  borderRadius: '16px',
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+                  border: '2px solid #ffb74d'
+                }}>
+                  <div style={{ fontSize: '14px', color: '#f57c00', fontWeight: 700, marginBottom: '12px' }}>
+                    📊 실시간 통계
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    <div style={{ fontSize: '13px', color: '#666' }}>
+                      총 학습일지: <strong style={{ color: '#1976d2' }}>{journalData.length}개</strong>
+                    </div>
+                    <div style={{ fontSize: '13px', color: '#666' }}>
+                      총 추천수: <strong style={{ color: '#f57c00' }}>{Object.values(recommendations).reduce((sum, count) => sum + count, 0)}회</strong>
+                    </div>
+                    <div style={{ fontSize: '13px', color: '#666' }}>
+                      현재까지: <strong style={{ color: '#2e7d32' }}>{Math.max(...Object.values(recommendations), 0)}번째 추천</strong>
+                    </div>
+                    {Object.values(recommendations).some(count => count >= eventThreshold) && (
+                      <div style={{
+                        fontSize: '13px',
+                        color: '#d32f2f',
+                        fontWeight: 700,
+                        background: '#ffebee',
+                        padding: '8px',
+                        borderRadius: '8px',
+                        marginTop: '4px'
+                      }}>
+                        🎉 이벤트 달성! {Object.entries(recommendations)
+                          .filter(([_, count]) => count >= eventThreshold)
+                          .map(([journalId]) => {
+                            const journal = journalData.find(j => j.id === journalId);
+                            return journal?.studentName;
+                          })
+                          .filter(Boolean)
+                          .join(', ')}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* 추천수 초기화 */}
+                <div style={{
+                  background: 'white',
+                  padding: '20px',
+                  borderRadius: '16px',
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+                  border: '2px solid #ffb74d'
+                }}>
+                  <div style={{ fontSize: '14px', color: '#f57c00', fontWeight: 700, marginBottom: '12px' }}>
+                    🔄 데이터 관리
+                  </div>
+                  <button
+                    onClick={handleResetRecommendations}
+                    style={{
+                      width: '100%',
+                      background: '#ff5722',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '12px',
+                      padding: '12px 20px',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      fontSize: '14px',
+                      transition: 'all 0.2s',
+                      boxShadow: '0 2px 8px rgba(255, 87, 34, 0.3)'
+                    }}
+                    onMouseOver={(e) => {
+                      e.currentTarget.style.transform = 'translateY(-2px)';
+                      e.currentTarget.style.boxShadow = '0 4px 16px rgba(255, 87, 34, 0.4)';
+                    }}
+                    onMouseOut={(e) => {
+                      e.currentTarget.style.transform = 'translateY(0)';
+                      e.currentTarget.style.boxShadow = '0 2px 8px rgba(255, 87, 34, 0.3)';
+                    }}
+                  >
+                    주간 추천수 초기화 & 저장
+                  </button>
+                  <div style={{ fontSize: '11px', color: '#999', marginTop: '8px', textAlign: 'center' }}>
+                    초기화 시 현재 데이터가 자동 저장됩니다
+                  </div>
+                </div>
+
+                {/* 이벤트 설정 */}
+                <div style={{
+                  background: 'white',
+                  padding: '20px',
+                  borderRadius: '16px',
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+                  border: '2px solid #ffb74d'
+                }}>
+                  <div style={{ fontSize: '14px', color: '#f57c00', fontWeight: 700, marginBottom: '12px' }}>
+                    🎁 추천 수 이벤트 설정
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <input
+                      type="number"
+                      value={eventThreshold}
+                      onChange={(e) => setEventThreshold(Number(e.target.value))}
+                      min="1"
+                      max="500"
+                      style={{
+                        flex: 1,
+                        padding: '10px',
+                        border: '2px solid #e0e0e0',
+                        borderRadius: '8px',
+                        fontSize: '16px',
+                        fontWeight: 700,
+                        textAlign: 'center',
+                        color: '#1976d2'
+                      }}
+                    />
+                    <span style={{ fontSize: '13px', color: '#666', fontWeight: 600 }}>번째</span>
+                    <button
+                      onClick={handleSaveEventThreshold}
+                      style={{
+                        background: '#4caf50',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '8px',
+                        padding: '10px 20px',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        fontSize: '13px',
+                        transition: 'all 0.2s',
+                        boxShadow: '0 2px 8px rgba(76, 175, 80, 0.3)'
+                      }}
+                      onMouseOver={(e) => {
+                        e.currentTarget.style.transform = 'scale(1.05)';
+                        e.currentTarget.style.boxShadow = '0 4px 12px rgba(76, 175, 80, 0.4)';
+                      }}
+                      onMouseOut={(e) => {
+                        e.currentTarget.style.transform = 'scale(1)';
+                        e.currentTarget.style.boxShadow = '0 2px 8px rgba(76, 175, 80, 0.3)';
+                      }}
+                    >
+                      저장
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* 컨텐츠 영역 */}
           <div style={{
             display: 'flex',
-            height: 'calc(102vh - 120px)',
+            height: showManagementPanel && isTeacher ? 'calc(102vh - 200px)' : 'calc(102vh - 120px)',
           }}>
             {/* 좌측: 학습일지 카드들 */}
-            <div style={{
-              flex: '1',
-              padding: '24px',
-              paddingRight: '12px',
-              overflow: 'auto',
-              overflowX: 'auto',
-              overflowY: 'auto'
-            }}>
+            <div
+              ref={scrollContainerRef}
+              style={{
+                flex: '1',
+                padding: '24px',
+                paddingRight: '12px',
+                overflow: 'auto',
+                overflowX: 'auto',
+                overflowY: 'auto'
+              }}
+            >
               {loading ? (
                 <div style={{
                   display: 'flex',
