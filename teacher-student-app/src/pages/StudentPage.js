@@ -1125,7 +1125,7 @@ _무중임_태_중_황태- 황무황---중태
     if (!student) return;
 
     const today = new Date().toDateString(); // 오늘 날짜 문자열
-    const studentTokens = student.dailyMessageTokens || 10;
+    const studentTokens = student.dailyMessageTokens ?? 10;
     const studentResetDate = student.tokenResetDate;
 
     // 날짜가 바뀌었거나 처음 설정하는 경우

@@ -20,6 +20,7 @@ const LearningJournalModal = ({ isOpen, onClose, studentName = '' }) => {
   const [selectedImage, setSelectedImage] = useState(null);
   const [imagePreview, setImagePreview] = useState(null);
   const fileInputRef = useRef(null);
+  const [copySuccess, setCopySuccess] = useState(false);
   const [formData, setFormData] = useState({
     studentName: studentName || '',
     period: '',
@@ -243,6 +244,17 @@ const LearningJournalModal = ({ isOpen, onClose, studentName = '' }) => {
 
   const renderEmojis = (count, emoji) => {
     return emoji.repeat(count);
+  };
+
+  const handleCopyContent = async () => {
+    try {
+      await navigator.clipboard.writeText(formData.content || '');
+      setCopySuccess(true);
+      setTimeout(() => setCopySuccess(false), 2000);
+    } catch (err) {
+      console.error('복사 실패:', err);
+      alert('복사에 실패했습니다.');
+    }
   };
 
   if (!isOpen) return null;
@@ -550,34 +562,74 @@ const LearningJournalModal = ({ isOpen, onClose, studentName = '' }) => {
         if (question.key === 'content') {
           // 학습 내용은 textarea 사용
           return (
-            <textarea
-              value={currentValue}
-              onChange={(e) => {
-                updateFormData(question.key, e.target.value);
-                // 자동 높이 조정
-                e.target.style.height = 'auto';
-                e.target.style.height = Math.max(240, e.target.scrollHeight) + 'px';
-              }}
-              placeholder={question.placeholder}
-              rows={10}
-              style={{
-                width: '100%',
-                padding: '20px',
-                border: '2px solid #e8eaed',
-                borderRadius: '16px',
-                fontSize: '16px',
-                marginTop: '24px',
-                outline: 'none',
-                transition: 'border-color 0.2s ease',
-                boxSizing: 'border-box',
-                resize: 'vertical',
-                fontFamily: 'inherit',
-                minHeight: '240px',
-                overflow: 'hidden'
-              }}
-              onFocus={(e) => e.target.style.borderColor = '#4285f4'}
-              onBlur={(e) => e.target.style.borderColor = '#e8eaed'}
-            />
+            <div style={{ position: 'relative', marginTop: '24px' }}>
+              <textarea
+                value={currentValue}
+                onChange={(e) => {
+                  updateFormData(question.key, e.target.value);
+                  // 자동 높이 조정
+                  e.target.style.height = 'auto';
+                  e.target.style.height = Math.max(240, e.target.scrollHeight) + 'px';
+                }}
+                placeholder={question.placeholder}
+                rows={10}
+                style={{
+                  width: '100%',
+                  padding: '20px',
+                  paddingRight: '60px',
+                  border: '2px solid #e8eaed',
+                  borderRadius: '16px',
+                  fontSize: '16px',
+                  outline: 'none',
+                  transition: 'border-color 0.2s ease',
+                  boxSizing: 'border-box',
+                  resize: 'vertical',
+                  fontFamily: 'inherit',
+                  minHeight: '240px',
+                  overflow: 'hidden'
+                }}
+                onFocus={(e) => e.target.style.borderColor = '#4285f4'}
+                onBlur={(e) => e.target.style.borderColor = '#e8eaed'}
+              />
+              {/* 복사 버튼 */}
+              <button
+                onClick={handleCopyContent}
+                disabled={!currentValue?.trim()}
+                style={{
+                  position: 'absolute',
+                  bottom: '16px',
+                  right: '16px',
+                  background: copySuccess ? '#4caf50' : '#4285f4',
+                  border: 'none',
+                  borderRadius: '12px',
+                  padding: '10px 16px',
+                  color: 'white',
+                  fontSize: '14px',
+                  fontWeight: '600',
+                  cursor: !currentValue?.trim() ? 'not-allowed' : 'pointer',
+                  opacity: !currentValue?.trim() ? 0.5 : 1,
+                  transition: 'all 0.2s ease',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+                  pointerEvents: !currentValue?.trim() ? 'none' : 'auto'
+                }}
+                onMouseOver={(e) => {
+                  if (currentValue?.trim() && !copySuccess) {
+                    e.currentTarget.style.transform = 'translateY(-2px)';
+                    e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.2)';
+                  }
+                }}
+                onMouseOut={(e) => {
+                  e.currentTarget.style.transform = 'translateY(0)';
+                  e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.15)';
+                }}
+              >
+                <span style={{ fontSize: '16px' }}>{copySuccess ? '✓' : '📋'}</span>
+                <span>{copySuccess ? '복사완료!' : '복사'}</span>
+              </button>
+            </div>
           );
         } else {
           // 키워드 입력은 input 사용
