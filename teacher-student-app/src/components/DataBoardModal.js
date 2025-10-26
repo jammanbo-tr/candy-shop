@@ -83,6 +83,22 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시', isTeacher 
     return `${year}-${month}-${day}`;
   };
 
+  // 스크롤 위치 저장
+  const saveScrollPosition = useCallback(() => {
+    if (scrollContainerRef.current) {
+      savedScrollPosition.current = scrollContainerRef.current.scrollTop;
+    }
+  }, []);
+
+  // 스크롤 위치 복원
+  const restoreScrollPosition = useCallback(() => {
+    if (scrollContainerRef.current && savedScrollPosition.current > 0) {
+      requestAnimationFrame(() => {
+        scrollContainerRef.current.scrollTop = savedScrollPosition.current;
+      });
+    }
+  }, []);
+
   // 새로고침 함수
   const refreshData = () => {
     setLoading(true);
@@ -435,22 +451,6 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시', isTeacher 
       }
     }
   };
-
-  // 스크롤 위치 저장
-  const saveScrollPosition = useCallback(() => {
-    if (scrollContainerRef.current) {
-      savedScrollPosition.current = scrollContainerRef.current.scrollTop;
-    }
-  }, []);
-
-  // 스크롤 위치 복원
-  const restoreScrollPosition = useCallback(() => {
-    if (scrollContainerRef.current && savedScrollPosition.current > 0) {
-      requestAnimationFrame(() => {
-        scrollContainerRef.current.scrollTop = savedScrollPosition.current;
-      });
-    }
-  }, []);
 
   // 학습일지 데이터 실시간 로딩
   useEffect(() => {
