@@ -30,7 +30,8 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시', isTeacher 
   // 스크롤 위치 저장을 위한 ref
   const scrollContainerRef = useRef(null);
   const savedScrollPosition = useRef(0);
-  const cardContentScrollRefs = useRef({}); // 카드별 학습 내용 스크롤 위치 저장
+  const cardContentScrollRefs = useRef({}); // 카드별 학습 내용 DOM 요소
+  const cardScrollPositions = useRef({}); // 카드별 스크롤 위치 값 저장
 
   const PERIODS = ['1교시', '2교시', '3교시', '4교시', '5교시', '6교시'];
 
@@ -94,8 +95,8 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시', isTeacher 
     // 각 카드의 학습 내용 스크롤 저장
     Object.keys(cardContentScrollRefs.current).forEach(journalId => {
       const element = cardContentScrollRefs.current[journalId];
-      if (element && element.scrollTop > 0) {
-        element.dataset.savedScroll = element.scrollTop;
+      if (element) {
+        cardScrollPositions.current[journalId] = element.scrollTop;
       }
     });
   }, []);
@@ -109,11 +110,14 @@ const DataBoardModal = ({ isOpen, onClose, defaultPeriod = '1교시', isTeacher 
       }
 
       // 각 카드의 학습 내용 스크롤 복원
-      Object.keys(cardContentScrollRefs.current).forEach(journalId => {
-        const element = cardContentScrollRefs.current[journalId];
-        if (element && element.dataset.savedScroll) {
-          element.scrollTop = parseInt(element.dataset.savedScroll, 10);
-        }
+      requestAnimationFrame(() => {
+        Object.keys(cardScrollPositions.current).forEach(journalId => {
+          const element = cardContentScrollRefs.current[journalId];
+          const scrollPos = cardScrollPositions.current[journalId];
+          if (element && scrollPos > 0) {
+            element.scrollTop = scrollPos;
+          }
+        });
       });
     });
   }, []);
