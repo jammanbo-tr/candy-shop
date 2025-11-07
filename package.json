@@ -4,7 +4,8 @@
   "scripts": {
     "build": "cd teacher-student-app && npm run build && mkdir -p build/chase && cp -r ../villain-chase-game/* build/chase/ && cp build/villian.png build/chase/villain.png && cp -r build/chase build/villain-chase-game",
     "deploy": "cd teacher-student-app && firebase deploy",
-    "build-and-deploy": "npm run build && npm run deploy"
+    "commit-and-push": "git add . && git commit -m \"Deploy: $(date '+%Y-%m-%d %H:%M:%S')\" && git push origin main",
+    "build-and-deploy": "npm run build && npm run commit-and-push && npm run deploy"
   },
   "dependencies": {
     "@hello-pangea/dnd": "^18.0.1",
