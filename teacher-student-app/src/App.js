@@ -26,6 +26,7 @@ import LearningJournalPage from './pages/LearningJournalPage';
 import DataBoardPage from './pages/DataBoardPage';
 import WatermelonGamePage from './pages/WatermelonGamePage';
 import VillainChaseGame from './components/VillainChaseGame';
+import VibeCodingPage from './pages/VibeCodingPage';
 import './App.css';
 
 function App() {
@@ -65,6 +66,7 @@ function App() {
         <Route path="/watermelon" element={<WatermelonGamePage />} />
         <Route path="/villain-chase" element={<VillainChaseGame />} />
         <Route path="/chase" element={<VillainChaseGame />} />
+        <Route path="/vibecoding" element={<VibeCodingPage />} />
         <Route path="/" element={<TeacherPage />} />
       </Routes>
     </RouterComponent>
