@@ -245,6 +245,7 @@ const StudentPage = () => {
   const [showFriendMessageModal, setShowFriendMessageModal] = useState(false);
   const [friendMessageText, setFriendMessageText] = useState('');
   const [selectedFriendForMessage, setSelectedFriendForMessage] = useState(null);
+  const [selectedFriendsForMessage, setSelectedFriendsForMessage] = useState([]); // 복수 선택용
   const [friendMessages, setFriendMessages] = useState([]);
   const [isClassInSession, setIsClassInSession] = useState(false);
   const [showClassInSessionModal, setShowClassInSessionModal] = useState(false);
@@ -1241,9 +1242,9 @@ _무중임_태_중_황태- 황무황---중태
     }
   };
 
-  // 친구에게 메시지 보내기
+  // 친구에게 메시지 보내기 (복수 친구 지원)
   const handleSendFriendMessage = async () => {
-    if (!selectedFriendForMessage || !friendMessageText.trim()) return;
+    if (selectedFriendsForMessage.length === 0 || !friendMessageText.trim()) return;
 
     // 수업 중 체크
     if (isClassInSession) {
@@ -1251,54 +1252,59 @@ _무중임_태_중_황태- 황무황---중태
       return;
     }
 
-    // 토큰 확인
-    if (dailyMessageTokens <= 0) {
-      setPraiseResultMsg('오늘의 메시지 토큰을 모두 사용했습니다! 내일 다시 시도해주세요. 🕒');
+    // 토큰 확인 - 선택한 친구 수만큼 토큰 필요
+    const requiredTokens = selectedFriendsForMessage.length;
+    if (dailyMessageTokens < requiredTokens) {
+      setPraiseResultMsg(`메시지 토큰이 부족합니다! (필요: ${requiredTokens}개, 보유: ${dailyMessageTokens}개)`);
       setPraiseResultEffect(true);
       setTimeout(() => setPraiseResultEffect(false), 3000);
       return;
     }
-    
+
     try {
-      // studentMessages 컬렉션에 메시지 저장
-      const actualStudentId = student.id || studentId;
-      const messageData = {
-        fromId: actualStudentId,
-        fromName: student.name,
-        toId: selectedFriendForMessage.id,
-        toName: selectedFriendForMessage.name,
-        message: friendMessageText.trim(),
-        timestamp: Date.now(),
-        read: false
-      };
-      
-      console.log('메시지 전송 시작:', messageData);
-      
       // 중복 전송 방지를 위한 추가 체크
       if (isSendingMessage) {
         console.log('이미 메시지 전송 중, 중복 전송 방지');
         return;
       }
       setIsSendingMessage(true);
-      
-      const docRef = await addDoc(collection(db, 'studentMessages'), messageData);
-      console.log('메시지 전송 완료, 문서 ID:', docRef.id);
-      
-      // 토큰 차감
-      const newTokenCount = dailyMessageTokens - 1;
+
+      const actualStudentId = student.id || studentId;
+
+      // 선택한 모든 친구에게 메시지 전송
+      const promises = selectedFriendsForMessage.map(friend => {
+        const messageData = {
+          fromId: actualStudentId,
+          fromName: student.name,
+          toId: friend.id,
+          toName: friend.name,
+          message: friendMessageText.trim(),
+          timestamp: Date.now(),
+          read: false
+        };
+        console.log('메시지 전송:', messageData);
+        return addDoc(collection(db, 'studentMessages'), messageData);
+      });
+
+      await Promise.all(promises);
+      console.log('메시지 전송 완료, 총', selectedFriendsForMessage.length, '명에게 전송');
+
+      // 토큰 차감 - 선택한 친구 수만큼
+      const newTokenCount = dailyMessageTokens - requiredTokens;
       await updateDoc(doc(db, 'students', studentId), {
         dailyMessageTokens: newTokenCount
       });
       setDailyMessageTokens(newTokenCount);
-      
-      // 성공 메시지 표시 (기존 praiseResult 시스템 활용)
-      setPraiseResultMsg(`${selectedFriendForMessage.name}에게 메시지를 보냈습니다! 💌 (남은 토큰: ${newTokenCount}개)`);
+
+      // 성공 메시지 표시
+      const friendNames = selectedFriendsForMessage.map(f => f.name).join(', ');
+      setPraiseResultMsg(`${friendNames}에게 메시지를 보냈습니다! 💌 (남은 토큰: ${newTokenCount}개)`);
       setPraiseResultEffect(true);
-      setTimeout(() => setPraiseResultEffect(false), 2000);
-      
+      setTimeout(() => setPraiseResultEffect(false), 3000);
+
       // 모달 닫기
       setShowFriendMessageModal(false);
-      setSelectedFriendForMessage(null);
+      setSelectedFriendsForMessage([]);
       setFriendMessageText('');
       
     } catch (error) {
@@ -5119,52 +5125,107 @@ _무중임_태_중_황태- 황무황---중태
               </span>
             </div>
             
-            {/* 친구 선택 */}
+            {/* 친구 선택 (복수 선택 가능) */}
             <div style={{ width: '100%', marginBottom: 18 }}>
-              <div style={{ fontWeight: 600, fontSize: 16, marginBottom: 8, color: '#1976d2', textAlign: 'left' }}>받을 친구 선택</div>
-              <select
-                value={selectedFriendForMessage?.id || ''}
-                onChange={(e) => {
-                  const friendId = e.target.value;
-                  if (friendId && studentsSnapshot) {
-                    const friendDoc = studentsSnapshot.docs.find(doc => 
-                      (doc.data().id || doc.id) === friendId
-                    );
-                    if (friendDoc) {
-                      const friendData = friendDoc.data();
-                      setSelectedFriendForMessage({
-                        id: friendId,
-                        name: friendData.name
-                      });
-                    }
-                  } else {
-                    setSelectedFriendForMessage(null);
-                  }
-                }}
-                style={{
-                  width: '100%',
-                  borderRadius: 14,
-                  border: '2px solid #e0f7fa',
-                  padding: 12,
-                  fontSize: 16,
-                  outline: 'none',
-                  background: '#f7faf7',
-                  color: '#222',
-                  boxSizing: 'border-box'
-                }}
-              >
-                <option value="">친구를 선택하세요</option>
+              <div style={{
+                fontWeight: 600,
+                fontSize: 16,
+                marginBottom: 8,
+                color: '#1976d2',
+                textAlign: 'left',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center'
+              }}>
+                <span>받을 친구 선택 ({selectedFriendsForMessage.length}명)</span>
+                {selectedFriendsForMessage.length > 0 && (
+                  <button
+                    onClick={() => setSelectedFriendsForMessage([])}
+                    style={{
+                      fontSize: 12,
+                      padding: '4px 8px',
+                      background: '#ffebee',
+                      color: '#c62828',
+                      border: '1px solid #ef9a9a',
+                      borderRadius: 8,
+                      cursor: 'pointer',
+                      fontWeight: 600
+                    }}
+                  >
+                    전체 해제
+                  </button>
+                )}
+              </div>
+              <div style={{
+                maxHeight: 200,
+                overflowY: 'auto',
+                border: '2px solid #e0f7fa',
+                borderRadius: 14,
+                background: '#f7faf7',
+                padding: 8
+              }}>
                 {studentsSnapshot && studentsSnapshot.docs.map(doc => {
                   const friend = doc.data();
                   const friendId = friend.id ? friend.id : doc.id;
                   if (friendId === studentId) return null; // 자기 자신 제외
+
+                  const isSelected = selectedFriendsForMessage.some(f => f.id === friendId);
+
                   return (
-                    <option key={friendId} value={friendId}>
-                      {getPokemonName(friend.name, anonymousMode)}
-                    </option>
+                    <label
+                      key={friendId}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        padding: '8px 12px',
+                        margin: '4px 0',
+                        borderRadius: 10,
+                        background: isSelected ? '#e1f5fe' : '#fff',
+                        border: `2px solid ${isSelected ? '#0277bd' : '#e0e0e0'}`,
+                        cursor: 'pointer',
+                        transition: 'all 0.2s',
+                        fontWeight: isSelected ? 600 : 400
+                      }}
+                      onMouseEnter={(e) => {
+                        if (!isSelected) {
+                          e.currentTarget.style.background = '#f5f5f5';
+                        }
+                      }}
+                      onMouseLeave={(e) => {
+                        if (!isSelected) {
+                          e.currentTarget.style.background = '#fff';
+                        }
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedFriendsForMessage([
+                              ...selectedFriendsForMessage,
+                              { id: friendId, name: friend.name }
+                            ]);
+                          } else {
+                            setSelectedFriendsForMessage(
+                              selectedFriendsForMessage.filter(f => f.id !== friendId)
+                            );
+                          }
+                        }}
+                        style={{
+                          marginRight: 10,
+                          width: 18,
+                          height: 18,
+                          cursor: 'pointer'
+                        }}
+                      />
+                      <span style={{ color: '#222', fontSize: 15 }}>
+                        {getPokemonName(friend.name, anonymousMode)}
+                      </span>
+                    </label>
                   );
                 })}
-              </select>
+              </div>
             </div>
             
             {/* 메시지 입력 */}
@@ -5191,46 +5252,63 @@ _무중임_태_중_황태- 황무황---중태
             </div>
             
             {/* 버튼들 */}
-            <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
-              <button
-                onClick={() => {
-                  setShowFriendMessageModal(false);
-                  setSelectedFriendForMessage(null);
-                  setFriendMessageText('');
-                }}
-                style={{
-                  fontWeight: 700,
-                  borderRadius: 999,
-                  background: '#ffe4ec',
-                  color: '#d72660',
-                  border: 'none',
-                  padding: '12px 24px',
-                  fontSize: 16,
-                  boxShadow: '0 2px 8px #f8bbd0a0',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s'
-                }}
-              >
-                취소
-              </button>
-              <button
-                onClick={handleSendFriendMessage}
-                disabled={!selectedFriendForMessage || !friendMessageText.trim() || dailyMessageTokens <= 0 || isSendingMessage}
-                style={{
-                  fontWeight: 700,
-                  borderRadius: 999,
-                  background: selectedFriendForMessage && friendMessageText.trim() && dailyMessageTokens > 0 && !isSendingMessage ? '#e0f7fa' : '#f5f5f5',
-                  color: selectedFriendForMessage && friendMessageText.trim() && dailyMessageTokens > 0 && !isSendingMessage ? '#1976d2' : '#aaa',
-                  border: 'none',
-                  padding: '12px 24px',
-                  fontSize: 16,
-                  boxShadow: '0 2px 8px #b2ebf240',
-                  cursor: selectedFriendForMessage && friendMessageText.trim() && dailyMessageTokens > 0 ? 'pointer' : 'not-allowed',
-                  transition: 'all 0.2s'
-                }}
-              >
-                {isSendingMessage ? '전송 중... ⏳' : '전송 📨'}
-              </button>
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexDirection: 'column', width: '100%' }}>
+              {/* 토큰 필요량 표시 */}
+              {selectedFriendsForMessage.length > 0 && (
+                <div style={{
+                  padding: '8px 12px',
+                  background: dailyMessageTokens >= selectedFriendsForMessage.length ? '#e8f5e8' : '#fff3e0',
+                  borderRadius: 10,
+                  fontSize: 13,
+                  fontWeight: 600,
+                  color: dailyMessageTokens >= selectedFriendsForMessage.length ? '#2e7d32' : '#f57c00',
+                  textAlign: 'center',
+                  border: `2px solid ${dailyMessageTokens >= selectedFriendsForMessage.length ? '#c8e6c9' : '#ffcc02'}`
+                }}>
+                  필요한 토큰: {selectedFriendsForMessage.length}개 | 보유: {dailyMessageTokens}개
+                </div>
+              )}
+              <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
+                <button
+                  onClick={() => {
+                    setShowFriendMessageModal(false);
+                    setSelectedFriendsForMessage([]);
+                    setFriendMessageText('');
+                  }}
+                  style={{
+                    fontWeight: 700,
+                    borderRadius: 999,
+                    background: '#ffe4ec',
+                    color: '#d72660',
+                    border: 'none',
+                    padding: '12px 24px',
+                    fontSize: 16,
+                    boxShadow: '0 2px 8px #f8bbd0a0',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s'
+                  }}
+                >
+                  취소
+                </button>
+                <button
+                  onClick={handleSendFriendMessage}
+                  disabled={selectedFriendsForMessage.length === 0 || !friendMessageText.trim() || dailyMessageTokens < selectedFriendsForMessage.length || isSendingMessage}
+                  style={{
+                    fontWeight: 700,
+                    borderRadius: 999,
+                    background: selectedFriendsForMessage.length > 0 && friendMessageText.trim() && dailyMessageTokens >= selectedFriendsForMessage.length && !isSendingMessage ? '#e0f7fa' : '#f5f5f5',
+                    color: selectedFriendsForMessage.length > 0 && friendMessageText.trim() && dailyMessageTokens >= selectedFriendsForMessage.length && !isSendingMessage ? '#1976d2' : '#aaa',
+                    border: 'none',
+                    padding: '12px 24px',
+                    fontSize: 16,
+                    boxShadow: '0 2px 8px #b2ebf240',
+                    cursor: selectedFriendsForMessage.length > 0 && friendMessageText.trim() && dailyMessageTokens >= selectedFriendsForMessage.length ? 'pointer' : 'not-allowed',
+                    transition: 'all 0.2s'
+                  }}
+                >
+                  {isSendingMessage ? '전송 중... ⏳' : `전송 📨 (${selectedFriendsForMessage.length}명)`}
+                </button>
+              </div>
             </div>
           </div>
         </div>
