@@ -98,6 +98,7 @@ const TeacherPage = () => {
   const [studentPasswords, setStudentPasswords] = useState({});
   const [passwordAuthEnabled, setPasswordAuthEnabled] = useState(true);
   const [dataBoardAnonymousMode, setDataBoardAnonymousMode] = useState(false);
+  const [isClassInSession, setIsClassInSession] = useState(false);
   const [questExp, setQuestExp] = useState(10);
   const [questActionStudent, setQuestActionStudent] = useState(null);
   const [questActionQuest, setQuestActionQuest] = useState(null);
@@ -483,6 +484,19 @@ const TeacherPage = () => {
         setDataBoardAnonymousMode(docSnap.data().enabled || false);
       } else {
         setDataBoardAnonymousMode(false); // 문서가 없으면 기본값 false
+      }
+    });
+    return () => unsubscribe();
+  }, []);
+
+  // 수업 중 상태 불러오기
+  useEffect(() => {
+    const classSessionRef = doc(db, 'settings', 'classInSession');
+    const unsubscribe = onSnapshot(classSessionRef, (docSnap) => {
+      if (docSnap.exists()) {
+        setIsClassInSession(docSnap.data().enabled || false);
+      } else {
+        setIsClassInSession(false); // 문서가 없으면 기본값 false
       }
     });
     return () => unsubscribe();
@@ -4694,7 +4708,7 @@ const TeacherPage = () => {
               <p style={{ margin: '0 0 16px 0', color: '#666', fontSize: 14 }}>학생들이 페이지 접속 시 비밀번호 입력을 요구할지 설정합니다.</p>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                 <span style={{ fontSize: 14, color: '#666' }}>비밀번호 인증</span>
-                <button 
+                <button
                   onClick={async () => {
                     const newEnabled = !passwordAuthEnabled;
                     try {
@@ -4737,6 +4751,58 @@ const TeacherPage = () => {
               </div>
               <p style={{ margin: '12px 0 0 0', color: '#999', fontSize: 12 }}>
                 비활성화하면 모든 학생이 비밀번호 없이 접속할 수 있습니다.
+              </p>
+            </div>
+
+            {/* 수업 중 메시지 제한 설정 */}
+            <div style={{ marginBottom: 32, padding: '20px', border: '2px solid #fce4ec', borderRadius: 12, background: '#fafafa' }}>
+              <h3 style={{ margin: '0 0 16px 0', color: '#c2185b', fontWeight: 600 }}>📚 수업 중 메시지 제한</h3>
+              <p style={{ margin: '0 0 16px 0', color: '#666', fontSize: 14 }}>수업 중에는 학생들끼리 메시지를 보낼 수 없도록 제한합니다.</p>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <span style={{ fontSize: 14, color: '#666' }}>수업 중</span>
+                <button
+                  onClick={async () => {
+                    const newEnabled = !isClassInSession;
+                    try {
+                      await setDoc(doc(db, 'settings', 'classInSession'), {
+                        enabled: newEnabled,
+                        updatedAt: new Date(),
+                        updatedBy: 'teacher'
+                      });
+                    } catch (error) {
+                      console.error('수업 중 설정 실패:', error);
+                    }
+                  }}
+                  style={{
+                    width: 50,
+                    height: 28,
+                    borderRadius: 14,
+                    border: 'none',
+                    background: isClassInSession ? '#e91e63' : '#ccc',
+                    position: 'relative',
+                    cursor: 'pointer',
+                    transition: 'background-color 0.3s',
+                    outline: 'none'
+                  }}
+                >
+                  <div style={{
+                    width: 24,
+                    height: 24,
+                    borderRadius: '50%',
+                    background: '#fff',
+                    position: 'absolute',
+                    top: 2,
+                    left: isClassInSession ? 24 : 2,
+                    transition: 'left 0.3s',
+                    boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
+                  }} />
+                </button>
+                <span style={{ fontSize: 14, fontWeight: 600, color: isClassInSession ? '#e91e63' : '#666' }}>
+                  {isClassInSession ? '수업 중' : '쉬는 시간'}
+                </span>
+              </div>
+              <p style={{ margin: '12px 0 0 0', color: '#999', fontSize: 12 }}>
+                수업 중으로 설정하면 학생들끼리 메시지를 보낼 수 없습니다.
               </p>
             </div>
 

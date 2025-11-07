@@ -246,6 +246,8 @@ const StudentPage = () => {
   const [friendMessageText, setFriendMessageText] = useState('');
   const [selectedFriendForMessage, setSelectedFriendForMessage] = useState(null);
   const [friendMessages, setFriendMessages] = useState([]);
+  const [isClassInSession, setIsClassInSession] = useState(false);
+  const [showClassInSessionModal, setShowClassInSessionModal] = useState(false);
   
   // 메시지 토큰 관련 상태
   const [dailyMessageTokens, setDailyMessageTokens] = useState(10);
@@ -318,6 +320,19 @@ const StudentPage = () => {
   // 감정출석부 모달 상태
   const [showEmotionAttendanceModal, setShowEmotionAttendanceModal] = useState(false);
   const [hasSubmittedToday, setHasSubmittedToday] = useState(false);
+
+  // 수업 중 상태 불러오기
+  useEffect(() => {
+    const classSessionRef = doc(db, 'settings', 'classInSession');
+    const unsubscribe = onSnapshot(classSessionRef, (docSnap) => {
+      if (docSnap.exists()) {
+        setIsClassInSession(docSnap.data().enabled || false);
+      } else {
+        setIsClassInSession(false);
+      }
+    });
+    return () => unsubscribe();
+  }, []);
 
   // 오늘 감정출석 제출 여부 확인
   useEffect(() => {
@@ -1229,7 +1244,13 @@ _무중임_태_중_황태- 황무황---중태
   // 친구에게 메시지 보내기
   const handleSendFriendMessage = async () => {
     if (!selectedFriendForMessage || !friendMessageText.trim()) return;
-    
+
+    // 수업 중 체크
+    if (isClassInSession) {
+      setShowClassInSessionModal(true);
+      return;
+    }
+
     // 토큰 확인
     if (dailyMessageTokens <= 0) {
       setPraiseResultMsg('오늘의 메시지 토큰을 모두 사용했습니다! 내일 다시 시도해주세요. 🕒');
@@ -2986,7 +3007,7 @@ _무중임_태_중_황태- 황무황---중태
               <Box mt={1.5}>
                 <Button fullWidth sx={{ mb: 1, borderRadius: 999, fontWeight: 'bold', background: '#ffe4ec', border: '2px solid #ffb6b9', color: '#d72660', boxShadow: '0 2px 8px #f8bbd0a0', fontSize: 16, letterSpacing: '-0.5px', py: 1.2, '&:hover': { background: '#ffd6e0' } }} onClick={() => { console.log('메시지 버튼 클릭'); setShowMsgModal(true); }} startIcon={<EmojiEventsIcon />}>메시지 보내기</Button>
                 <div style={{ position: 'relative', display: 'inline-block', width: '100%' }}>
-                  <Button fullWidth sx={{ mb: 1, borderRadius: 999, fontWeight: 'bold', background: '#e0f7fa', border: '2px solid #b2ebf2', color: '#1976d2', boxShadow: '0 2px 8px #b2ebf240', fontSize: 16, letterSpacing: '-0.5px', py: 1.2, '&:hover': { background: '#b2ebf2' } }} onClick={() => { console.log('친구 메시지 버튼 클릭'); setShowFriendMessageModal(true); }} startIcon={<EmojiEventsIcon />}>친구에게 메시지</Button>
+                  <Button fullWidth sx={{ mb: 1, borderRadius: 999, fontWeight: 'bold', background: '#e0f7fa', border: '2px solid #b2ebf2', color: '#1976d2', boxShadow: '0 2px 8px #b2ebf240', fontSize: 16, letterSpacing: '-0.5px', py: 1.2, '&:hover': { background: '#b2ebf2' } }} onClick={() => { console.log('친구 메시지 버튼 클릭'); if (isClassInSession) { setShowClassInSessionModal(true); } else { setShowFriendMessageModal(true); } }} startIcon={<EmojiEventsIcon />}>친구에게 메시지</Button>
                   <div style={{
                     position: 'absolute',
                     top: '-8px',
@@ -5580,6 +5601,84 @@ _무중임_태_중_황태- 황무황---중태
             }}>
               비밀번호를 잊어버렸다면 선생님께 문의하세요.
             </p>
+          </div>
+        </div>
+      )}
+
+      {/* 수업 중 메시지 제한 모달 */}
+      {showClassInSessionModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          width: '100vw',
+          height: '100vh',
+          background: 'rgba(0,0,0,0.5)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 10000
+        }}>
+          <div style={{
+            background: '#fff',
+            borderRadius: 24,
+            padding: 32,
+            minWidth: 320,
+            maxWidth: 400,
+            boxShadow: '0 12px 48px rgba(0,0,0,0.2)',
+            textAlign: 'center',
+            border: '3px solid #e91e63'
+          }}>
+            <div style={{
+              fontSize: 64,
+              marginBottom: 16
+            }}>
+              📚
+            </div>
+            <div style={{
+              fontSize: 24,
+              color: '#e91e63',
+              marginBottom: 16,
+              fontWeight: 700,
+              letterSpacing: '-0.5px'
+            }}>
+              수업 중입니다
+            </div>
+            <p style={{
+              fontSize: 16,
+              color: '#666',
+              marginBottom: 24,
+              lineHeight: 1.6
+            }}>
+              수업 중에는 친구들에게<br />
+              메시지를 보낼 수 없습니다.
+            </p>
+            <button
+              onClick={() => setShowClassInSessionModal(false)}
+              style={{
+                width: '100%',
+                padding: '12px 24px',
+                fontSize: 16,
+                fontWeight: 600,
+                color: '#fff',
+                background: '#e91e63',
+                border: 'none',
+                borderRadius: 12,
+                cursor: 'pointer',
+                boxShadow: '0 4px 12px rgba(233, 30, 99, 0.3)',
+                transition: 'all 0.2s'
+              }}
+              onMouseEnter={(e) => {
+                e.target.style.background = '#c2185b';
+                e.target.style.transform = 'translateY(-2px)';
+              }}
+              onMouseLeave={(e) => {
+                e.target.style.background = '#e91e63';
+                e.target.style.transform = 'translateY(0)';
+              }}
+            >
+              확인
+            </button>
           </div>
         </div>
       )}
